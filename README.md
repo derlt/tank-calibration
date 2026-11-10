@@ -117,6 +117,12 @@ Notes:
 - `tilt_test` adds the tilt parameter of §5.5 and keeps it only if the F-test
   and plausibility both pass.
 
+## Charts
+
+The seven diagnostic views of §6.6, the `r` profile, and their Excel
+equivalents are specified in [CHARTS.md](CHARTS.md): palette, sizes, data
+contracts, reference lines and parity notes.
+
 ## How the pieces map to the method
 
 See `FEATURES.md` for a section-by-section map.

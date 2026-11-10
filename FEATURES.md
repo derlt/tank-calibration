@@ -66,7 +66,7 @@ Every section and rule of [CALIBRATION_METHODOLOGY.md](CALIBRATION_METHODOLOGY.m
 | 6.3 Object bookkeeping | `band_displacement`, `blocked_below`, `liquid_volume`, `to_brim`, `max_liquid` |
 | 6.4 Void, leak, lag | `diagnostics.lag_check`; net residual over a band |
 | 6.5 Watch items | `diagnostics.watch_items` |
-| 6.6 Seven views | `charts.all_charts`; `pair_scatter`; `classify_drift` |
+| 6.6 Seven views | `charts.all_charts`; `pair_scatter`; `classify_drift`; see [CHARTS.md](CHARTS.md) |
 
 ## §7 Small pours and grouping
 
