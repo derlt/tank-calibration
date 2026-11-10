@@ -177,6 +177,7 @@ For tank `X` in the output directory:
 ## Configuration
 
 One JSON file per tank. Paths are relative to the JSON file.
+See [docs/config.md](docs/config.md) for every field, unit and default.
 
 ```json
 {
