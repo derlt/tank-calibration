@@ -10,13 +10,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 from openpyxl import Workbook
-from openpyxl.chart import BarChart, LineChart, Reference, ScatterChart, Series
+from openpyxl.chart import Reference, ScatterChart, Series
 from openpyxl.chart.marker import Marker
+from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.drawing.line import LineProperties
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
+from . import charts
 from .diagnostics import blocked_below
 
 INK = "1F2933"
@@ -214,65 +217,71 @@ def _input(wb, result):
     ws.freeze_panes = "A5"
 
 
-def _model(wb, result):
-    ws = wb.create_sheet("Model")
-    r = _title(ws, "Model — interval residuals", 1, 12)
-    r = _sub(
-        ws,
-        "resid = step - (F(H_i) - F(H_i-1)). Negative: rise too cheap. "
-        "Positive: rise too small (§2). Read mm-equivalent first.",
-        r,
-        12,
-    )
+def _series_sheet(wb, name, title, subtitle, series, result, *, raw):
+    ws = wb.create_sheet(name)
+    r = _title(ws, title, 1, 16)
+    r = _sub(ws, subtitle, r, 16)
     r = _header(
-        ws,
-        r,
+        ws, r,
         ["i", "H_prev", "H_cur", "Step", "Predicted", "Residual", "m (L/mm)",
-         "mm-equiv", "sigma", "z", "Drift", "Flag", "Books", "Pour/rise"],
+         "mm-equiv", "sigma", "z", "Drift", "Flag", "Books", "Pour/rise",
+         "+sigma", "-sigma"],
     )
-    cfg = result["config"]
-    heel = float(result["rows"][0].step.value) if (
-        cfg.heel_row and result["rows"][0].step.known
-    ) else 0.0
-    est = {u["interval"]: u for u in result["unknowns"]}
-    books = heel
-    for iv in result["intervals"]:
-        if iv.known:
-            books += float(iv.s)
-        elif iv.idx in est:
-            books += float(est[iv.idx].get("total", est[iv.idx]["x"]))
-        fill = None
-        if iv.flag == "candidate":
-            fill = BAD
-        elif iv.flag == "watch":
-            fill = WARN
+    ivs = {iv.row: iv for iv in result["intervals"]}
+    shell = result["fit"].shell
+    for k in range(len(series)):
+        row = int(series.row[k])
+        iv = ivs.get(row)
+        m = float(shell.slope(series.H[k]))
+        mm = series.resid[k] / m if m > 0 else ""
+        pour_rise = series.s[k] / series.rise[k] if series.rise[k] > 0 else ""
+        if raw:
+            flag = "excluded" if series.excluded[k] else "raw"
+            z_value = "" if series.excluded[k] else series.z[k]
+        else:
+            flag = iv.flag if iv else ""
+            z_value = series.z[k]
         r = _row(
-            ws,
-            r,
-            [
-                iv.idx,
-                iv.h_prev,
-                iv.h_cur,
-                iv.s if iv.known else "?",
-                iv.pred,
-                iv.resid if iv.known else "",
-                iv.m,
-                iv.mm_equiv if iv.known else "",
-                iv.sigma if iv.known else "",
-                iv.z if iv.known else "",
-                iv.drift,
-                iv.flag,
-                books,
-                (iv.s / iv.rise) if (iv.known and iv.rise > 0) else "",
-            ],
-            formats=[
-                None, "0.0", "0.0", "0.0", "0.00", "0.00", "0.0000",
-                "0.00", "0.00", "0.00", "0.00", None, "0.0", "0.0000",
-            ],
-            fill=fill,
+            ws, r,
+            [row, series.h_prev[k], series.H[k], series.s[k], series.pred[k],
+             series.resid[k], m, mm, series.sigma[k], z_value, series.drift[k],
+             flag, series.books[k], pour_rise, series.sigma[k], -series.sigma[k]],
+            formats=[None, "0.0", "0.0", "0.0", "0.00", "0.00", "0.0000",
+                     "0.00", "0.00", "0.00", "0.00", None, "0.0", "0.0000",
+                     "0.00", "0.00"],
         )
-    _widths(ws, [5, 9, 9, 9, 11, 10, 9, 10, 8, 8, 10, 14, 10, 10])
+    _widths(ws, [5, 9, 9, 9, 11, 10, 9, 10, 8, 8, 10, 14, 10, 10, 9, 9])
     ws.freeze_panes = "A5"
+    return ws
+
+
+def _model(wb, result):
+    cfg = result["config"]
+    series = charts.build_series(
+        result["rows"], result["fit"].shell,
+        sigma_h=cfg.sigma_h, rel=cfg.pour_rel, abs_=cfg.pour_abs,
+        heel_row=cfg.heel_row,
+    )
+    _series_sheet(
+        wb, "Model", "Model — corrected interval series",
+        "resid = step - (F(H_i) - F(H_i-1)). Negative: rise too cheap. "
+        "Positive: rise too small (§2). Drift = books - F.",
+        series, result, raw=False,
+    )
+
+
+def _raw_model(wb, result):
+    cfg = result["config"]
+    series = charts.build_series(
+        result["raw_rows"], result["fit"].shell,
+        sigma_h=cfg.sigma_h, rel=cfg.pour_rel, abs_=cfg.pour_abs,
+        heel_row=cfg.heel_row,
+    )
+    _series_sheet(
+        wb, "RawModel", "RawModel — raw interval series",
+        "The same series before corrections. Excluded rows are flagged.",
+        series, result, raw=True,
+    )
 
 
 def _fit_sheet(wb, result):
@@ -556,6 +565,56 @@ def _pairs(wb, result):
     ws.freeze_panes = "A5"
 
 
+def _raw_pairs(wb, result):
+    cfg = result["config"]
+    series = charts.build_series(
+        result["raw_rows"], result["fit"].shell,
+        sigma_h=cfg.sigma_h, rel=cfg.pour_rel, abs_=cfg.pour_abs,
+        heel_row=cfg.heel_row,
+    )
+    ws = wb.create_sheet("RawPairs")
+    r = _title(ws, "Raw adjacent-pair scatter data", 1, 4)
+    r = _sub(ws, "One point per adjacent raw interval pair (§6.6).", r, 4)
+    r = _header(ws, r, ["i", "z(i)", "z(i+1)", "Reading"])
+    ok = (~series.excluded) & np.isfinite(series.z)
+    z = series.z[ok]
+    for i in range(len(z) - 1):
+        r = _row(ws, r, [i + 1, float(z[i]), float(z[i + 1]), ""],
+                 formats=[None, "0.00", "0.00", None])
+    _widths(ws, [6, 10, 10, 46])
+    ws.freeze_panes = "A5"
+
+
+def _guides(wb, result):
+    """Two-point series for the reference lines of the live charts."""
+    ws = wb.create_sheet("Guides")
+    r = _title(ws, "Guide series", 1, 4)
+    r = _sub(ws, "Reference lines for the live charts. Each name is a series.", r, 4)
+    r = _header(ws, r, ["Series", "x", "y"])
+    brim = result["fit"].shell.brim()
+    cap = result["fit"].shell.capacity()
+    points = [
+        ("identity", [(0.0, 0.0), (cap, cap)]),
+        ("diag_main", [(-15.0, -15.0), (15.0, 15.0)]),
+        ("diag_anti", [(-15.0, 15.0), (15.0, -15.0)]),
+        ("box", [(-2.0, -2.0), (2.0, -2.0), (2.0, 2.0), (-2.0, 2.0), (-2.0, -2.0)]),
+        ("z+2", [(0.0, 2.0), (brim, 2.0)]),
+        ("z-2", [(0.0, -2.0), (brim, -2.0)]),
+        ("z+3", [(0.0, 3.0), (brim, 3.0)]),
+        ("z-3", [(0.0, -3.0), (brim, -3.0)]),
+        ("zero", [(0.0, 0.0), (brim, 0.0)]),
+        ("brim", [(brim, 0.0), (brim, cap)]),
+    ]
+    rows = {}
+    for name, pts in points:
+        first = r
+        for x, y in pts:
+            r = _row(ws, r, [name, x, y], formats=[None, "0.0", "0.0"])
+        rows[name] = (first, r - 1)
+    _widths(ws, [14, 10, 10])
+    return rows
+
+
 def _scatter(ws, title, x_title, y_title, x_ref, y_ref, *, line=False, color="2563EB", width=14, height=8):
     chart = ScatterChart()
     chart.title = title
@@ -576,131 +635,171 @@ def _scatter(ws, title, x_title, y_title, x_ref, y_ref, *, line=False, color="25
     return chart
 
 
-def _charts(wb, result):
-    """The seven views of §6.6 as live Excel charts."""
+def _ref(ws, col, first, last):
+    return Reference(ws, min_col=col, min_row=first, max_row=last)
+
+
+def _gref(ws, rows, col):
+    first, last = rows
+    return Reference(ws, min_col=col, min_row=first, max_row=last)
+
+
+def _add_series(chart, x_ref, y_ref, title, color, *, marker="circle",
+                filled=False, line=False, dash=None, width=22000):
+    series = Series(y_ref, x_ref, title=title)
+    if marker:
+        series.marker = Marker(symbol=marker, size=5)
+        if filled:
+            series.marker.graphicalProperties = GraphicalProperties(solidFill=color)
+        else:
+            series.marker.graphicalProperties = GraphicalProperties(
+                noFill=True, ln=LineProperties(solidFill=color)
+            )
+    else:
+        series.marker = Marker(symbol="none")
+    if line:
+        series.graphicalProperties.line = LineProperties(solidFill=color, w=width)
+        if dash:
+            series.graphicalProperties.line.dashStyle = dash
+    else:
+        series.graphicalProperties.line = LineProperties(noFill=True)
+    chart.series.append(series)
+    return series
+
+
+def _charts(wb, result, guides):
+    """The seven views of §6.6 as live Excel charts (CHARTS.md grammar)."""
     ws = wb.create_sheet("Charts")
     r = _title(ws, "The seven views of §6.6 — live charts", 1, 12)
     r = _sub(
         ws,
-        "Each chart reads the Model, Curve or Pairs sheet. Consult the pair "
-        "scatter last: it forbids a hasty correction.",
+        "Each chart reads Model, RawModel, Curve, Pairs or Guides. Raw is red, "
+        "corrected is green, the model is blue. Consult the pair scatter last.",
         r,
         12,
     )
     model = wb["Model"]
+    raw = wb["RawModel"]
     curve = wb["Curve"]
     pairs = wb["Pairs"]
+    raw_pairs = wb["RawPairs"]
+    guides_ws = wb["Guides"]
     n_model = model.max_row
+    n_raw = raw.max_row
     n_curve = curve.max_row
     n_pairs = pairs.max_row
+    n_raw_pairs = raw_pairs.max_row
 
     # 1. Strapping vs books
     c = ScatterChart()
     c.title = "Strapping vs books"
-    c.x_axis.title = "tape reading H (mm)"
-    c.y_axis.title = "volume (L)"
+    c.x_axis.title = "Tape reading H (mm)"
+    c.y_axis.title = "Cumulative volume (L)"
     c.style = 13
     c.width, c.height = 15, 9
-    shell_series = Series(
-        Reference(curve, min_col=2, min_row=5, max_row=n_curve),
-        Reference(curve, min_col=1, min_row=5, max_row=n_curve),
-        title="adopted shell F(H)",
-    )
-    shell_series.marker = Marker(symbol="none")
-    shell_series.graphicalProperties.line = LineProperties(solidFill="2563EB", w=22000)
-    books_series = Series(
-        Reference(model, min_col=13, min_row=5, max_row=n_model),
-        Reference(model, min_col=3, min_row=5, max_row=n_model),
-        title="cumulative books",
-    )
-    books_series.marker = Marker(symbol="circle", size=4)
-    books_series.graphicalProperties.line = LineProperties(noFill=True)
-    c.series.append(shell_series)
-    c.series.append(books_series)
+    c.x_axis.delete = False
+    c.y_axis.delete = False
+    _add_series(c, _ref(curve, 1, 5, n_curve), _ref(curve, 2, 5, n_curve),
+                "Fitted shell V(H)", charts.MODEL, marker=None, line=True)
+    _add_series(c, _ref(raw, 3, 5, n_raw), _ref(raw, 13, 5, n_raw),
+                "Raw books", charts.RAW, marker="circle")
+    _add_series(c, _ref(model, 3, 5, n_model), _ref(model, 13, 5, n_model),
+                "Corrected books", charts.COR, marker="square", filled=True)
+    _add_series(c, _gref(guides_ws, guides["brim"], 2), _gref(guides_ws, guides["brim"], 3),
+                "Brim", "808080", marker=None, line=True, dash="dash")
     ws.add_chart(c, "A4")
 
     # 2. Interval residuals
-    bar = BarChart()
-    bar.type = "col"
-    bar.title = "Interval residuals"
-    bar.x_axis.title = "level H (mm)"
-    bar.y_axis.title = "residual (mm-equivalent)"
-    bar.width, bar.height = 15, 9
-    bar.add_data(Reference(model, min_col=8, min_row=4, max_row=n_model), titles_from_data=True)
-    bar.set_categories(Reference(model, min_col=3, min_row=5, max_row=n_model))
-    bar.legend = None
-    ws.add_chart(bar, "A22")
+    c = ScatterChart()
+    c.title = "Interval residuals"
+    c.x_axis.title = "Tape reading H (mm)"
+    c.y_axis.title = "Residual, obs - pred (L)"
+    c.style = 13
+    c.width, c.height = 15, 9
+    c.x_axis.delete = False
+    c.y_axis.delete = False
+    _add_series(c, _ref(raw, 3, 5, n_raw), _ref(raw, 8, 5, n_raw),
+                "Raw residual", charts.RAW, marker="circle")
+    _add_series(c, _ref(model, 3, 5, n_model), _ref(model, 8, 5, n_model),
+                "Corrected residual", charts.COR, marker="square", filled=True)
+    _add_series(c, _ref(model, 3, 5, n_model), _ref(model, 15, 5, n_model),
+                "+1 sigma", charts.MODEL, marker=None, line=True, dash="dash")
+    _add_series(c, _ref(model, 3, 5, n_model), _ref(model, 16, 5, n_model),
+                "-1 sigma", charts.MODEL, marker=None, line=True, dash="dash")
+    _add_series(c, _gref(guides_ws, guides["zero"], 2), _gref(guides_ws, guides["zero"], 3),
+                "zero", "808080", marker=None, line=True)
+    ws.add_chart(c, "A22")
 
     # 3. Predicted vs recorded
     c = ScatterChart()
     c.title = "Predicted vs recorded"
-    c.x_axis.title = "predicted pour (L)"
-    c.y_axis.title = "recorded pour (L)"
+    c.x_axis.title = "Recorded pour (L)"
+    c.y_axis.title = "Predicted pour from the shell (L)"
     c.style = 13
     c.width, c.height = 12, 9
-    s = Series(
-        Reference(model, min_col=4, min_row=5, max_row=n_model),
-        Reference(model, min_col=5, min_row=5, max_row=n_model),
-        title="pour",
-    )
-    s.marker = Marker(symbol="circle", size=5)
-    s.graphicalProperties.line = LineProperties(noFill=True)
-    c.series.append(s)
-    c.legend = None
+    c.x_axis.delete = False
+    c.y_axis.delete = False
+    _add_series(c, _ref(raw, 5, 5, n_raw), _ref(raw, 4, 5, n_raw),
+                "Raw", charts.RAW, marker="circle")
+    _add_series(c, _ref(model, 5, 5, n_model), _ref(model, 4, 5, n_model),
+                "Corrected", charts.COR, marker="square", filled=True)
+    _add_series(c, _gref(guides_ws, guides["identity"], 2), _gref(guides_ws, guides["identity"], 3),
+                "y = x", "808080", marker=None, line=True)
     ws.add_chart(c, "A40")
 
     # 4. Slope profile
     c = ScatterChart()
     c.title = "Slope profile"
-    c.x_axis.title = "level H (mm)"
-    c.y_axis.title = "L/mm"
+    c.x_axis.title = "Level midpoint (mm)"
+    c.y_axis.title = "Slope (L per mm)"
     c.style = 13
     c.width, c.height = 15, 9
-    shell_m = Series(
-        Reference(curve, min_col=3, min_row=5, max_row=n_curve),
-        Reference(curve, min_col=1, min_row=5, max_row=n_curve),
-        title="shell slope m(H)",
-    )
-    shell_m.marker = Marker(symbol="none")
-    shell_m.graphicalProperties.line = LineProperties(solidFill="2563EB", w=22000)
-    pts = Series(
-        Reference(model, min_col=14, min_row=5, max_row=n_model),
-        Reference(model, min_col=3, min_row=5, max_row=n_model),
-        title="pour / rise",
-    )
-    pts.marker = Marker(symbol="circle", size=4)
-    pts.graphicalProperties.line = LineProperties(noFill=True)
-    c.series.append(shell_m)
-    c.series.append(pts)
+    c.x_axis.delete = False
+    c.y_axis.delete = False
+    _add_series(c, _ref(curve, 1, 5, n_curve), _ref(curve, 3, 5, n_curve),
+                "Shell slope dV/dH", charts.MODEL, marker=None, line=True)
+    _add_series(c, _ref(raw, 3, 5, n_raw), _ref(raw, 14, 5, n_raw),
+                "Raw pour / rise", charts.RAW, marker="circle")
+    _add_series(c, _ref(model, 3, 5, n_model), _ref(model, 14, 5, n_model),
+                "Corrected pour / rise", charts.COR, marker="square", filled=True)
     ws.add_chart(c, "A58")
 
     # 5. Drift
-    line = LineChart()
-    line.title = "Drift: the running disagreement"
-    line.x_axis.title = "level H (mm)"
-    line.y_axis.title = "cumulative residual (L)"
-    line.width, line.height = 15, 9
-    line.add_data(Reference(model, min_col=11, min_row=4, max_row=n_model), titles_from_data=True)
-    line.set_categories(Reference(model, min_col=3, min_row=5, max_row=n_model))
-    line.legend = None
-    ws.add_chart(line, "A76")
+    c = ScatterChart()
+    c.title = "Drift: the running disagreement"
+    c.x_axis.title = "Tape reading H (mm)"
+    c.y_axis.title = "Drift, books - F (L)"
+    c.style = 13
+    c.width, c.height = 15, 9
+    c.x_axis.delete = False
+    c.y_axis.delete = False
+    _add_series(c, _ref(raw, 3, 5, n_raw), _ref(raw, 11, 5, n_raw),
+                "Raw", charts.RAW, marker="circle", line=True)
+    _add_series(c, _ref(model, 3, 5, n_model), _ref(model, 11, 5, n_model),
+                "Corrected", charts.COR, marker="square", filled=True, line=True)
+    _add_series(c, _gref(guides_ws, guides["zero"], 2), _gref(guides_ws, guides["zero"], 3),
+                "zero", "808080", marker=None, line=True)
+    ws.add_chart(c, "A76")
 
     # 6. z alarms
     c = ScatterChart()
     c.title = "z alarms"
-    c.x_axis.title = "level H (mm)"
-    c.y_axis.title = "z"
+    c.x_axis.title = "Level (mm)"
+    c.y_axis.title = "z = resid / sigma"
     c.style = 13
     c.width, c.height = 15, 9
-    s = Series(
-        Reference(model, min_col=10, min_row=5, max_row=n_model),
-        Reference(model, min_col=3, min_row=5, max_row=n_model),
-        title="z",
-    )
-    s.marker = Marker(symbol="circle", size=5)
-    s.graphicalProperties.line = LineProperties(noFill=True)
-    c.series.append(s)
-    c.legend = None
+    c.x_axis.delete = False
+    c.y_axis.delete = False
+    _add_series(c, _ref(raw, 3, 5, n_raw), _ref(raw, 10, 5, n_raw),
+                "Raw", charts.RAW, marker="circle")
+    _add_series(c, _ref(model, 3, 5, n_model), _ref(model, 10, 5, n_model),
+                "Corrected", charts.COR, marker="square", filled=True)
+    for name, color, dash in (
+        ("z+2", charts.CHECK, "dash"), ("z-2", charts.CHECK, "dash"),
+        ("z+3", charts.RAW, "sysDot"), ("z-3", charts.RAW, "sysDot"),
+    ):
+        _add_series(c, _gref(guides_ws, guides[name], 2), _gref(guides_ws, guides[name], 3),
+                    name, color, marker=None, line=True, dash=dash)
     ws.add_chart(c, "A94")
 
     # 7. Adjacent-pair scatter
@@ -710,15 +809,20 @@ def _charts(wb, result):
     c.y_axis.title = "z(i+1)"
     c.style = 13
     c.width, c.height = 12, 10
-    s = Series(
-        Reference(pairs, min_col=3, min_row=5, max_row=n_pairs),
-        Reference(pairs, min_col=2, min_row=5, max_row=n_pairs),
-        title="pairs",
-    )
-    s.marker = Marker(symbol="circle", size=5)
-    s.graphicalProperties.line = LineProperties(noFill=True)
-    c.series.append(s)
-    c.legend = None
+    c.x_axis.delete = False
+    c.y_axis.delete = False
+    c.x_axis.scaling.min = -15
+    c.x_axis.scaling.max = 15
+    c.y_axis.scaling.min = -15
+    c.y_axis.scaling.max = 15
+    _add_series(c, _ref(raw_pairs, 2, 5, n_raw_pairs), _ref(raw_pairs, 3, 5, n_raw_pairs),
+                "Raw pairs", charts.RAW, marker="circle")
+    _add_series(c, _ref(pairs, 2, 5, n_pairs), _ref(pairs, 3, 5, n_pairs),
+                "Corrected pairs", charts.COR, marker="square", filled=True)
+    for name in ("diag_main", "diag_anti", "box"):
+        _add_series(c, _gref(guides_ws, guides[name], 2), _gref(guides_ws, guides[name], 3),
+                    name, charts.MODEL, marker=None, line=True,
+                    dash="dash" if name == "box" else None)
     ws.add_chart(c, "A112")
     _widths(ws, [100])
     return ws
@@ -899,6 +1003,7 @@ def build_workbook(
     _settings(wb, result)
     _input(wb, result)
     _model(wb, result)
+    _raw_model(wb, result)
     _fit_sheet(wb, result)
     _diagnostics(wb, result)
     _anomaly_log(wb, result)
@@ -906,7 +1011,9 @@ def build_workbook(
     _commercial(wb, result)
     _curve(wb, result)
     _pairs(wb, result)
-    _charts(wb, result)
+    _raw_pairs(wb, result)
+    guides = _guides(wb, result)
+    _charts(wb, result, guides)
     if audit_sheet:
         _audit(wb, result)
     _reference(wb)

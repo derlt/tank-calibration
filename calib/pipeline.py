@@ -473,9 +473,12 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
             outdir / "charts",
             shell=adopted.shell,
             rows=rows,
-            intervals=intervals,
+            raw_rows=raw_rows,
             heel_row=cfg.heel_row,
             bands=bands,
+            sigma_h=cfg.sigma_h,
+            rel=cfg.pour_rel,
+            abs_=cfg.pour_abs,
             profile=profile,
         )
     else:

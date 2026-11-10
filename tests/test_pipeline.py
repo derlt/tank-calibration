@@ -74,12 +74,32 @@ class TestPipeline(unittest.TestCase):
             "demo_report.md",
         ]:
             self.assertTrue((out / name).exists(), name)
-        self.assertTrue((out / "charts" / "07_pair_scatter.png").exists())
+        for name in (
+            "01_strapping.png",
+            "02_residuals.png",
+            "03_predicted_vs_recorded.png",
+            "04_slope_profile.png",
+            "05_drift.png",
+            "06_z_alarms.png",
+            "07_pair_scatter.png",
+            "08_r_profile.png",
+            "pour_fit.png",
+            "pour_fit_views.png",
+            "anomaly_detector.png",
+            "00_all_views.png",
+        ):
+            self.assertTrue((out / "charts" / name).exists(), name)
 
     def test_workbook_gate(self):
         out = gate_workbook(self.out / "out" / "demo_workbook.xlsx")
         self.assertTrue(out["ok"], out["errors"][:3])
         self.assertGreater(out["formulas"], 50)
+
+    def test_workbook_chart_sheets(self):
+        wb = load_workbook(self.out / "out" / "demo_workbook.xlsx")
+        for name in ("Model", "RawModel", "Curve", "Pairs", "RawPairs", "Guides", "Charts"):
+            self.assertIn(name, wb.sheetnames)
+        self.assertEqual(len(wb["Charts"]._charts), 7)
 
     def test_strapping_extrapolated_below_lowest_dip(self):
         rows = self.result["strapping"]

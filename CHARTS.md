@@ -9,8 +9,8 @@ same annotation style, same reading rules.
 strapping table; they explain it. The authoritative numbers live in the corrected
 CSV and the adopted-shell record.
 
-**Implementation.** Python 3.12 + matplotlib (Agg backend), `dpi=160`.
-The same seven charts exist as live native charts in `test/tank_calculator.xlsx`
+**Implementation.** Python 3.10+ + matplotlib (Agg backend), `dpi=160`.
+The same seven charts exist as live native charts in the tank workbook
 (wiring table in §7). Line-only charts also render inline as `openui-lang`
 `LineChart` blocks (§8); scatter charts cannot, so they stay as images.
 
@@ -112,19 +112,27 @@ ann = dict(fontsize=9, arrowprops=dict(arrowstyle="->", color="0.3"))
 | `F(H)` | fitted shell volume (L) | adopted shell |
 | `m(H)` | local slope `dF/dH` (L/mm) | derivative of `F` |
 | `pred[i]` | `F(H[i]) − F(H[i−1])` (L) | model |
-| `d[i]` | `pred[i] − s[i]` (L) — **figure convention** | derived |
+| `resid[i]` | `s[i] − pred[i]` (L) — **methodology convention** | derived |
 | `σ[i]` | `√((m_i σh)² + (m_{i+1} σh)² + (rel·s + abs)²)` | noise model |
-| `z[i]` | `d[i] / σ[i]` | derived |
+| `z[i]` | `resid[i] / σ[i]` | derived |
 | `books[i]` | heel + cumulative pours (L) | ledger |
-| `drift[i]` | `F(H[i]) − books[i]` (L) | derived |
+| `drift[i]` | `books[i] − F(H[i])` (L), equivalently `Σ resid` | derived |
 | `mid[i]` | `(H[i−1] + H[i]) / 2` (mm) | derived |
 
-**Sign convention — read this before reusing the figures.** The figures in this
-project plot `d = pred − obs` (positive = the level rose less than the shell
-predicts). The methodology text uses `resid = obs − pred = −d`. They are exact
-mirrors. Every axis label says which one it is. For new charts, prefer the
-methodology convention `resid = obs − pred` and label the axis
-`resid = obs − pred`; if you reuse these images unchanged, keep `pred − obs`.
+**Sign convention — one convention, everywhere.** The charts use the
+methodology convention:
+
+```
+resid = obs − pred          z = resid / σ          drift = books − F
+```
+
+- `resid < 0`: the rise came too cheap — an object, or an under-recorded pour.
+- `resid > 0`: the rise came too small — a loss, or an over-recorded pour.
+- `drift > 0`: the books exceed the tank — loss or over-record.
+- `drift < 0`: the tank holds more than the books — object or under-record.
+
+Every axis label says `obs − pred`. The earlier `pred − obs` mirror is not
+used anywhere in this document.
 
 ---
 
@@ -132,7 +140,7 @@ methodology convention `resid = obs − pred` and label the axis
 
 ### C1 — Strapping curve vs cumulative books
 
-- **File:** `test/pour_fit.png`, top panel.
+- **File:** `out/<tank>/charts/pour_fit.png`, top panel.
 - **Question:** does the tank agree with the ledger in absolute volume, and where
   does it stop agreeing?
 - **Axes:** x = tape reading `H` (mm); y = cumulative volume (L).
@@ -151,25 +159,26 @@ methodology convention `resid = obs − pred` and label the axis
 
 ### C2 — Residual per interval
 
-- **File:** `test/pour_fit.png`, bottom panel.
+- **File:** `out/<tank>/charts/pour_fit.png`, bottom panel.
 - **Question:** where, and by how much, do data and model disagree?
-- **Axes:** x = interval midpoint (mm); y = `pred − obs` (L).
+- **Axes:** x = interval midpoint (mm); y = `resid = obs − pred` (L).
 - **Series:**
   1. raw residuals — open red circles;
-  2. corrected residuals — filled green squares (last point omitted);
+  2. corrected residuals — filled green squares;
   3. `±1σ` band — blue fill, `alpha=0.12`.
 - **Reference:** zero line.
 - **Special marker:** excluded overflow row as a purple `x`.
 - **Annotations:** the single-sided anomaly, the shared-dip pair, the overflow row.
-- **Reading rule:** inside the band = noise; a lone spike = single-sided event
-  (object / pour error); an adjacent opposite-sign pair = shared-dip misread;
-  a run of same-sign points = systematic (datum, leak).
-- **y-limits:** fixed symmetric (`±165 L` here) so raw and corrected are comparable
-  across figures; do not autoscale per panel.
+- **Reading rule:** inside the band = noise; a lone negative spike = object or
+  under-recorded pour; a lone positive spike = loss or over-recorded pour; an
+  adjacent opposite-sign pair = shared-dip misread; a run of same-sign points =
+  systematic (datum, leak).
+- **y-limits:** symmetric and shared by the raw and corrected series; do not
+  autoscale one panel and not the other.
 
 ### C3 — Predicted vs recorded pour
 
-- **File:** `test/pour_fit_views.png`, panel 1.
+- **File:** `out/<tank>/charts/pour_fit_views.png`, panel 1.
 - **Question:** which rows have a pour record that the shell cannot reproduce?
 - **Axes:** x = recorded pour (L); y = predicted pour from the shell (L).
 - **Series:**
@@ -185,7 +194,7 @@ methodology convention `resid = obs − pred` and label the axis
 
 ### C4 — Slope profile (litres per mm)
 
-- **File:** `test/pour_fit_views.png`, panel 2.
+- **File:** `out/<tank>/charts/pour_fit_views.png`, panel 2.
 - **Question:** is the tank's shape physically plausible at every level?
 - **Axes:** x = level midpoint (mm); y = slope (L per mm).
 - **Series:**
@@ -200,9 +209,9 @@ methodology convention `resid = obs − pred` and label the axis
 
 ### C5 — Drift chart
 
-- **File:** `test/pour_fit_views.png`, panel 3.
+- **File:** `out/<tank>/charts/pour_fit_views.png`, panel 3.
 - **Question:** how much have the books and the tank diverged, in total?
-- **Axes:** x = tape reading (mm); y = `V(H) − books` (L).
+- **Axes:** x = tape reading (mm); y = `drift = books − F` (L).
 - **Series:**
   1. raw — open red circles joined by a thin red line;
   2. corrected — filled green squares joined by a thin green line.
@@ -222,9 +231,9 @@ methodology convention `resid = obs − pred` and label the axis
 
 ### C6 — z-alarm chart
 
-- **File:** `test/pour_fit_views.png`, panel 4.
+- **File:** `out/<tank>/charts/pour_fit_views.png`, panel 4.
 - **Question:** which residuals are significant against the action bar?
-- **Axes:** x = level (mm); y = `z = d / σ`.
+- **Axes:** x = level (mm); y = `z = resid / σ`.
 - **Series:**
   1. raw — open red circles;
   2. corrected — filled green squares.
@@ -237,7 +246,7 @@ methodology convention `resid = obs − pred` and label the axis
 
 ### C7 — Adjacent-pair detector
 
-- **File:** `test/anomaly_detector.png`, panel A.
+- **File:** `out/<tank>/charts/anomaly_detector.png`, panel A.
 - **Question:** which failure mode produced the residual pattern?
 - **Axes:** x = `z[i]`; y = `z[i+1]`; both in σ units, fixed `±15`.
 - **Series:**
@@ -258,16 +267,16 @@ methodology convention `resid = obs − pred` and label the axis
 
 ### C8 — Drift-shape reference panel
 
-- **File:** `test/anomaly_detector.png`, panel B.
+- **File:** `out/<tank>/charts/anomaly_detector.png`, panel B.
 - **Question:** what does each failure mode look like on a drift chart?
 - **Axes:** x = interval number (1–40); y = drift (L).
 - **Series (six synthetic curves, teaching aid only):**
   1. honest noise — random walk;
   2. misread dip — one-point spike, returns;
-  3. one-off loss — step down, flat;
-  4. object — step up, flat;
-  5. active leak — ramp down;
-  6. settling lag — dip, then return.
+  3. one-off loss — step up, flat;
+  4. object — step down, flat;
+  5. active leak — ramp up;
+  6. settling lag — dip up, then return.
 - **Reading rule:** match the shape of the real drift chart (C5) to this panel.
 - **Why it works:** it turns an abstract residual pattern into six named pictures;
   the reader classifies by recognition, not by calculation.
@@ -330,11 +339,11 @@ ax1.set_ylabel("Cumulative volume (L)")
 ax1.legend(loc="upper left", fontsize=9); ax1.grid(alpha=0.3)
 
 ax2.fill_between(mid, -sig, sig, color=MODEL, alpha=0.12, label="±1σ")
-raw_pts(ax2, mid, d_raw, "Raw table")
-cor_pts(ax2, mid[:-1], d_cor[:-1], "Corrected")
-ax2.plot(mid[-1], d_raw[-1], "x", ms=8, color=EXCL, mew=2)
-ax2.set_ylim(-165, 165)
-finish(ax2, "Tape reading H (mm)", "Residual, pred − obs (L)", "")
+raw_pts(ax2, mid, resid_raw, "Raw table")
+cor_pts(ax2, mid, resid_cor, "Corrected")
+ax2.plot(mid[-1], resid_raw[-1], "x", ms=8, color=EXCL, mew=2)
+ax2.set_ylim(-lim, lim)
+finish(ax2, "Tape reading H (mm)", "Residual, obs − pred (L)", "")
 fig.tight_layout(); fig.savefig("pour_fit.png", dpi=160)
 ```
 
@@ -368,36 +377,42 @@ ax.add_patch(plt.Rectangle((-2, -2), 4, 4, fill=False, ls="--", ec=CHECK))
 | persistent | same-sign run | ramp | main diagonal | leak / continuing over-record | audit; do not refit |
 | mixed | large, no partner | step + offset | off both diagonals | superposed errors | decompose before correcting |
 
+With `resid = obs − pred`, a negative single-sided event is an object or an
+under-recorded pour; a positive one is a loss or an over-recorded pour. The
+drift uses `books − F`, so a loss raises it and an object lowers it.
+
 ---
 
-## 7. Excel workbook wiring (`test/tank_calculator.xlsx`)
+## 7. Excel workbook wiring (`out/<tank>/<tank>_workbook.xlsx`)
 
-Seven native `ScatterChart` objects on the `Charts` sheet, all fed by `Calc`
-formulas (200-row capacity). Ranges are `(min_col, min_row, max_col, max_row)`.
+Seven native `ScatterChart` objects on the `Charts` sheet. They read the
+`Model` (corrected), `RawModel` (raw), `Curve` (shell), `Pairs` (corrected
+pairs), `RawPairs` (raw pairs) and `Guides` (reference lines) sheets.
 
-| # | Chart | x range | y range(s) | Type |
-|---|---|---|---|---|
-| 1 | Strapping vs books | `Calc X2:X102` | `Calc Y2:Y102` (line), `Calc F2:F201` (markers) | line + scatter |
-| 2 | Residuals | `Calc I2:I200` | `Calc L2:L200` | scatter |
-| 3 | Pred vs recorded | `Calc J2:J200` | `Calc K2:K200`; `Fit B14:B15`→`C14:C15` (y = x) | scatter + line |
-| 4 | Slope profile | `Calc I2:I200` | `Calc R2:R200` (line), `Calc Q2:Q200` (markers) | line + scatter |
-| 5 | Drift | `Calc A2:A201` | `Calc G2:G201` | scatter |
-| 6 | z-alarms | `Calc I2:I200` | `Calc P2:P200`; `S/T/U/V` (±2, ±3 lines) | scatter + lines |
-| 7 | Pair detector | `Calc P2:P200` | `Calc W2:W200`; `Fit B22:B23`→`C22:C23` (main diag); `Fit B24:B25`→`C24:C25` (anti-diag) | scatter + lines |
+| # | Chart | x | y | Reference | Anchor |
+|---|---|---|---|---|---|
+| 1 | Strapping vs books | `Curve!A`, `RawModel!C`, `Model!C` | `Curve!B`, `RawModel!M`, `Model!M` | brim | `A4` |
+| 2 | Residuals | `RawModel!C`, `Model!C` | `RawModel!H`, `Model!H`, `Model!O/P` (±σ) | zero | `A22` |
+| 3 | Pred vs recorded | `RawModel!E`, `Model!E` | `RawModel!D`, `Model!D` | identity | `A40` |
+| 4 | Slope profile | `Curve!A`, `RawModel!C`, `Model!C` | `Curve!C`, `RawModel!N`, `Model!N` | — | `A58` |
+| 5 | Drift | `RawModel!C`, `Model!C` | `RawModel!K`, `Model!K` | zero | `A76` |
+| 6 | z alarms | `RawModel!C`, `Model!C` | `RawModel!J`, `Model!J` | ±2, ±3 | `A94` |
+| 7 | Pair detector | `RawPairs!B`, `Pairs!B` | `RawPairs!C`, `Pairs!C` | diagonals, box | `A112` |
 
-`Calc` column map: `A` H, `B` pour, `C` clipped depth, `D` V(H), `E` slope,
-`F` books, `G` drift, `I` mid level, `J` pour, `K` pred, `L` resid, `M` include,
-`N` SSE, `O` σ, `P` z, `Q` pour/rise, `R` shell slope, `S–V` threshold lines,
-`W` z-next, `X` curve H grid, `Y` curve V.
+Column map, identical on `Model` and `RawModel`: `A` i, `B` H_prev, `C` H_cur,
+`D` Step, `E` Predicted, `F` Residual, `G` m, `H` mm-equiv, `I` sigma, `J` z,
+`K` Drift, `L` Flag, `M` Books, `N` Pour/rise, `O` +sigma, `P` −sigma.
+
+`Guides` holds the two-point reference series: `identity`, `diag_main`,
+`diag_anti`, `box`, `z+2`, `z-2`, `z+3`, `z-3`, `zero`, `brim`.
 
 Rules for the workbook charts:
 - `x_axis.delete = False`, `y_axis.delete = False` (openpyxl hides axes by default);
-- markers: `Marker(symbol="circle", size=6)`, line `noFill` for scatter series;
-- model lines: `line.width = 20000`, `smooth = True`;
-- threshold lines: `dashStyle = "dash"`, `smooth = False`;
+- raw series: open circle markers, `RawModel`; corrected series: filled square
+  markers, `Model`;
+- model lines: `line.width = 22000`, solid `#1a6fa8`;
+- thresholds: `dashStyle = "dash"` for ±2, `"sysDot"` for ±3;
 - every generated workbook passes the formula gate (paren balance + parse).
-
----
 
 ## 8. Inline `openui-lang` equivalents
 
@@ -431,12 +446,15 @@ Units go in the `LineChart` third argument (`"L"`, `"L/mm"`).
 
 ---
 
-## 10. Files produced in this project
+## 10. Files produced
 
 | File | Contents |
 |---|---|
-| `test/pour_fit.png` | C1 + C2 (main pair) |
-| `test/pour_fit_views.png` | C3 + C4 + C5 + C6 (gallery) |
-| `test/anomaly_detector.png` | C7 + C8 (detector) |
-| `test/tank_calculator.xlsx` | all seven as live native charts |
-| `test/pour_corrected.csv` | corrected table behind every chart |
+| `out/<tank>/charts/pour_fit.png` | C1 + C2 (main pair) |
+| `out/<tank>/charts/pour_fit_views.png` | C3 + C4 + C5 + C6 (gallery) |
+| `out/<tank>/charts/anomaly_detector.png` | C7 + C8 (detector) |
+| `out/<tank>/charts/01_strapping.png` … `07_pair_scatter.png` | individual views |
+| `out/<tank>/charts/08_r_profile.png` | `r` profile |
+| `out/<tank>/charts/00_all_views.png` | 2 × 4 overview |
+| `out/<tank>/<tank>_workbook.xlsx` | all seven as live native charts |
+| `out/<tank>/<tank>_corrected.csv` | corrected table behind every chart |

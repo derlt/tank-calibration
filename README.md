@@ -61,7 +61,7 @@ For tank `X` in the output directory:
 | `X_presets.json` | The adopted shell for the field tool. One source of truth. |
 | `X_workbook.xlsx` | Values-only workbook, a Certificate header sheet, plus the optional Audit sheet. The Audit objective sums the trusted set only. |
 | `X_report.md` | Shell record, acceptance table, register, limitations. |
-| `charts/` | The seven views of §6.6, plus the `r` profile. |
+| `charts/` | The seven views of §6.6, the `r` profile, and the three composites (`pour_fit`, `pour_fit_views`, `anomaly_detector`). |
 
 ## Configuration
 
