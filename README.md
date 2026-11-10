@@ -9,7 +9,24 @@ values-only delivery layer, plus an optional live-formula audit sheet.
 
 ## Install
 
+On Windows, install Git and uv first:
+
+```powershell
+winget install --id Git.Git -e
+winget install --id astral-sh.uv -e
+```
+
+If `winget` is not available, install uv with:
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+Clone the repository, then install:
+
 ```bash
+git clone https://github.com/derlt/tank-calibration.git
+cd tank-calibration
 uv sync
 ```
 
@@ -37,6 +54,98 @@ uv run python -m calib field out/demo/demo_presets.json examples/demo_raw.csv
 
 The fit prints the adopted shell record and the six acceptance checks. It
 exits with code 2 if any check fails.
+
+## Real data
+
+The demo shows the shape of a run. A real tank needs one folder with one CSV
+and one JSON file:
+
+```text
+C:\tank-data\run1\
+    run1_raw.csv
+    run1.json
+```
+
+The examples use Windows paths. On Linux or macOS, use the same commands with
+your own paths.
+
+The CSV holds the pours and dips:
+
+```csv
+step_volume,measured_height,note
+50,62,
+50,90,
+100,134,
+100,166,
+150,205,
+```
+
+- `step_volume` is the pour since the previous dip, in litres. It is not
+  cumulative.
+- `measured_height` is the dip reading in mm.
+- The first row is the datum. If the tank was not empty, set `heel_row` to
+  `true` and record the heel.
+- A whole unknown pour is `?`. A partial unknown is `200+?`.
+- The raw file is never edited. Corrections go in the JSON.
+
+The JSON names the tank, the raw file and the decisions:
+
+```json
+{
+  "tank": "run1",
+  "raw": "run1_raw.csv",
+  "nominal": {"r": 948.0, "L": 2517.0},
+  "sigma_h": 1.5,
+  "pour_unit": 50,
+  "h0": {"mode": "fit"},
+  "heel_row": false,
+  "brim": {"reading": 1896.0, "overflow_pour": 50.0},
+  "object_bands": [],
+  "strapping": {"step_mm": 10.0, "start_mm": 0.0},
+  "bootstrap_n": 200,
+  "seed": 0
+}
+```
+
+Fill the values from the tank record. [Configuration](#configuration) explains
+every field.
+
+Run the fit from the repo root:
+
+```powershell
+uv run python -m calib fit C:\tank-data\run1\run1.json -o C:\tank-data\run1\out
+```
+
+Or from any folder, with `--project`:
+
+```powershell
+uv run --project C:\src\tank-calibration python -m calib fit C:\tank-data\run1\run1.json -o C:\tank-data\run1\out
+```
+
+The fit prints the adopted shell and the six acceptance checks. It exits with
+code 2 if any check fails. [What the fit writes](#what-the-fit-writes) lists
+the files.
+
+Gate the workbook and check the field data:
+
+```powershell
+uv run --project C:\src\tank-calibration python -m calib gate C:\tank-data\run1\out\run1_workbook.xlsx
+uv run --project C:\src\tank-calibration python -m calib field C:\tank-data\run1\out\run1_presets.json C:\tank-data\run1\run1_raw.csv
+```
+
+Add `--interactive` to `calib field` to type each pour as `step,height`.
+
+### Windows notes
+
+- `make` is not installed by default. Use the `uv run` commands above. If you
+  install make, run it from Git Bash, because `make clean` uses `rm -rf`.
+- Use forward slashes or double backslashes in JSON paths.
+- Save the CSV as UTF-8. Excel's "CSV UTF-8" works; a BOM is accepted.
+- Use a dot for decimals. Do not mix comma decimals with a comma delimiter.
+- Close the workbook in Excel before a run. Windows locks open files.
+- Keep `out\` out of OneDrive. Sync can lock files during a run.
+- Clone to a short path such as `C:\src\tank-calibration` to avoid long-path
+  problems.
 
 ## Commands
 
@@ -177,6 +286,23 @@ uv run python -m coverage report -m
 ```
 
 `make test`, `make lint` and `make coverage` run the same commands.
+
+## Makefile
+
+`make` is a short command menu over the same `uv run` commands:
+
+| Command | Runs |
+|---|---|
+| `make` | `test` |
+| `make test` | the 50 tests |
+| `make lint` | `ruff check .` |
+| `make coverage` | tests with a coverage report |
+| `make demo` | generate, fit and gate the demo |
+| `make gate` | gate the demo workbook |
+| `make clean` | remove `out/` |
+
+`PY ?= uv run python` sets the Python command. Override it with
+`make test PY=python3`. The targets are `.PHONY`, so they always run.
 
 ## License
 
