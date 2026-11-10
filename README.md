@@ -117,6 +117,12 @@ Notes:
 - `tilt_test` adds the tilt parameter of §5.5 and keeps it only if the F-test
   and plausibility both pass.
 
+## Charts
+
+The chart specification is in [CHARTS.md](CHARTS.md): visual grammar, the
+seven diagnostic views, the synthetic reference panel, Excel wiring and the
+inline equivalents.
+
 ## How the pieces map to the method
 
 See `FEATURES.md` for a section-by-section map.
