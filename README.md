@@ -54,12 +54,12 @@ For tank `X` in the output directory:
 |---|---|
 | `X_raw.csv` | Byte copy of the source. The source is never edited. |
 | `X_corrected.csv` | Corrections flagged with rule and magnitude. |
-| `X_strapping.csv` | Authoritative table: level, liquid, ±σ, flag. |
-| `X_commercial.csv` | Fixed interval, whole litres, extrapolated region labelled. |
+| `X_strapping.csv` | Authoritative table with a generated certificate header: level, liquid, ±σ, flag. |
+| `X_commercial.csv` | Fixed interval, whole litres, extrapolated region labelled, with the same certificate header. |
 | `X_anomaly_register.csv` | Object bands, dip pairs, single-sided events, watch items, unknowns. |
 | `X_shell_record.txt` | The adopted-shell record of §11. |
 | `X_presets.json` | The adopted shell for the field tool. One source of truth. |
-| `X_workbook.xlsx` | Values-only workbook, plus the optional Audit sheet. The Audit objective sums the trusted set only. |
+| `X_workbook.xlsx` | Values-only workbook, a Certificate header sheet, plus the optional Audit sheet. The Audit objective sums the trusted set only. |
 | `X_report.md` | Shell record, acceptance table, register, limitations. |
 | `charts/` | The seven views of §6.6, plus the `r` profile. |
 
@@ -70,6 +70,9 @@ One JSON file per tank. Paths are relative to the JSON file.
 ```json
 {
   "tank": "tankA",
+  "site": "Tank farm A",
+  "table_version": "v1",
+  "supersedes": "none",
   "raw": "tankA_raw.csv",
   "nominal": {"r": 948.0, "L": 2517.0},
   "sigma_h": 1.5,
@@ -100,6 +103,9 @@ One JSON file per tank. Paths are relative to the JSON file.
 Notes:
 
 - `raw` is read-only. Corrections live in `corrections`, never in the raw file.
+- `site`, `table_version` and `supersedes` fill the generated certificate
+  header. The header is written to the top of both tables, the workbook
+  `Certificate` sheet and the report.
 - `corrections` and `exclude` use 1-based data rows (the header is not a row).
 - A step cell may be a number, `?` (whole pour unknown), or `200+?`
   (200 L plus an unknown extra). `x1`/`x2` are read as unknown pours.

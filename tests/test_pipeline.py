@@ -84,7 +84,21 @@ class TestPipeline(unittest.TestCase):
     def test_strapping_extrapolated_below_lowest_dip(self):
         rows = self.result["strapping"]
         self.assertEqual(rows[0]["flag"], "extrapolated")
-        self.assertIn("verified", rows[-1]["flag"])
+        self.assertIn("brim-anchored", rows[-1]["flag"])
+
+    def test_table_header_is_part_of_the_output(self):
+        header = self.result["table_header"]
+        self.assertEqual(header["title"], "demo — tank calibration certificate")
+        self.assertIn("Formula gate", [label for label, _ in header["quality"]])
+
+        out = self.out / "out"
+        text = (out / "demo_strapping.csv").read_text(encoding="utf-8")
+        self.assertTrue(text.startswith("# demo — tank calibration certificate"))
+        self.assertIn("#   Radius r (mm):", text)
+        self.assertIn("# ---", text)
+
+        wb = load_workbook(out / "demo_workbook.xlsx")
+        self.assertEqual(wb.sheetnames[0], "Certificate")
 
     def test_audit_sheet_uses_trusted_rows(self):
         wb = load_workbook(self.out / "out" / "demo_workbook.xlsx")

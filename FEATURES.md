@@ -9,7 +9,7 @@ Every section and rule of [CALIBRATION_METHODOLOGY.md](CALIBRATION_METHODOLOGY.m
 | 1.1 Raw never edited | `data.read_raw` only reads; `pipeline._write_artifacts` copies the raw file; corrections live in `Correction` objects | `X_raw.csv` is a byte copy; `X_corrected.csv` carries the flag |
 | 1.2 A gap is a finding | `report.anomaly_register`; residuals are never averaged away | `X_anomaly_register.csv`, workbook `AnomalyLog` |
 | 1.3 One authoritative table | One `X_strapping.csv` per run | `X_shell_record.txt` names it |
-| 1.4 No extrapolation | `report.strapping_table` flags every row below the lowest verified dip | `flag = extrapolated` |
+| 1.4 No extrapolation | `report.strapping_table` flags every row below the lowest verified dip and every row above the highest verified dip | `flag = extrapolated` or `brim-anchored` |
 
 ## §2 Conventions
 
@@ -108,7 +108,8 @@ adopted shell, so the tool cannot drift from the fit.
 |---|---|
 | `*_raw.csv` | Byte copy, immutable |
 | `*_corrected.csv` | Flag, rule, magnitude, raw value in the note |
-| Strapping table | `X_strapping.csv`, workbook `Strapping` |
+| Strapping table | `X_strapping.csv` with a generated certificate header; workbook `Certificate` and `Strapping` |
+| Customer header | `report.table_header` → CSV comment block, workbook `Certificate`, report section |
 | Shell record | `X_shell_record.txt` |
 | Anomaly register | `X_anomaly_register.csv`, workbook `AnomalyLog` |
 | Fit script | This package |

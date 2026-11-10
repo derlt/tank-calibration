@@ -35,6 +35,7 @@ from .fit import (
     profile_r,
     tilt_test,
 )
+from .formula_gate import gate_workbook
 from .geometry import Shell
 from .quantized import quantized_pour_search
 from .workbook import build_workbook
@@ -318,9 +319,10 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
 
     # -- deliverables ---------------------------------------------------
     lowest = min(iv.h_cur for iv in intervals if iv.trusted)
+    highest = max(iv.h_cur for iv in intervals if iv.trusted)
     strapping = report.strapping_table(
         adopted.shell, adopted,
-        bands=bands, lowest_verified=lowest,
+        bands=bands, lowest_verified=lowest, highest_verified=highest,
         step_mm=float(cfg.strapping.get("step_mm", 10.0)),
         sigma_h=cfg.sigma_h,
         start_mm=float(cfg.strapping.get("start_mm", 0.0)),
@@ -328,6 +330,7 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
     accepted = all(c["pass"] for c in acceptance)
     commercial = report.commercial_chart(
         adopted.shell, bands=bands, lowest_verified=lowest,
+        highest_verified=highest,
         step_mm=float(cfg.strapping.get("step_mm", 10.0)),
         start_mm=float(cfg.strapping.get("start_mm", 0.0)),
         shell_accepted=accepted,
@@ -433,6 +436,7 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
         "rmse_mm": sanity["rmse_mm"],
         "brim": adopted.shell.brim(),
         "lowest_verified": lowest,
+        "highest_verified": highest,
         "overflow": overflow,
     }
 
@@ -589,8 +593,21 @@ def _write_artifacts(outdir: Path, result: dict) -> None:
     shutil.copyfile(cfg.raw, outdir / f"{tank}_raw.csv")
     write_corrected(outdir / f"{tank}_corrected.csv", result["rows"])
 
-    report.write_csv(outdir / f"{tank}_strapping.csv", result["strapping"])
-    report.write_csv(outdir / f"{tank}_commercial.csv", result["commercial"])
+    # The workbook is gated before the header claims the gate result.
+    header = report.table_header(result)
+    workbook_path = outdir / f"{tank}_workbook.xlsx"
+    build_workbook(workbook_path, result, audit_sheet=True, header=header)
+    gate = gate_workbook(workbook_path)
+    result["gate"] = gate
+    header = report.table_header(result, gate=gate)
+    result["table_header"] = header
+
+    report.write_csv(
+        outdir / f"{tank}_strapping.csv", result["strapping"], header=header
+    )
+    report.write_csv(
+        outdir / f"{tank}_commercial.csv", result["commercial"], header=header
+    )
     report.write_csv(outdir / f"{tank}_anomaly_register.csv", result["register"])
     report.write_text(outdir / f"{tank}_shell_record.txt", result["shell_record"])
 
@@ -617,7 +634,6 @@ def _write_artifacts(outdir: Path, result: dict) -> None:
         json.dumps(presets, indent=2), encoding="utf-8"
     )
 
-    build_workbook(outdir / f"{tank}_workbook.xlsx", result, audit_sheet=True)
     (outdir / f"{tank}_report.md").write_text(_markdown(result), encoding="utf-8")
 
 
@@ -631,6 +647,41 @@ def _markdown(result: dict) -> str:
         result["shell_record"].rstrip(),
         "```",
         "",
+    ]
+    header = result.get("table_header")
+    if header:
+        lines += ["## Customer table header", "", "| Field | Value |", "|---|---|"]
+        for label, value in header["identification"]:
+            lines.append(f"| {label} | {value} |")
+        lines += ["", "**Adopted shell**", "", "| Parameter | Value |", "|---|---|"]
+        for label, value in header["shell"]:
+            lines.append(f"| {label} | {value} |")
+        lines += [
+            "",
+            f"**Datum.** {header['datum']}",
+            "",
+            f"**Basis.** {header['basis']}",
+            "",
+            f"**Uncertainty.** {header['uncertainty']}",
+            "",
+            "**Validity**",
+            "",
+            "| Region | Level | Status |",
+            "|---|---|---|",
+        ]
+        for row in header["validity"]:
+            lines.append("| " + " | ".join(row) + " |")
+        lines += ["", "**Quality**", "", "| Item | Value |", "|---|---|"]
+        for label, value in header["quality"]:
+            lines.append(f"| {label} | {value} |")
+        lines += ["", "**Anomalies**", "", "| Item | Where | Effect |", "|---|---|---|"]
+        for row in header["anomalies"]:
+            lines.append("| " + " | ".join(row) + " |")
+        lines += ["", "**Limitations**", ""]
+        for line in header["limitations"]:
+            lines.append(f"- {line}")
+        lines.append("")
+    lines += [
         "## Acceptance (§5.7)",
         "",
         "| # | Check | Result | Pass |",

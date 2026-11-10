@@ -25,6 +25,7 @@ HEAD_FG = "FFFFFF"
 BAND = "EEF2F7"
 WARN = "FDE68A"
 BAD = "FECACA"
+NOTE = "DBEAFE"
 GOOD = "BBF7D0"
 
 THIN = Side(style="thin", color="D9DEE5")
@@ -490,6 +491,8 @@ def _strapping(wb, result):
     r = _header(ws, r, ["Level (mm)", "Liquid (L)", "To brim (L)", "±sigma (L)", "Flag", "Note"])
     for item in result["strapping"]:
         fill = WARN if "extrapolated" in item["flag"] else None
+        if "brim-anchored" in item["flag"]:
+            fill = NOTE
         r = _row(ws, r, [item["level_mm"], item["liquid_l"], item.get("to_brim_l", ""),
                          item["sigma_l"], item["flag"], ""],
                  formats=["0.0", "0.0", "0.0", "0.0", None, None], fill=fill)
@@ -510,6 +513,8 @@ def _commercial(wb, result):
     r = _header(ws, r, ["Level (mm)", "Volume (L)", "Validity", "Note"])
     for item in result["commercial"]:
         fill = WARN if item["validity"] == "extrapolated" else None
+        if item["validity"] == "brim-anchored":
+            fill = NOTE
         r = _row(ws, r, [item["level_mm"], item["volume_l"], item["validity"], item.get("note", "")],
                  formats=["0.0", "0", None, None], fill=fill)
     _widths(ws, [12, 14, 14, 40])
@@ -832,14 +837,64 @@ def _reference(wb):
 # Build
 # ---------------------------------------------------------------------------
 
+def _certificate(wb, header):
+    """Customer-facing header sheet (§11)."""
+    ws = wb.create_sheet("Certificate", 0)
+    r = _title(ws, header["title"], 1, 6)
+    r = _sub(ws, header["subtitle"], r, 6)
+    r = _section(ws, "Identification", r, 6)
+    r = _kv(ws, r, header["identification"], span=6)
+    r = _section(ws, "Adopted shell", r, 6)
+    r = _kv(ws, r, header["shell"], span=6)
+    for title, text in (
+        ("Datum", header["datum"]),
+        ("Basis", header["basis"]),
+        ("Uncertainty", header["uncertainty"]),
+    ):
+        r = _section(ws, title, r, 6)
+        cell = ws.cell(row=r, column=1, value=text)
+        cell.font = Font(size=9, color=INK)
+        cell.alignment = Alignment(wrap_text=True, vertical="top")
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
+        ws.row_dimensions[r].height = 44
+        r += 1
+    r = _section(ws, "Validity", r, 6)
+    r = _header(ws, r, ["Region", "Level", "Status"])
+    for row in header["validity"]:
+        r = _row(ws, r, list(row))
+    r = _section(ws, "Quality", r, 6)
+    r = _kv(ws, r, header["quality"], span=6)
+    r = _section(ws, "Anomalies", r, 6)
+    r = _header(ws, r, ["Item", "Where", "Effect"])
+    for row in header["anomalies"]:
+        r = _row(ws, r, list(row))
+    r = _section(ws, "Limitations", r, 6)
+    for line in header["limitations"]:
+        cell = ws.cell(row=r, column=1, value=f"- {line}")
+        cell.font = Font(size=9, color=INK)
+        cell.alignment = Alignment(wrap_text=True, vertical="top")
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
+        r += 1
+    r = _section(ws, "Files", r, 6)
+    cell = ws.cell(row=r, column=1, value=", ".join(header["files"]))
+    cell.font = Font(size=9, color=INK)
+    cell.alignment = Alignment(wrap_text=True, vertical="top")
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
+    _widths(ws, [24, 22, 36, 14, 14, 14])
+    ws.freeze_panes = "A4"
+
+
 def build_workbook(
     path: str | Path,
     result: dict,
     *,
     audit_sheet: bool = True,
+    header: dict | None = None,
 ) -> Path:
     wb = Workbook()
     wb.remove(wb.active)
+    if header:
+        _certificate(wb, header)
     _readme(wb, result)
     _settings(wb, result)
     _input(wb, result)

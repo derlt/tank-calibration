@@ -37,6 +37,9 @@ class Config:
     seed: int = 0
     lag_checks: list[dict] = field(default_factory=list)
     notes: str = ""
+    site: str = ""
+    table_version: str = "v1"
+    supersedes: str = "none"
 
     @property
     def nominal(self) -> dict:
@@ -156,6 +159,9 @@ def load_config(path: str | Path) -> Config:
         seed=int(_get(data, "seed", default=0)),
         lag_checks=list(_get(data, "lag_checks", default=[]) or []),
         notes=_get(data, "notes", default=""),
+        site=str(_get(data, "site", default="")),
+        table_version=str(_get(data, "table_version", default="v1")),
+        supersedes=str(_get(data, "supersedes", default="none")),
     )
     cfg.validate()
     return cfg

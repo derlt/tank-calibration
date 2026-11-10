@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
@@ -43,6 +44,7 @@ def strapping_table(
     *,
     bands: list[dict],
     lowest_verified: float,
+    highest_verified: float | None = None,
     step_mm: float = 10.0,
     sigma_h: float = 1.5,
     start_mm: float = 0.0,
@@ -57,6 +59,8 @@ def strapping_table(
     for h, s in zip(levels, sig):
         liquid = float(shell.volume(h)) - float(blocked_below(bands, h))
         flag = "verified" if h >= lowest_verified else "extrapolated"
+        if highest_verified is not None and h > highest_verified:
+            flag = "brim-anchored"
         for band in bands:
             if float(band["low"]) <= h <= float(band["high"]):
                 flag += "; object band"
@@ -77,6 +81,7 @@ def commercial_chart(
     *,
     bands: list[dict],
     lowest_verified: float,
+    highest_verified: float | None = None,
     step_mm: float = 10.0,
     start_mm: float = 0.0,
     shell_accepted: bool = True,
@@ -89,11 +94,14 @@ def commercial_chart(
     out = []
     for h in levels:
         liquid = float(shell.volume(h)) - float(blocked_below(bands, h))
+        validity = "verified" if h >= lowest_verified else "extrapolated"
+        if highest_verified is not None and h > highest_verified:
+            validity = "brim-anchored"
         out.append(
             {
                 "level_mm": float(h),
                 "volume_l": round(liquid),
-                "validity": "verified" if h >= lowest_verified else "extrapolated",
+                "validity": validity,
                 "note": (
                     "shell accepted (§5.7)"
                     if shell_accepted
@@ -309,13 +317,234 @@ def shell_record(
     )
 
 
-def write_csv(path: str | Path, rows: list[dict], fieldnames: list[str] | None = None) -> None:
+def table_header(result: dict, *, gate: dict | None = None) -> dict:
+    """Customer-facing header for the strapping table (§11).
+
+    One source of truth for the CSV comment block, the workbook Certificate
+    sheet and the markdown report.
+    """
+    cfg = result["config"]
+    fit = result["fit"]
+    shell = fit.shell
+    bands = result["bands"]
+    lowest = float(result["lowest_verified"])
+    highest = float(result.get("highest_verified", lowest))
+    brim = float(shell.brim())
+    checks = result["acceptance"]
+    passed = sum(1 for c in checks if c["pass"])
+    qa = result["qa"]
+    closure = result["closure"]
+    v0 = float(shell.volume(0.0))
+
+    r_sigma = (result["profile"]["hi"] - result["profile"]["lo"]) / 2.0
+    l_sigma = (result["profile_L"]["hi"] - result["profile_L"]["lo"]) / 2.0
+
+    if bands:
+        blocked = "; ".join(
+            f"{float(b.get('displacement', b.get('litres', 0)) or 0.0):.1f} L at "
+            f"{float(b['low']):g}-{float(b['high']):g} mm"
+            for b in bands
+        )
+    else:
+        blocked = "none declared"
+    max_liquid = float(shell.capacity()) - sum(
+        float(b.get("displacement", b.get("litres", 0)) or 0.0) for b in bands
+    )
+
+    identification = [
+        ("Tank", cfg.tank),
+        ("Site / tag", cfg.site or "—"),
+        ("Calibration date", datetime.now(UTC).date().isoformat()),
+        ("Method", "Pour-and-dip difference fit, CALIBRATION_METHODOLOGY.md §5"),
+        ("Table version", cfg.table_version),
+        ("Authoritative file", f"{cfg.tank}_strapping.csv"),
+        ("Supersedes", cfg.supersedes),
+    ]
+    shell_rows = [
+        ("Radius r (mm)", f"{shell.r:.1f} ± {r_sigma:.1f}"),
+        ("Length L (mm)", f"{shell.L:.1f} ± {l_sigma:.1f}"),
+        (
+            "Datum h0 (mm)",
+            f"{shell.h0:.1f} ({'locked' if cfg.h0_mode == 'locked' else 'fitted'})",
+        ),
+        ("Crown level (mm)", f"{brim:.1f}"),
+        ("Capacity Vcap (L)", f"{shell.capacity():.1f}"),
+        ("Max liquid (L)", f"{max_liquid:.1f}"),
+    ]
+    datum = datum_statement(
+        shell, h0_mode=cfg.h0_mode, lock=result.get("lock"), v0=v0,
+    )
+    basis = (
+        "Liquid volume at level H = F(H) - blocked volumes below H. "
+        f"Blocked volume: {blocked}. Level in mm; volume in litres."
+    )
+    uncertainty = (
+        "The ± column is one standard deviation (1σ). It includes r, L, h0 "
+        f"and one dip reading (σh = {cfg.sigma_h:.1f} mm). It does not include "
+        "the object displacement, the extrapolated bottom, temperature or "
+        "product correction, or tape-scale error. For a 95% interval, "
+        "multiply by 2."
+    )
+    validity = [
+        ("Bottom", f"0-{lowest:.1f} mm", "extrapolated"),
+        ("Verified", f"{lowest:.1f}-{highest:.1f} mm", "backed by dips"),
+    ]
+    if highest < brim - 1e-9:
+        validity.append(
+            ("Top", f"{highest:.1f}-{brim:.1f} mm", "brim-anchored; no dip")
+        )
+    quality = [
+        ("RMSE", f"{fit.rmse:.3f} L/step = {result['rmse_mm']:.2f} mm-equiv"),
+        (
+            "QA max abs(books - F)",
+            f"{qa['max']:.1f} L over {qa['n']} rows (mean {qa['mean']:.1f} L)",
+        ),
+        (
+            "Closure",
+            f"{closure['diff']:+.1f} L against a {closure['limit']:.1f} L limit",
+        ),
+        ("Acceptance", f"{passed} of {len(checks)} checks pass"),
+    ]
+    if gate is not None:
+        quality.append(
+            (
+                "Formula gate",
+                f"{gate.get('formulas', 0)} formulas, "
+                f"{len(gate.get('errors', []))} problems",
+            )
+        )
+    else:
+        quality.append(("Formula gate", "run `calib gate` before issue"))
+
+    anomalies = []
+    for item in result["register"]:
+        magnitude = item.get("magnitude_l")
+        if item.get("kind") == "correction":
+            magnitude_text = (
+                f"{float(magnitude):+.1f} mm" if magnitude is not None else ""
+            )
+        else:
+            magnitude_text = (
+                f"{float(magnitude):.1f} L" if magnitude is not None else ""
+            )
+        effect = f"{magnitude_text} — {item.get('status', '')}".strip(" —")
+        anomalies.append(
+            (
+                str(item.get("kind", "")),
+                str(item.get("where_mm", "")),
+                effect,
+            )
+        )
+
+    limitations = [
+        "Static tilt not tested." if not cfg.tilt_test else "Static tilt tested; see report.",
+        "Tape scale is unidentifiable from pour and level data.",
+        "Object error and pour error are not separable from one pass.",
+        "r is an effective mean; ovality and bulging are not modelled.",
+        "Bottom shape is absorbed by h0; the heel is an estimate unless sounded.",
+    ]
+    files = [
+        f"{cfg.tank}_raw.csv",
+        f"{cfg.tank}_corrected.csv",
+        f"{cfg.tank}_strapping.csv",
+        f"{cfg.tank}_commercial.csv",
+        f"{cfg.tank}_anomaly_register.csv",
+        f"{cfg.tank}_shell_record.txt",
+        f"{cfg.tank}_presets.json",
+        f"{cfg.tank}_report.md",
+        f"{cfg.tank}_workbook.xlsx",
+    ]
+    return {
+        "title": f"{cfg.tank} — tank calibration certificate",
+        "subtitle": "Strapping table header and delivery notes (§11).",
+        "identification": identification,
+        "shell": shell_rows,
+        "datum": datum,
+        "basis": basis,
+        "uncertainty": uncertainty,
+        "validity": validity,
+        "quality": quality,
+        "anomalies": anomalies,
+        "limitations": limitations,
+        "files": files,
+    }
+
+
+def _comment_wrap(prefix: str, text: str, width: int = 120) -> list[str]:
+    """Wrap a long header paragraph into readable CSV comment lines."""
+    words = str(text).split()
+    if not words:
+        return [prefix.rstrip()]
+    lines = []
+    current = prefix
+    for word in words:
+        candidate = current + word if current == prefix else current + " " + word
+        if len(candidate) > width and current != prefix:
+            lines.append(current)
+            current = "#   " + word
+        else:
+            current = candidate
+    lines.append(current)
+    return lines
+
+
+def header_lines(header: dict) -> list[str]:
+    """Render the table header as CSV comment lines."""
+    out = [f"# {header['title']}", "#"]
+    out.append("# Identification")
+    for label, value in header["identification"]:
+        out.append(f"#   {label}: {value}")
+    out.append("#")
+    out.append("# Adopted shell")
+    for label, value in header["shell"]:
+        out.append(f"#   {label}: {value}")
+    out.append("#")
+    for label, text in (
+        ("Datum", header["datum"]),
+        ("Basis", header["basis"]),
+        ("Uncertainty", header["uncertainty"]),
+    ):
+        out.extend(_comment_wrap(f"# {label}: ", text))
+    out.append("#")
+    out.append("# Validity")
+    for region, span, status in header["validity"]:
+        out.append(f"#   {region}: {span} — {status}")
+    out.append("#")
+    out.append("# Quality")
+    for label, value in header["quality"]:
+        out.append(f"#   {label}: {value}")
+    out.append("#")
+    out.append("# Anomalies")
+    for kind, where, effect in header["anomalies"]:
+        out.append(f"#   {kind} | {where} | {effect}")
+    out.append("#")
+    out.append("# Limitations")
+    for line in header["limitations"]:
+        out.append(f"#   - {line}")
+    out.append("#")
+    out.append("# Files: " + ", ".join(header["files"]))
+    out.append("# ---")
+    return out
+
+
+def write_csv(
+    path: str | Path,
+    rows: list[dict],
+    fieldnames: list[str] | None = None,
+    header: dict | None = None,
+) -> None:
     path = Path(path)
     if not rows:
-        path.write_text("", encoding="utf-8")
+        path.write_text(
+            "\n".join(header_lines(header)) + "\n" if header else "",
+            encoding="utf-8",
+        )
         return
     names = fieldnames or list(rows[0])
     with path.open("w", newline="", encoding="utf-8") as fh:
+        if header:
+            for line in header_lines(header):
+                fh.write(line + "\n")
         writer = csv.DictWriter(fh, fieldnames=names)
         writer.writeheader()
         for row in rows:
