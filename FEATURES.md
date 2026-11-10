@@ -1,6 +1,6 @@
 # Method coverage
 
-Every section and rule of `CALIBRATION_METHODOLOGY.md`, and where it lives.
+Every section and rule of [CALIBRATION_METHODOLOGY.md](CALIBRATION_METHODOLOGY.md), and where it lives.
 
 ## §1 Products and authority
 

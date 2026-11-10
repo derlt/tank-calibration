@@ -1,7 +1,7 @@
 # Tank calibration
 
 Calibrate a horizontal, flat-ended cylindrical tank from pour and level data.
-The package implements `CALIBRATION_METHODOLOGY.md` end to end.
+The package implements [CALIBRATION_METHODOLOGY.md](CALIBRATION_METHODOLOGY.md) end to end.
 
 **Python owns the numbers. Excel shows them.** The fit, the uncertainty, the
 anomaly register and the charts come from Python. The workbook is a
