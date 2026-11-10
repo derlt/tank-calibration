@@ -370,6 +370,7 @@ def _fit_sheet(wb, result):
 
 
 def _diagnostics(wb, result):
+    cfg = result["config"]
     ws = wb.create_sheet("Diagnostics")
     r = _title(ws, "Diagnostics", 1, 7)
     r = _sub(ws, "Uncertainty audit and detector views (§9, §6.6).", r, 7)
@@ -384,10 +385,28 @@ def _diagnostics(wb, result):
             ("sigma_pour (L)", ns["sigma_pour"], "the rest of the interval variance"),
             ("implied RMSE (L)", ns["implied_rmse"], "must equal the observed"),
             ("observed RMSE (L)", ns["observed_rmse"], "check"),
+            ("configured sigma_h (mm)", cfg.sigma_h,
+             "the value used everywhere; compare with the estimate above"),
         ]:
             r = _row(ws, r, [label, value, note], formats=[None, "0.000", None])
     else:
         r = _row(ws, r, ["not computed", ns.get("reason", ""), ""])
+
+    r = _section(ws, "SENSITIVITY BATTERY (§8.3)", r + 1)
+    bat = result["battery"]
+    spread = bat["shell_spread"]
+    r = _header(ws, r, ["Item", "Value", "Note"])
+    r = _row(ws, r, ["battery runs", len(bat["runs"]), "loss x h0 x exclusion shapes"])
+    r = _row(ws, r, ["r spread (mm)", f"{spread['r'][0]:.2f} to {spread['r'][1]:.2f}",
+                     "how far the refit shapes move r"])
+    r = _row(ws, r, ["L spread (mm)", f"{spread['L'][0]:.2f} to {spread['L'][1]:.2f}", ""])
+    for u in bat["per_unknown"]:
+        r = _row(
+            ws, r,
+            [f"unknown at interval {u['interval']}", f"range {u['range']:.1f} L",
+             f"noise term {u['noise_term']:.1f} L; "
+             + ("settled" if u["settled"] else "not settled")],
+        )
 
     r = _section(ws, "TELESCOPING BLOCK TEST (§9.6)", r + 1)
     r = _header(ws, r, ["Block", "From (mm)", "To (mm)", "Sum (L)", "sigma (L)", "z", "Flag"])
@@ -425,7 +444,7 @@ def _diagnostics(wb, result):
     qa = result["qa"]
     r = _header(ws, r, ["Item", "Value", "Note"])
     r = _row(ws, r, ["closure diff (L)", cl["diff"], f"limit {cl['limit']:.1f} L; z={cl['z']:.2f}"])
-    r = _row(ws, r, ["closure ok", "yes" if cl["ok"] else "no", "heel + poured + blocked vs F(H)"])
+    r = _row(ws, r, ["closure ok", "yes" if cl["ok"] else "no", "first pour + poured + blocked vs F(H)"])
     r = _row(ws, r, ["QA max |books - F| (L)", qa["max"], "over corrected rows"])
     r = _row(ws, r, ["QA mean (L)", qa["mean"], f"n={qa['n']}"])
     r = _row(ws, r, ["empty start", result["empty_start"]["resid"], result["empty_start"]["kind"]])
@@ -925,7 +944,7 @@ def _reference(wb):
         ("Object", "Once submerged, displacement is constant; difference residuals return to zero."),
         ("Liquid", "liquid(H) = F(H) - blocked volumes below H. Never quote raw F as liquid."),
         ("Unknown pours", "x = F(H_i) - F(H_i-1) - known_base. Never fitted."),
-        ("Closure", "heel + poured + blocked below H = F(H), within 3 sigma sqrt(n)."),
+        ("Closure", "first pour + poured + blocked below H = F(H), within 3 sigma sqrt(n)."),
         ("Blocking", "Merge small pours for fitting only; block boundaries stay fit points."),
         ("Tape scale", "Unidentifiable from pour/level data. The volume table is invariant."),
         ("Tilt", "Not absorbed by r. Test it or record it as a limitation."),

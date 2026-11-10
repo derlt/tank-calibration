@@ -87,14 +87,19 @@ class Shell:
     h0: float
     eps: float = 0.0
 
+    @property
+    def flat(self) -> bool:
+        """True when the tilt is numerically zero: the closed form applies."""
+        return abs(self.eps) < 1e-12
+
     # -- model ---------------------------------------------------------
     def volume(self, H):
-        if self.eps == 0.0:
+        if self.flat:
             return volume(H, self.r, self.L, self.h0)
         return volume_tilted(H, self.r, self.L, self.h0, self.eps)
 
     def slope(self, H):
-        if self.eps == 0.0:
+        if self.flat:
             return slope(H, self.r, self.L, self.h0)
         # The closed form is flat-shell only; differentiate the tilted volume.
         d = 1e-3
@@ -108,7 +113,7 @@ class Shell:
         return brim_reading(self.h0, self.r)
 
     def as_params(self):
-        return (self.r, self.L, self.h0) if self.eps == 0.0 else (self.r, self.L, self.h0, self.eps)
+        return (self.r, self.L, self.h0) if self.flat else (self.r, self.L, self.h0, self.eps)
 
     def with_params(self, p):
         if len(p) == 3:

@@ -17,6 +17,7 @@ from .data import (
     Interval,
     Step,
     apply_corrections,
+    books_start,
     build_intervals,
     mark_trusted,
     read_raw,
@@ -106,6 +107,7 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
     diagnostics.apply_model(
         intervals, free.shell,
         sigma_h=cfg.sigma_h, rel=cfg.pour_rel, abs_=cfg.pour_abs,
+        books_start=books_start(rows, free.shell),
     )
     bands = _band_with_displacement(cfg.object_bands, intervals)
 
@@ -131,12 +133,15 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
         diagnostics.apply_model(
             intervals, free.shell,
             sigma_h=cfg.sigma_h, rel=cfg.pour_rel, abs_=cfg.pour_abs,
+            books_start=books_start(rows, free.shell),
         )
         bands = _band_with_displacement(cfg.object_bands, intervals)
 
     # -- Huber comparison (§5.2) --------------------------------------
+    # The scale must describe the fitted population: trusted intervals only.
     resid_scale = float(np.median([
-        abs(iv.resid) for iv in intervals if iv.known and math.isfinite(iv.resid)
+        abs(iv.resid) for iv in intervals
+        if iv.trusted and math.isfinite(iv.resid)
     ]))
     sigma_scale = float(np.median([
         iv.sigma for iv in intervals if iv.trusted and math.isfinite(iv.sigma)
@@ -224,6 +229,7 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
     diagnostics.apply_model(
         intervals, adopted.shell,
         sigma_h=cfg.sigma_h, rel=cfg.pour_rel, abs_=cfg.pour_abs,
+        books_start=books_start(rows, adopted.shell),
     )
     bands = _band_with_displacement(cfg.object_bands, intervals)
     pairs = diagnostics.find_pairs(intervals, adopted.shell)
@@ -251,15 +257,26 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
     estimates = unknowns.widen_unknowns(estimates, battery)
 
     # -- audit numbers -------------------------------------------------
-    heel = float(rows[0].step.value) if (cfg.heel_row and rows[0].step.known) else 0.0
+    # The books start with the first row's pour: recorded when known,
+    # back-predicted F(H_0) when not.  Without it the closure identity is
+    # short by exactly the first pour (§9.3).
+    first = rows[0]
+    if first.step.known:
+        bstart = float(first.step.value)
+        start_sigma = cfg.pour_rel * bstart + cfg.pour_abs
+    else:
+        bstart = float(adopted.shell.volume(first.height))
+        start_sigma = float(adopted.shell.slope(first.height)) * cfg.sigma_h
     closure = diagnostics.closure(
         intervals, adopted.shell, bands,
-        heel=heel, sigma_h=cfg.sigma_h,
+        books_start=bstart, start_sigma=start_sigma,
+        sigma_h=cfg.sigma_h,
         rel=cfg.pour_rel, abs_=cfg.pour_abs,
         estimates=estimates,
     )
     qa = report.qa_agreement(
-        intervals, adopted.shell, bands=bands, heel=heel, estimates=estimates,
+        intervals, adopted.shell, bands=bands, books_start=bstart,
+        estimates=estimates,
     )
     empty = empty_start_check(rows, adopted.shell, cfg.heel_row)
     mean_m = float(np.mean([iv.m for iv in intervals if iv.trusted]))
@@ -306,6 +323,43 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
             "delta_h0": bfit.shell.h0 - adopted.shell.h0,
         }
 
+    # -- anomaly register (before acceptance: check 2 reads it) --------
+    register = report.anomaly_register(
+        bands=bands, pairs=pairs, singles=singles, watch=watch,
+        unknowns=estimates, corrections=cfg.corrections,
+        quantized=quantized,
+    )
+    if overflow:
+        if overflow.get("back_predicted") is not None:
+            register.append(
+                {
+                    "kind": "overflow back-prediction",
+                    "where_mm": f"{overflow.get('h_last', 0):.0f}",
+                    "magnitude_l": overflow["back_predicted"],
+                    "rule": "5.3a",
+                    "status": (
+                        f"recorded pour {overflow['pour']:.1f} L cannot fill "
+                        f"G={overflow['gap']:.1f} L; height is data, pour is a claim"
+                    ),
+                    "test": "re-dip the brim; confirm the vent volume",
+                }
+            )
+        else:
+            register.append(
+                {
+                    "kind": "overflow interval",
+                    "where_mm": f"{overflow.get('h_overflow', 0):.0f}",
+                    "magnitude_l": overflow["gap"],
+                    "rule": "5.3a",
+                    "status": (
+                        f"recorded pour {overflow['pour']:.1f} L can fill "
+                        f"G={overflow['gap']:.1f} L; the reading is vent-column "
+                        "height, the interval stays out of the fit"
+                    ),
+                    "test": "re-dip the brim; confirm the vent volume",
+                }
+            )
+
     # -- acceptance (§5.7) ---------------------------------------------
     constraint_ok = True
     if constrained is not None:
@@ -314,7 +368,8 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
         )
     acceptance = _acceptance(
         free, huber, profile, profile_l, bootstrap, closure, sanity,
-        intervals, pairs, singles, bands, battery, constraint_ok, constraint,
+        intervals, pairs, singles, battery, constraint_ok, constraint,
+        register,
     )
 
     # -- deliverables ---------------------------------------------------
@@ -335,25 +390,6 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
         start_mm=float(cfg.strapping.get("start_mm", 0.0)),
         shell_accepted=accepted,
     )
-    register = report.anomaly_register(
-        bands=bands, pairs=pairs, singles=singles, watch=watch,
-        unknowns=estimates, corrections=cfg.corrections,
-        quantized=quantized,
-    )
-    if overflow and overflow.get("back_predicted") is not None:
-        register.append(
-            {
-                "kind": "overflow back-prediction",
-                "where_mm": f"{overflow.get('h_last', 0):.0f}",
-                "magnitude_l": overflow["back_predicted"],
-                "rule": "5.3a",
-                "status": (
-                    f"recorded pour {overflow['pour']:.1f} L cannot fill "
-                    f"G={overflow['gap']:.1f} L; height is data, pour is a claim"
-                ),
-                "test": "re-dip the brim; confirm the vent volume",
-            }
-        )
 
     def _unknown_label(u):
         body = (
@@ -499,10 +535,10 @@ def _acceptance(
     intervals: list[Interval],
     pairs: list,
     singles: list[Interval],
-    bands: list[dict],
     battery: dict,
     constraint_ok: bool,
     constraint: dict,
+    register: list[dict],
 ) -> list[dict]:
     checks = []
 
@@ -517,24 +553,26 @@ def _acceptance(
     )
 
     candidates = [iv for iv in intervals if iv.flag == "candidate"]
-    in_bands = [
-        iv for iv in candidates
-        if any(float(b["low"]) <= iv.h_cur <= float(b["high"]) for b in bands)
-    ]
-    disposition = set()
-    for p in pairs:
-        disposition.add(id(p.first))
-        disposition.add(id(p.second))
-    for iv in singles:
-        disposition.add(id(iv))
-    for iv in in_bands:
-        disposition.add(id(iv))
-    classified = len({id(iv) for iv in candidates} & disposition)
+    # The classification itself is a partition by construction (singles are
+    # the candidates not in pairs), so the checkable claim is that the
+    # shipped register carries every pair and every single-sided event.
+    reg_pairs = sum(
+        1 for e in register if str(e.get("kind", "")).startswith("dip pair")
+    )
+    reg_singles = sum(1 for e in register if e.get("kind") == "single-sided")
+    classified = 2 * reg_pairs + reg_singles
     checks.append(
         {
             "check": "every action-bar residual classified",
-            "result": f"{len(candidates)} candidates; {classified} dispositions",
-            "pass": classified >= len(candidates),
+            "result": (
+                f"{len(candidates)} candidates; "
+                f"{reg_pairs} pairs and {reg_singles} single-sided in the register"
+            ),
+            "pass": (
+                classified == len(candidates)
+                and reg_pairs == len(pairs)
+                and reg_singles == len(singles)
+            ),
             "detail": "pair, single-sided, object band, or unknown pour",
         }
     )
@@ -556,7 +594,7 @@ def _acceptance(
             "check": "closure identity within 3 sigma sqrt(n)",
             "result": f"diff {closure['diff']:+.1f} L, limit {closure['limit']:.1f} L",
             "pass": bool(closure["ok"]),
-            "detail": "heel + poured + blocked vs F(H)",
+            "detail": "first pour + poured + blocked vs F(H)",
         }
     )
 
@@ -596,9 +634,16 @@ def _write_artifacts(outdir: Path, result: dict) -> None:
     shutil.copyfile(cfg.raw, outdir / f"{tank}_raw.csv")
     write_corrected(outdir / f"{tank}_corrected.csv", result["rows"])
 
-    # The workbook is gated before the header claims the gate result.
+    # The workbook is gated, then rebuilt so its certificate states the
+    # gate result, then the shipped file is gated again (§11).  The
+    # certificate holds no formulas, so the second gate sees the same
+    # formula set as the first.
     header = report.table_header(result)
     workbook_path = outdir / f"{tank}_workbook.xlsx"
+    build_workbook(workbook_path, result, audit_sheet=True, header=header)
+    gate = gate_workbook(workbook_path)
+    result["gate"] = gate
+    header = report.table_header(result, gate=gate)
     build_workbook(workbook_path, result, audit_sheet=True, header=header)
     gate = gate_workbook(workbook_path)
     result["gate"] = gate

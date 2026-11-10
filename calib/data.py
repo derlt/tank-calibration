@@ -58,15 +58,16 @@ def parse_step(cell: str) -> Step:
 
 @dataclass
 class Row:
-    index: int  # 0-based position in the file
+    index: int  # 0-based position among the kept rows
     step: Step
     height: float
     note: str = ""
     flags: list[str] = field(default_factory=list)
+    file_line: int = 0  # 1-based line in the file; 0 = same as index + 1
 
     @property
     def line(self) -> int:
-        return self.index + 1
+        return self.file_line or self.index + 1
 
 
 @dataclass
@@ -129,7 +130,12 @@ def read_raw(path: str | Path) -> list[Row]:
     for i, rec in enumerate(reader):
         raw_h = (rec.get(height_col) or "").strip()
         if raw_h == "":
-            continue
+            step = parse_step(rec.get(step_col) if step_col else "")
+            if step.known or step.base:
+                raise ValueError(
+                    f"{path}: row {i + 1}: pour {step.raw!r} is recorded without a height"
+                )
+            continue  # a blank line, not a lost pour
         try:
             height = _to_float(raw_h)
         except ValueError as exc:
@@ -140,11 +146,28 @@ def read_raw(path: str | Path) -> list[Row]:
                 step=parse_step(rec.get(step_col)),
                 height=height,
                 note=(rec.get(note_col) or "").strip() if note_col else "",
+                file_line=i + 1,
             )
         )
     if len(rows) < 2:
         raise ValueError(f"{path}: need at least two rows")
     return rows
+
+
+def books_start(rows: list[Row], shell) -> float:
+    """Liquid on the books at the first recorded level (§9.3).
+
+    The first row's pour filled the tank to its first level.  A known pour
+    enters the books at its recorded value; an unknown one enters at the
+    back-predicted ``F(H_0)`` (§8.1).  Without this term the closure identity
+    is short by exactly the first pour.
+    """
+    if not rows:
+        return 0.0
+    first = rows[0]
+    if first.step.known:
+        return float(first.step.value)
+    return float(shell.volume(first.height))
 
 
 # ---------------------------------------------------------------------------

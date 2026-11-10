@@ -117,20 +117,21 @@ def qa_agreement(
     shell: Shell,
     *,
     bands: list[dict],
-    heel: float,
+    books_start: float,
     estimates: list[dict] | None = None,
 ) -> dict:
     """max |books - F| over corrected rows (§11).
 
-    Unknown pours enter at their back-predicted value, so the number is
-    comparable across a campaign with gaps.
+    ``books_start`` is the first row's pour (recorded or back-predicted), so
+    the number is comparable across a campaign with gaps.  Unknown pours
+    enter at their back-predicted value.
     """
     trusted = [iv for iv in intervals if iv.trusted]
     if not trusted:
         return {"max": float("nan"), "mean": float("nan"), "n": 0}
     h_last = trusted[-1].h_cur
     est = {u["interval"]: u for u in (estimates or [])}
-    books = float(heel)
+    books = float(books_start)
     diffs = []
     for iv in intervals:
         if iv.h_cur > h_last:

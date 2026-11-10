@@ -466,10 +466,10 @@ def fit_joint(
         r = x[0]
         h0 = x[-1] if h0_mode != "locked" else 0.0
         out = []
-        for i, (ivs, _) in enumerate(campaigns):
+        for i, group in enumerate(groups):
             L = x[1 + i]
             shell = Shell(r, L, h0)
-            hp, hc, s = _arrays(ivs)
+            hp, hc, s = _arrays(group)
             out.append(s - (shell.volume(hc) - shell.volume(hp)))
         return np.concatenate(out)
 

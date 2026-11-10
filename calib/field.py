@@ -216,7 +216,13 @@ class FieldValidator:
         if not rows:
             return []
         first = rows[0]
-        self.heel = float(first.step.value) if first.step.known else 0.0
+        # The books start with the first row's pour: recorded when known,
+        # back-predicted from the first level when not (§9.3).
+        self.heel = (
+            float(first.step.value)
+            if first.step.known
+            else float(self.shell.volume(first.height))
+        )
         self.levels = [first.height]
         self.history = []
         self.drift = 0.0

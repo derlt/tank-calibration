@@ -10,6 +10,9 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
+from calib.charts import build_series
+from calib.data import build_intervals, mark_trusted, read_raw
+from calib.fit import fit_joint
 from calib.formula_gate import gate_workbook
 from calib.pipeline import run
 
@@ -140,6 +143,60 @@ class TestPipeline(unittest.TestCase):
             round(fit.shell.capacity() - bands[0]["displacement"]),
             delta=2,
         )
+
+    def test_closure_counts_the_first_pour(self):
+        # Before the books fix the diff was -46 L: exactly the first pour,
+        # dropped from the books, hidden by the 3-sigma-sqrt(n) limit.
+        self.assertLess(abs(self.result["closure"]["diff"]), 20.0)
+
+    def test_qa_books_agreement(self):
+        # Before the books fix the max was 52.8 L: the same constant offset
+        # at every row, not a data-to-model disagreement.
+        self.assertLess(self.result["qa"]["max"], 20.0)
+
+    def test_drift_definitions_agree(self):
+        # The interval drift (Diagnostics sheet) and the chart series drift
+        # (chart 5, Model sheet) are one quantity (§2).  They used to differ
+        # by the first pour and by every unknown pour.
+        cfg = self.result["config"]
+        series = build_series(
+            self.result["rows"], self.result["fit"].shell,
+            sigma_h=cfg.sigma_h, rel=cfg.pour_rel, abs_=cfg.pour_abs,
+            heel_row=cfg.heel_row,
+        )
+        by_row = {iv.row: iv for iv in self.result["intervals"]}
+        for k in range(len(series)):
+            iv = by_row[int(series.row[k])]
+            self.assertAlmostEqual(iv.drift, float(series.drift[k]), places=6)
+
+    def test_workbook_certificate_carries_gate(self):
+        wb = load_workbook(self.out / "out" / "demo_workbook.xlsx")
+        gate_rows = [
+            " ".join(str(c) for c in row if c is not None)
+            for row in wb["Certificate"].iter_rows(values_only=True)
+            if any(c == "Formula gate" for c in row)
+        ]
+        self.assertTrue(gate_rows)
+        self.assertIn("0 problems", gate_rows[0])
+        self.assertNotIn("run `calib gate`", gate_rows[0])
+
+    def test_register_records_the_overflow_interval(self):
+        # The demo overflow pour can fill the gap; that fact must ship.
+        kinds = [e["kind"] for e in self.result["register"]]
+        self.assertIn("overflow interval", kinds)
+
+
+class TestJoint(unittest.TestCase):
+    """`calib joint` must fit the trusted subset (§5.4)."""
+
+    def test_joint_skips_untrusted_intervals(self):
+        rows = read_raw(HERE / "examples" / "demo_raw.csv")
+        ivs = build_intervals(rows)
+        mark_trusted(ivs, brim=1792.0)
+        self.assertTrue(any(not iv.trusted for iv in ivs))
+        joint = fit_joint([(ivs, {"r": 880.0, "L": 2950.0})], common_r=True)
+        self.assertTrue(joint.success)
+        self.assertLess(abs(joint.shell.r - 897.4), 5.0)
 
 
 class TestLockedDatum(unittest.TestCase):

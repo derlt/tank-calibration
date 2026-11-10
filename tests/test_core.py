@@ -12,6 +12,8 @@ import numpy as np
 from openpyxl import Workbook
 
 from calib.blocking import block_intervals
+from calib.charts import build_series
+from calib.cli import _parse_pour_line
 from calib.config import load_config
 from calib.data import (
     Correction,
@@ -19,13 +21,16 @@ from calib.data import (
     Row,
     Step,
     apply_corrections,
+    books_start,
     build_intervals,
     mark_trusted,
     parse_step,
     read_raw,
 )
 from calib.diagnostics import (
+    apply_model,
     classify,
+    closure,
     find_pairs,
     liquid_volume,
     max_liquid,
@@ -122,6 +127,22 @@ class TestData(unittest.TestCase):
         self.assertFalse(ivs[1].trusted)  # object band
         self.assertFalse(ivs[2].trusted)  # non-positive rise
         self.assertFalse(ivs[3].trusted)  # overflow
+
+    def test_pour_without_height_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "x.csv"
+            p.write_text("pour(L);height(mm)\n100;50\n200;\n", encoding="utf-8")
+            with self.assertRaises(ValueError) as cm:
+                read_raw(p)
+            self.assertIn("without a height", str(cm.exception))
+
+    def test_line_numbers_match_the_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "x.csv"
+            # An empty record: a blank data row in the user's file.
+            p.write_text("pour,height\n100,50\n,\n100,120\n", encoding="utf-8")
+            rows = read_raw(p)
+            self.assertEqual([r.line for r in rows], [1, 3])
 
 
 class TestFit(unittest.TestCase):
@@ -414,6 +435,74 @@ class TestField(unittest.TestCase):
         verdict = self.v.check(None, 500.0, 600.0)
         self.assertEqual(verdict.flag, "UNKNOWN")
         self.assertIsNotNone(verdict.unknown)
+
+
+class TestBooksIdentity(unittest.TestCase):
+    """The books must count the first pour everywhere (§9.3)."""
+
+    def _perfect(self, unknown_first=False):
+        """A noise-free campaign: every pour matches the shell exactly."""
+        shell = Shell(900.0, 3000.0, 0.0)
+        hs = [100.0, 200.0, 300.0, 400.0]
+        steps = [Step("known", float(shell.volume(hs[0])), raw="s0")]
+        for i in range(1, len(hs)):
+            p = float(shell.volume(hs[i]) - shell.volume(hs[i - 1]))
+            steps.append(Step("known", p, raw=f"s{i}"))
+        if unknown_first:
+            steps[0] = Step("unknown", raw="?")
+        return shell, [Row(i, s, h) for i, (s, h) in enumerate(zip(steps, hs))]
+
+    def test_closure_counts_first_pour(self):
+        shell, rows = self._perfect()
+        ivs = build_intervals(rows)
+        mark_trusted(ivs, brim=shell.brim())
+        out = closure(
+            ivs, shell, [], books_start=books_start(rows, shell),
+            sigma_h=1.5, rel=0.0, abs_=0.0,
+        )
+        # Dropping the first pour used to bias this by exactly -s_0.
+        self.assertAlmostEqual(out["diff"], 0.0, places=6)
+
+    def test_closure_back_predicts_unknown_start(self):
+        shell, rows = self._perfect(unknown_first=True)
+        ivs = build_intervals(rows)
+        mark_trusted(ivs, brim=shell.brim())
+        out = closure(
+            ivs, shell, [], books_start=books_start(rows, shell),
+            start_sigma=1.0, sigma_h=1.5, rel=0.0, abs_=0.0,
+        )
+        self.assertAlmostEqual(out["diff"], 0.0, places=6)
+
+    def test_drift_series_equals_interval_drift(self):
+        shell, rows = self._perfect()
+        rows[2].step = Step("unknown", raw="?")  # a gap in the books
+        ivs = build_intervals(rows)
+        mark_trusted(ivs, brim=shell.brim())
+        apply_model(
+            ivs, shell, sigma_h=1.5, rel=0.0, abs_=0.0,
+            books_start=books_start(rows, shell),
+        )
+        series = build_series(
+            rows, shell, sigma_h=1.5, rel=0.0, abs_=0.0, heel_row=False
+        )
+        by_row = {iv.row: iv for iv in ivs}
+        self.assertGreater(len(series), 1)
+        for k in range(len(series)):
+            iv = by_row[int(series.row[k])]
+            self.assertAlmostEqual(iv.drift, float(series.drift[k]), places=6)
+
+
+class TestPourLine(unittest.TestCase):
+    """One malformed entry must not end a field session."""
+
+    def test_parse(self):
+        self.assertEqual(_parse_pour_line("200,500"), (200.0, 500.0))
+        self.assertEqual(_parse_pour_line("200;500"), (200.0, 500.0))
+        self.assertEqual(_parse_pour_line("?,500"), (None, 500.0))
+        self.assertEqual(_parse_pour_line(",500"), (None, 500.0))
+        self.assertIsNone(_parse_pour_line("600"))
+        self.assertIsNone(_parse_pour_line("200,"))
+        self.assertIsNone(_parse_pour_line("abc,500"))
 
 
 class TestFormulaGate(unittest.TestCase):

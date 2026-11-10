@@ -23,7 +23,12 @@ def _cmd_fit(args) -> int:
     print(f"artifacts: {Path(out).resolve()}")
     for c in result["acceptance"]:
         print(f"  [{'PASS' if c['pass'] else 'FAIL'}] {c['check']}: {c['result']}")
-    return 0 if all(c["pass"] for c in result["acceptance"]) else 2
+    gate = result.get("gate")
+    if gate:
+        print(f"  formula gate: {gate['formulas']} formulas, {len(gate['errors'])} problems")
+    accepted = all(c["pass"] for c in result["acceptance"])
+    gated = not gate or gate["ok"]
+    return 0 if accepted and gated else 2
 
 
 def _load_presets(path: str) -> tuple[Shell, dict]:
@@ -31,6 +36,22 @@ def _load_presets(path: str) -> tuple[Shell, dict]:
     a = data["adopted"]
     shell = Shell(float(a["r"]), float(a["L"]), float(a["h0"]))
     return shell, data
+
+
+def _parse_pour_line(line: str) -> tuple[float | None, float] | None:
+    """Parse one 'step,height' entry.  None means: not readable, try again.
+
+    A blank step is an unknown pour.  Semicolons are accepted as separators.
+    """
+    parts = [p.strip() for p in line.replace(";", ",").split(",")]
+    if len(parts) < 2 or not parts[1]:
+        return None
+    try:
+        step = None if parts[0] in ("", "?", "x") else float(parts[0])
+        h = float(parts[1])
+    except ValueError:
+        return None
+    return step, h
 
 
 def _cmd_field(args) -> int:
@@ -49,13 +70,17 @@ def _cmd_field(args) -> int:
         print("Enter: step,height   (blank step = unknown pour).  q to quit.")
         h_prev = float(input("start height (mm): ").strip() or 0.0)
         validator.levels = [h_prev]
+        # The tank already holds F(start); the closure counts it (§9.3).
+        validator.heel = float(validator.shell.volume(h_prev))
         while True:
             line = input("pour: ").strip()
             if line.lower() in ("q", "quit", "exit", ""):
                 break
-            parts = [p.strip() for p in line.replace(";", ",").split(",")]
-            step = None if parts[0] in ("", "?", "x") else float(parts[0])
-            h = float(parts[1])
+            parsed = _parse_pour_line(line)
+            if parsed is None:
+                print(f"  cannot read {line!r}; enter: step,height   (q to quit)")
+                continue
+            step, h = parsed
             v = validator.check(step, h_prev, h)
             print(f"  {v.flag:10s} resid={v.resid if v.resid is None else round(v.resid, 1)} "
                   f"z={v.z if v.z is None else round(v.z, 1)}  {v.message}")
@@ -63,8 +88,13 @@ def _cmd_field(args) -> int:
                 print(f"  -> {v.advice}")
             h_prev = h
         s = validator.summary(validator.history)
-        print(f"\nclosure: {s['closure']}")
-        return 0
+        print(f"\ncounts: {s['counts']}")
+        print(f"closure: {s['closure']}")
+        for d in s["detector"]:
+            print(f"detector: pair {d['i']}/{d['i'] + 1} z=({d['z1']:+.1f},{d['z2']:+.1f}) {d['kind']}")
+        if s.get("advisor"):
+            print(f"advisor: {s['advisor']['advice']}")
+        return 1 if any(v.flag in ("ALARM", "DRIFT") for v in validator.history) else 0
 
     if not args.csv:
         print("field: give a CSV or --interactive", file=sys.stderr)
@@ -102,6 +132,18 @@ def _cmd_joint(args) -> int:
         ivs = build_intervals(rows)
         brim = cfg.brim_reading if cfg.brim_reading is not None else cfg.h0_value + 2 * cfg.nominal_r
         mark_trusted(ivs, brim=brim, object_bands=cfg.object_bands, excluded_rows=cfg.excluded_interval_rows)
+        if cfg.brim_reading is None:
+            # Refine the brim from a free fit, exactly as the pipeline does,
+            # so both tools trust the same intervals for the same tank.
+            free = fit_difference(
+                ivs, cfg.nominal, h0_mode=args.h0, h0_value=cfg.h0_value,
+                multistart=True,
+            )
+            brim = free.shell.brim()
+            mark_trusted(
+                ivs, brim=brim, object_bands=cfg.object_bands,
+                excluded_rows=cfg.excluded_interval_rows,
+            )
         campaigns.append((ivs, cfg.nominal))
 
     joint = fit_joint(campaigns, common_r=True, h0_mode=args.h0)
@@ -166,7 +208,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except (ValueError, OSError, KeyError, EOFError) as exc:
+    except (ValueError, OSError, KeyError, IndexError, RuntimeError, EOFError) as exc:
         print(f"calib: error: {exc}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:

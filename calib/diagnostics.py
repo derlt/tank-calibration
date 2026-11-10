@@ -38,8 +38,16 @@ def apply_model(
     sigma_h: float,
     rel: float,
     abs_: float,
+    books_start: float | None = None,
 ) -> None:
-    """Fill pred, resid, slope, sigma, z, flag and drift on every interval."""
+    """Fill pred, resid, slope, sigma, z, flag and drift on every interval.
+
+    ``books_start`` is the liquid already on the books at the first level
+    (§9.3).  The drift is anchored so that ``drift_k = books_k - F(H_k)``:
+    it starts at the first pour's residual and carries an unknown pour at
+    the shell's predicted rise for that interval (its residual is zero by
+    construction, §8.1).  ``None`` keeps the plain running residual sum.
+    """
     for iv in intervals:
         if not iv.known:
             iv.pred = float(shell.volume(iv.h_cur) - shell.volume(iv.h_prev))
@@ -59,13 +67,16 @@ def apply_model(
         iv.z = iv.resid / iv.sigma if iv.sigma > 0 else float("nan")
         iv.flag = classify(iv.mm_equiv, iv.z) if iv.trusted else (iv.reason or "excluded")
 
-    running = 0.0
+    anchor = 0.0
+    if books_start is not None and intervals:
+        anchor = books_start - float(shell.volume(intervals[0].h_prev))
+    running = anchor
     for iv in intervals:
         if iv.known and math.isfinite(iv.resid):
             running += iv.resid
-            iv.drift = running
-        else:
-            iv.drift = float("nan")
+        # An unknown pour keeps the drift flat: back-prediction makes its
+        # residual zero by construction, and a gap must not read as a leak.
+        iv.drift = running
 
 
 def interval_sigma(m: float, s: float, sigma_h: float, rel: float, abs_: float) -> float:
@@ -221,16 +232,19 @@ def closure(
     shell: Shell,
     bands: list[dict],
     *,
-    heel: float,
+    books_start: float,
+    start_sigma: float = 0.0,
     sigma_h: float,
     rel: float,
     abs_: float,
     estimates: list[dict] | None = None,
 ) -> dict:
-    """heel + sum poured + sum blocked below H versus F(H) (§9.3).
+    """books_start + sum poured + sum blocked below H versus F(H) (§9.3).
 
-    Only liquid that entered the shell counts: overflow pours are excluded,
-    and an unknown pour enters at its back-predicted value.
+    ``books_start`` is the first row's pour: recorded when known,
+    back-predicted ``F(H_0)`` when not.  Only liquid that entered the shell
+    counts: overflow pours are excluded, and an unknown pour enters at its
+    back-predicted value.
     """
     data = [iv for iv in intervals if iv.trusted]
     if not data:
@@ -238,7 +252,7 @@ def closure(
                 "z": float("nan"), "limit": float("nan"), "ok": False, "n": 0}
     h_last = data[-1].h_cur
     poured = 0.0
-    var = 0.0
+    var = float(start_sigma) ** 2
     by_idx = {u["interval"]: u for u in (estimates or [])}
     n_unknown = 0
     n_known = 0
@@ -259,7 +273,7 @@ def closure(
         var += float(est["sigma"]) ** 2
         n_unknown += 1
     blocked = float(blocked_below(bands, h_last))
-    lhs = heel + poured + blocked
+    lhs = books_start + poured + blocked
     rhs = float(shell.volume(h_last))
     diff = lhs - rhs
     m = float(shell.slope(h_last))

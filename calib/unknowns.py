@@ -122,10 +122,17 @@ def sensitivity_battery(
                                 bounds=bounds,
                             )
                         else:
+                            scale_resid = [
+                                abs(iv.resid) for iv in data
+                                if iv.known and math.isfinite(iv.resid)
+                            ]
                             f = fit_difference(
                                 data, nominal, loss=loss, h0_mode=h0m,
                                 bounds=bounds, multistart=False,
-                                f_scale=(float(np.median([abs(iv.resid) for iv in data if iv.known])) or None),
+                                f_scale=(
+                                    float(np.median(scale_resid))
+                                    if scale_resid else None
+                                ),
                             )
                     except Exception:  # noqa: S112 - a failed battery run is skipped
                         continue

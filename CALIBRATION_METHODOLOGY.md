@@ -169,7 +169,7 @@ This is where naive calibrations go wrong.
 liquid(H)      = F(H) − Σ blocked volumes below H      (objects + permanent voids)
 to-brim(H)     = Vcap − F(H) − Σ blocked volumes above H
 max liquid     = Vcap − Σ all blocked volumes
-closure: heel + Σ poured + Σ blocked below H ≈ F(H)    (§9.3)
+closure: books_0 + Σ poured + Σ blocked below H ≈ F(H)    (§9.3)
 ```
 
 - Read liquid volumes from the empirical cumulative table, or subtract blocked volumes from `F`. Never quote raw `F(H)` as "liquid in tank" where objects are declared.
@@ -234,7 +234,7 @@ The shipped workbook implements all seven as live charts. Consult the pair scatt
 
 - **9.1** Choose `σh` per campaign and use it in the document, the tables, and the tool alike: careful dipping 1.0 mm; field conditions 1.5 mm. Choose pour noise from the can calibration: `rel` (e.g. 0.5 %) + `abs` (e.g. 3 L).
 - **9.2** Per interval: `σ² = (m·σh·√2)² + (rel·s + abs)²`; `z = resid/σ`.
-- **9.3 Closure identity:** `heel + Σ poured + Σ blocked volumes below H ≈ F(H)`, within `3σ√n`. Report it with every fit and every field run. A drifting closure is the best single live alarm.
+- **9.3 Closure identity:** `books₀ + Σ poured + Σ blocked volumes below H ≈ F(H)`, within `3σ√n`. `books₀` is the liquid on the books at the first recorded level: the first row's pour when known, `F(H₀)` when the first pour is unknown. Without that term the identity is short by exactly the first pour. Report it with every fit and every field run. A drifting closure is the best single live alarm.
 - **9.4 Sanity:** `RMSE / m` should land near `√2·σh`. Much larger → find the structure (pairs, singles, drift) before quoting anything. Much smaller → `σh` is over-conservative; say so.
 - **9.5 Noise split from the data.** Adjacent residuals share a dip, so their lag-1 autocorrelation is negative, ≈ `−(m·σh)²/σ²` when dip noise dominates. Method-of-moments on the residuals splits the interval σ into dip and pour parts; the implied RMSE must equal the observed (§9.4). Prefer the measured split when quoting unknowns (§8.2) and z-scores.
 - **9.6 Telescoping block test.** In a block sum of residuals every interior dip appears twice with opposite signs and cancels; only the two boundary dips and the pour noise remain: `σ_block = √((m₁² + m₂²)·σh² + Σ(rel·s + abs)²)` — far smaller than `√n·σ`. Run bottom/middle/top thirds at every adoption: a block sum beyond `3·σ_block` is a systematic effect (datum offset, pour bias, slow leak) even when no single interval clears the watch bar.

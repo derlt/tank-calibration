@@ -70,27 +70,38 @@ def build_series(
     rel: float,
     abs_: float,
     heel_row: bool,
+    books_start: float | None = None,
 ) -> Series:
-    """Reduce a table to the arrays every chart reads."""
+    """Reduce a table to the arrays every chart reads.
+
+    The books start with the first row's pour: recorded when known,
+    back-predicted ``F(H_0)`` when not (§9.3).  An unknown pour advances the
+    books by the shell's predicted rise for that interval, so the drift
+    series stays comparable across a gap and equals the interval drift of §2.
+    """
     if not rows:
         return _empty()
     brim = shell.brim()
-    if heel_row:
-        heel = float(rows[0].step.value) if rows[0].step.known else 0.0
-        books = heel
-    else:
-        heel = 0.0
-        books = float(rows[0].step.value) if rows[0].step.known else 0.0
+    first = rows[0]
+    if books_start is None:
+        books_start = (
+            float(first.step.value)
+            if first.step.known
+            else float(shell.volume(first.height))
+        )
+    heel = books_start if heel_row else 0.0
+    books = books_start
 
     out = {k: [] for k in ("H", "h_prev", "mid", "row", "s", "pred", "resid", "sigma", "z", "books", "drift", "rise", "excluded")}
     for i in range(1, len(rows)):
         step = rows[i].step
-        if not step.known:
-            continue
         h_prev = float(rows[i - 1].height)
         h_cur = float(rows[i].height)
-        s = float(step.value)
         pred = float(shell.volume(h_cur) - shell.volume(h_prev))
+        if not step.known:
+            books += step.base + pred
+            continue
+        s = float(step.value)
         resid = s - pred
         m = float(shell.slope(h_cur))
         sigma = math.sqrt((m * sigma_h * math.sqrt(2.0)) ** 2 + (rel * s + abs_) ** 2)
