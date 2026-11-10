@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tank-calibration"
+version = "1.0.0"
+description = "Horizontal cylindrical tank calibration from pour and level data"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.26",
+  "scipy>=1.11",
+  "matplotlib>=3.8",
+  "openpyxl>=3.1",
+]
+
+[project.scripts]
+calib = "calib.cli:main"
+
+[tool.setuptools]
+packages = ["calib"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "S", "PLC", "RUF"]
+ignore = ["E501", "B905", "RUF001"]

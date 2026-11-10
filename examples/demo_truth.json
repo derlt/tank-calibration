@@ -1,0 +1,16 @@
+{
+  "r": 900.0,
+  "L": 3000.0,
+  "h0": -5.0,
+  "capacity": 7634.070148223197,
+  "brim": 1795.0,
+  "object_l": 30.0,
+  "object_at_mm": 1000.0,
+  "misread_row": 12,
+  "misread_mm": 4.0,
+  "unknown_row": 16,
+  "overflow_pour": 120.0,
+  "sigma_h": 1.0,
+  "pour_rel": 0.003,
+  "pour_abs": 1.0
+}

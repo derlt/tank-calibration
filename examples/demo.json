@@ -1,0 +1,48 @@
+{
+  "tank": "demo",
+  "raw": "demo_raw.csv",
+  "nominal": {
+    "r": 880.0,
+    "L": 2950.0
+  },
+  "sigma_h": 1.0,
+  "pour_noise": {
+    "rel": 0.003,
+    "abs": 1.0
+  },
+  "pour_unit": 50.0,
+  "h0": {
+    "mode": "fit"
+  },
+  "heel_row": false,
+  "brim": {
+    "reading": 1795.0,
+    "overflow_pour": 120.0
+  },
+  "object_bands": [
+    {
+      "low": 990.0,
+      "high": 1000.0,
+      "litres": 30.0,
+      "label": "demo solid",
+      "test": "repeat pour into the band"
+    }
+  ],
+  "corrections": [
+    {
+      "row": 12,
+      "field": "height",
+      "value": 629.0,
+      "rule": "6.1",
+      "magnitude": -4.0,
+      "note": "demo: dip misread by +4 mm"
+    }
+  ],
+  "strapping": {
+    "step_mm": 10.0,
+    "start_mm": 0.0
+  },
+  "bootstrap_n": 150,
+  "seed": 11,
+  "notes": "Synthetic campaign with known truth. See demo_truth.json."
+}
