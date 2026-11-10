@@ -164,7 +164,14 @@ def main(argv: list[str] | None = None) -> int:
     p_gate.set_defaults(func=_cmd_gate)
 
     args = parser.parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except (ValueError, OSError, KeyError, EOFError) as exc:
+        print(f"calib: error: {exc}", file=sys.stderr)
+        return 2
+    except KeyboardInterrupt:
+        print("calib: interrupted", file=sys.stderr)
+        return 130
 
 
 if __name__ == "__main__":

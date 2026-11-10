@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import csv
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -354,7 +354,7 @@ def table_header(result: dict, *, gate: dict | None = None) -> dict:
     identification = [
         ("Tank", cfg.tank),
         ("Site / tag", cfg.site or "—"),
-        ("Calibration date", datetime.now(UTC).date().isoformat()),
+        ("Calibration date", datetime.now(timezone.utc).date().isoformat()),
         ("Method", "Pour-and-dip difference fit, CALIBRATION_METHODOLOGY.md §5"),
         ("Table version", cfg.table_version),
         ("Authoritative file", f"{cfg.tank}_strapping.csv"),

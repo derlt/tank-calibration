@@ -10,28 +10,30 @@ values-only delivery layer, plus an optional live-formula audit sheet.
 ## Install
 
 ```bash
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -r requirements.txt
+uv sync
 ```
 
-Python 3.10 or newer. Dependencies: numpy, scipy, matplotlib, openpyxl.
+`uv` creates `.venv` and installs the runtime and development dependencies
+pinned in `uv.lock`. Use `uv sync --no-dev` for the runtime only.
+Python 3.10 or newer. Runtime dependencies: numpy, scipy, matplotlib, openpyxl.
 
 ## Quick start
 
 ```bash
 # 1. Generate the synthetic demo campaign (known truth).
-python examples/make_demo.py
+uv run python examples/make_demo.py
 
 # 2. Fit, diagnose, and write every deliverable.
-python -m calib fit examples/demo.json -o out/demo
+uv run python -m calib fit examples/demo.json -o out/demo
 
 # 3. Check the workbook formulas.
-python -m calib gate out/demo/demo_workbook.xlsx
+uv run python -m calib gate out/demo/demo_workbook.xlsx
 
 # 4. Validate a new field run against the adopted shell.
-python -m calib field out/demo/demo_presets.json examples/demo_raw.csv
+uv run python -m calib field out/demo/demo_presets.json examples/demo_raw.csv
 ```
+
+`uv run` uses the project environment, so you do not need to activate it.
 
 The fit prints the adopted shell record and the six acceptance checks. It
 exits with code 2 if any check fails.
@@ -157,14 +159,28 @@ recovers it within the quoted uncertainty.
 ## Tests
 
 ```bash
-python -m unittest discover -s tests -v
+uv run python -m unittest discover -s tests -v
 ```
 
-48 tests cover geometry, step parsing, corrections, the trusted set, fit
+50 tests cover geometry, step parsing, corrections, the trusted set, fit
 recovery, the pair rule, object bookkeeping, noise split, telescoping blocks,
 blocking, unknowns, the field protocol, the formula gate, a locked datum
 (with and without an overflow), the audit objective, and an end-to-end run
 with the workbook gate.
+
+## Development
+
+```bash
+uv run ruff check .
+uv run python -m coverage run -m unittest discover -s tests
+uv run python -m coverage report -m
+```
+
+`make test`, `make lint` and `make coverage` run the same commands.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
 
 ## Limits
 

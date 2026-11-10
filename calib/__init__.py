@@ -5,7 +5,12 @@ Python owns the fit and the uncertainty.  Excel shows the result.
 
 from __future__ import annotations
 
-__version__ = "1.0.0"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("tank-calibration")
+except PackageNotFoundError:  # pragma: no cover - source tree without an install
+    __version__ = "0.0.0"
 
 from .config import Config, load_config
 from .data import (

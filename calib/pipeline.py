@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import math
 import shutil
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -631,7 +631,7 @@ def _write_artifacts(outdir: Path, result: dict) -> None:
         "bands": result["bands"],
         "constraint": result["constraint"],
         "authoritative_file": f"{tank}_strapping.csv",
-        "generated": datetime.now(UTC).isoformat(timespec="seconds"),
+        "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
     (outdir / f"{tank}_presets.json").write_text(
         json.dumps(presets, indent=2), encoding="utf-8"

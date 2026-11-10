@@ -1,12 +1,29 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "tank-calibration"
 version = "1.0.0"
 description = "Horizontal cylindrical tank calibration from pour and level data"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
+authors = [{ name = "derlt" }]
+keywords = ["tank", "calibration", "strapping", "volume", "metrology"]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Manufacturing",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering",
+]
 dependencies = [
   "numpy>=1.26",
   "scipy>=1.11",
@@ -14,8 +31,17 @@ dependencies = [
   "openpyxl>=3.1",
 ]
 
+[project.urls]
+Repository = "https://github.com/derlt/tank-calibration"
+
 [project.scripts]
 calib = "calib.cli:main"
+
+[dependency-groups]
+dev = [
+  "coverage>=7.6",
+  "ruff>=0.6",
+]
 
 [tool.setuptools]
 packages = ["calib"]
@@ -27,3 +53,10 @@ target-version = "py310"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "S", "PLC", "RUF"]
 ignore = ["E501", "B905", "RUF001"]
+
+[tool.coverage.run]
+source = ["calib"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
