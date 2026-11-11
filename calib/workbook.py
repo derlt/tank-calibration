@@ -35,6 +35,15 @@ THIN = Side(style="thin", color="D9DEE5")
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
 
 
+def _rgb(color):
+    """Drop the matplotlib ``#``: OOXML wants bare ``RRGGBB``.
+
+    A ``#`` in ``a:srgbClr`` is invalid, and Excel then removes the whole
+    drawing part on open ("Removed Part: /xl/drawings/drawing1.xml").
+    """
+    return color.lstrip("#")
+
+
 def _title(ws, text, row=1, span=8):
     cell = ws.cell(row=row, column=1, value=text)
     cell.font = Font(bold=True, size=14, color=INK)
@@ -645,7 +654,7 @@ def _scatter(ws, title, x_title, y_title, x_ref, y_ref, *, line=False, color="25
     series = Series(y_ref, x_ref, title_from_data=True)
     if line:
         series.marker = Marker(symbol="none")
-        series.graphicalProperties.line = LineProperties(solidFill=color, w=22000)
+        series.graphicalProperties.line = LineProperties(solidFill=_rgb(color), w=22000)
     else:
         series.marker = Marker(symbol="circle", size=5)
         series.graphicalProperties.line = LineProperties(noFill=True)
@@ -669,15 +678,15 @@ def _add_series(chart, x_ref, y_ref, title, color, *, marker="circle",
     if marker:
         series.marker = Marker(symbol=marker, size=5)
         if filled:
-            series.marker.graphicalProperties = GraphicalProperties(solidFill=color)
+            series.marker.graphicalProperties = GraphicalProperties(solidFill=_rgb(color))
         else:
             series.marker.graphicalProperties = GraphicalProperties(
-                noFill=True, ln=LineProperties(solidFill=color)
+                noFill=True, ln=LineProperties(solidFill=_rgb(color))
             )
     else:
         series.marker = Marker(symbol="none")
     if line:
-        series.graphicalProperties.line = LineProperties(solidFill=color, w=width)
+        series.graphicalProperties.line = LineProperties(solidFill=_rgb(color), w=width)
         if dash:
             series.graphicalProperties.line.dashStyle = dash
     else:

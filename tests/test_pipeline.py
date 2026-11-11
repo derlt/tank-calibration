@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -103,6 +105,19 @@ class TestPipeline(unittest.TestCase):
         for name in ("Model", "RawModel", "Curve", "Pairs", "RawPairs", "Guides", "Charts"):
             self.assertIn(name, wb.sheetnames)
         self.assertEqual(len(wb["Charts"]._charts), 7)
+
+    def test_workbook_chart_colours_are_bare_hex(self):
+        # Excel drops the drawing part when a chart carries "#rrggbb" in
+        # a:srgbClr ("Removed Part: /xl/drawings/drawing1.xml").  OOXML
+        # wants RRGGBB, so the matplotlib constants must be stripped.
+        path = self.out / "out" / "demo_workbook.xlsx"
+        with zipfile.ZipFile(path) as zf:
+            charts = [n for n in zf.namelist() if n.startswith("xl/charts/")]
+            self.assertEqual(len(charts), 7)
+            for name in charts:
+                xml = zf.read(name).decode("utf-8")
+                for value in re.findall(r'<a:srgbClr val="([^"]*)"', xml):
+                    self.assertRegex(value, r"^[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$", name)
 
     def test_strapping_extrapolated_below_lowest_dip(self):
         rows = self.result["strapping"]

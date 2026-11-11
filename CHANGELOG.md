@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Workbook charts use bare `RRGGBB` in `a:srgbClr`. The matplotlib constants
+  carry a leading `#`, which OOXML rejects; Excel then repaired the file by
+  removing the drawing part ("Removed Part: /xl/drawings/drawing1.xml").
 - Closure and QA agreement count the first row's pour. Without it the books
   were short by exactly that pour: the demo closure read −46 L (z = −3.7) and
   passed only because the limit is `3σ√n`. An unknown first pour enters at the
