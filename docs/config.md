@@ -6,6 +6,40 @@ the fit cannot take from the data. Paths are relative to the JSON file.
 The raw file is read-only. Corrections live in `corrections`, never in the raw
 file.
 
+## Create the file
+
+Run `calib init` on the raw CSV. It reads the CSV, infers the data-side fields,
+and asks only for the tank record:
+
+```bash
+uv run python -m calib init run1_raw.csv --r 948 --L 2517
+```
+
+It writes `run1.json`, checks it with the loader, and prints the next command.
+Add `--interactive` to answer the questions. The inferred fields are:
+
+| Field | How it is inferred |
+|---|---|
+| `tank` | The CSV stem without `_raw` or `_data`. |
+| `raw` | A path relative to the JSON file. |
+| `pour_unit` | The largest increment that divides the known, non-overflow pours. |
+| `brim.overflow_pour` | The last row with an `overflow` note, or a dip above the nominal brim. |
+| `heel_row` | True when the first pour is far below the volume at the first dip. |
+
+`brim.reading` is not inferred. Leave it out and the fit refines the brim from
+the shell. The command prints a warning for unknown pours, a height that does
+not rise, a repeated height, and a dip above the nominal brim.
+
+Before a fit, resolve the file without running it:
+
+```bash
+uv run python -m calib check run1.json
+```
+
+It prints the settings, the trusted and untrusted intervals with the reason,
+the correction targets and the unknown pours. A file with no trusted interval
+exits with code 2.
+
 ## Minimal file
 
 ```json

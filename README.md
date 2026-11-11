@@ -107,8 +107,19 @@ The JSON names the tank, the raw file and the decisions:
 }
 ```
 
-Fill the values from the tank record. [Configuration](#configuration) explains
-every field.
+Create the file from the CSV. The command infers the data-side fields and asks
+only for the tank record:
+
+```bash
+uv run python -m calib init C:\tank-data\run1\run1_raw.csv --r 948 --L 2517
+```
+
+It writes `run1.json`, validates it, and prints the next command. Add
+`--interactive` to answer the questions. `calib check run1.json` resolves the
+file without a fit and lists the trusted intervals.
+
+You can also write the JSON by hand. Fill the values from the tank record.
+[Configuration](#configuration) explains every field.
 
 Run the fit from the repo root:
 
@@ -151,6 +162,8 @@ Add `--interactive` to `calib field` to type each pour as `step,height`.
 
 | Command | Purpose |
 |---|---|
+| `calib init RAW` | Write a campaign JSON from the raw CSV. |
+| `calib check CONFIG` | Resolve a JSON and report what the fit will trust. |
 | `calib fit CONFIG -o DIR` | Run the full pipeline for one tank. |
 | `calib field PRESETS CSV` | Per-pour z-test against an adopted shell (§10). |
 | `calib field PRESETS --interactive` | Type pours one at a time. |
@@ -272,11 +285,11 @@ recovers it within the quoted uncertainty.
 uv run python -m unittest discover -s tests -v
 ```
 
-50 tests cover geometry, step parsing, corrections, the trusted set, fit
+72 tests cover geometry, step parsing, corrections, the trusted set, fit
 recovery, the pair rule, object bookkeeping, noise split, telescoping blocks,
-blocking, unknowns, the field protocol, the formula gate, a locked datum
-(with and without an overflow), the audit objective, and an end-to-end run
-with the workbook gate.
+blocking, unknowns, the field protocol, the formula gate, the config scaffold
+and preflight, a locked datum (with and without an overflow), the audit
+objective, and an end-to-end run with the workbook gate.
 
 ## Development
 
@@ -295,7 +308,7 @@ uv run python -m coverage report -m
 | Command | Runs |
 |---|---|
 | `make` | `test` |
-| `make test` | the 50 tests |
+| `make test` | the 72 tests |
 | `make lint` | `ruff check .` |
 | `make coverage` | tests with a coverage report |
 | `make demo` | generate, fit and gate the demo |

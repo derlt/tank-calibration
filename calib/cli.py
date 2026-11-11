@@ -14,6 +14,7 @@ from .fit import fit_difference, fit_joint
 from .formula_gate import gate_workbook
 from .geometry import Shell
 from .pipeline import run
+from .scaffold import infer_config, preflight, tank_stem, write_config
 
 
 def _cmd_fit(args) -> int:
@@ -52,6 +53,146 @@ def _parse_pour_line(line: str) -> tuple[float | None, float] | None:
     except ValueError:
         return None
     return step, h
+
+
+def _cmd_init(args) -> int:
+    raw = Path(args.raw)
+    if not raw.exists():
+        raise ValueError(f"raw file not found: {raw}")
+
+    r, L = args.r, args.L
+    if args.interactive and (r is None or L is None):
+        if r is None:
+            r = float(input("internal radius r, mm: ").strip())
+        if L is None:
+            L = float(input("internal shell length L, mm: ").strip())
+    if r is None or L is None:
+        raise ValueError(
+            "give --r and --L (internal radius and length, mm), or use --interactive"
+        )
+
+    tank = args.tank
+    site = args.site
+    sigma_h = args.sigma_h
+    unit = args.pour_unit
+    brim = args.brim
+    overflow = args.overflow_pour
+    heel = args.heel
+
+    if args.interactive:
+        base, _ = infer_config(
+            raw, r=r, L=L, tank=tank, site=site, sigma_h=sigma_h
+        )
+        tank = input(f"tank name [{base['tank']}]: ").strip() or base["tank"]
+        sigma_h = _ask_float("dip sigma_h, mm", sigma_h)
+        unit = _ask_float("pour unit, L (blank = inferred)", base.get("pour_unit"))
+        brim = _ask_float("brim reading, mm (blank = fit refines it)", brim)
+        overflow = _ask_float(
+            "overflow pour, L (blank = inferred)",
+            base.get("brim", {}).get("overflow_pour"),
+        )
+        site = input(f"site [{site}]: ").strip() or site
+        heel = _ask_bool("first row is a heel", base["heel_row"])
+
+    data, warnings = infer_config(
+        raw,
+        r=r,
+        L=L,
+        tank=tank,
+        site=site,
+        sigma_h=sigma_h,
+        pour_unit=unit,
+        brim=brim,
+        overflow_pour=overflow,
+        heel_row=heel,
+    )
+    out = Path(args.out) if args.out else raw.with_name(tank_stem(raw) + ".json")
+    write_config(out, data, force=args.force, raw_path=raw)
+    cfg = load_config(out)
+
+    print(f"wrote {out}")
+    print(f"  tank      {cfg.tank}")
+    print(f"  raw       {cfg.raw}")
+    print(f"  nominal   r={cfg.nominal_r:g} L={cfg.nominal_L:g} mm")
+    print(f"  sigma_h   {cfg.sigma_h:g} mm")
+    if cfg.pour_unit:
+        print(f"  pour_unit {cfg.pour_unit:g} L")
+    if cfg.brim_reading is not None:
+        print(f"  brim      {cfg.brim_reading:g} mm")
+    if cfg.overflow_pour is not None:
+        print(f"  overflow  {cfg.overflow_pour:g} L")
+    if cfg.heel_row:
+        print("  heel_row  true")
+    if warnings:
+        print("warnings:")
+        for w in warnings:
+            print(f"  - {w}")
+    outdir = out.parent / f"{cfg.tank}_out"
+    print(f"\nnext: calib fit {out} -o {outdir}")
+    return 0
+
+
+def _cmd_check(args) -> int:
+    report = preflight(args.config)
+    cfg = report["config"]
+    print(f"{args.config}")
+    print(f"  tank       {cfg.tank}")
+    print(f"  raw        {cfg.raw} ({report['rows']} rows)")
+    print(f"  nominal    r={cfg.nominal_r:g} L={cfg.nominal_L:g} mm")
+    print(f"  sigma_h    {cfg.sigma_h:g} mm")
+    print(f"  pour_unit  {f'{cfg.pour_unit:g} L' if cfg.pour_unit else 'not set'}")
+    h0 = cfg.h0_mode if cfg.h0_mode == "fit" else f"locked at {cfg.h0_value:g} mm"
+    print(f"  h0         {h0}")
+    brim = (
+        f"{cfg.brim_reading:g} mm"
+        if cfg.brim_reading is not None
+        else f"from the fit ({report['brim']:g} mm nominal)"
+    )
+    print(f"  brim       {brim}")
+    print(f"  bootstrap  {cfg.bootstrap_n} draws, seed {cfg.seed}")
+    print()
+    print(f"intervals: {report['trusted']} trusted of {report['intervals']}")
+    for item in report["untrusted"]:
+        print(f"  row {item['row']:>3}  {item['reason']}")
+    if cfg.excluded_rows:
+        rows = ", ".join(str(r) for r in sorted(cfg.excluded_rows))
+        print(f"excluded rows: {rows}")
+    if report["unknown_pours"]:
+        print(f"unknown pours: {len(report['unknown_pours'])}")
+        for item in report["unknown_pours"]:
+            print(f"  row {item['row']:>3}  {item['raw']}")
+    if report["corrections"]:
+        print(f"corrections: {len(report['corrections'])}")
+        for c in report["corrections"]:
+            print(
+                f"  row {c['row']:>3}  {c['field']} -> {c['value']:g}  "
+                f"({c['rule']}, {c['magnitude']:+g})"
+            )
+    if report["warnings"]:
+        print("warnings:")
+        for w in report["warnings"]:
+            print(f"  - {w}")
+    if report["trusted"] == 0:
+        print(
+            "calib: error: no trusted intervals; the fit cannot run",
+            file=sys.stderr,
+        )
+        return 2
+    return 0
+
+
+def _ask_float(prompt: str, default: float | None) -> float | None:
+    shown = "" if default is None else f"{default:g}"
+    text = input(f"{prompt} [{shown}]: ").strip()
+    return default if not text else float(text)
+
+
+def _ask_bool(prompt: str, default: bool) -> bool:
+    shown = "Y/n" if default else "y/N"
+    text = input(f"{prompt}? [{shown}]: ").strip().lower()
+    if not text:
+        return default
+    return text in ("y", "yes", "true", "1")
 
 
 def _cmd_field(args) -> int:
@@ -187,6 +328,39 @@ def main(argv: list[str] | None = None) -> int:
     p_fit.add_argument("-o", "--out", help="output directory")
     p_fit.add_argument("--no-charts", action="store_true")
     p_fit.set_defaults(func=_cmd_fit)
+
+    p_init = sub.add_parser("init", help="write a campaign JSON from a raw CSV")
+    p_init.add_argument("raw", help="raw pour/level CSV")
+    p_init.add_argument(
+        "-o", "--out", help="output JSON (default: <tank>.json beside the CSV)"
+    )
+    p_init.add_argument("--r", type=float, help="internal radius, mm")
+    p_init.add_argument("--L", type=float, help="internal shell length, mm")
+    p_init.add_argument("--tank", help="tank name (default: CSV stem)")
+    p_init.add_argument("--site", default="", help="site line for the certificate")
+    p_init.add_argument(
+        "--sigma-h", type=float, default=1.5, dest="sigma_h", help="dip sigma, mm"
+    )
+    p_init.add_argument(
+        "--pour-unit", type=float, dest="pour_unit", help="pour increment, L"
+    )
+    p_init.add_argument("--brim", type=float, help="brim reading, mm")
+    p_init.add_argument(
+        "--overflow-pour", type=float, dest="overflow_pour", help="overflow pour, L"
+    )
+    p_init.add_argument(
+        "--heel",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="the first row is a heel (default: infer)",
+    )
+    p_init.add_argument("--interactive", action="store_true")
+    p_init.add_argument("--force", action="store_true", help="replace an existing JSON")
+    p_init.set_defaults(func=_cmd_init)
+
+    p_check = sub.add_parser("check", help="validate a campaign JSON without a fit")
+    p_check.add_argument("config", help="campaign JSON")
+    p_check.set_defaults(func=_cmd_check)
 
     p_field = sub.add_parser("field", help="validate pours against an adopted shell")
     p_field.add_argument("presets", help="*_presets.json written by fit")

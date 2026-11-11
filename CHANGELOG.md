@@ -40,6 +40,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `calib init` writes a campaign JSON from the raw CSV. It infers the tank
+  name, pour unit, overflow pour and heel hint, asks only for the tank record,
+  and validates the file with the loader before writing it.
+- `calib check` preflights a campaign JSON without a fit: resolved settings,
+  the trusted and untrusted intervals with the reason, correction targets and
+  unknown pours.
 - Workbook Diagnostics: the sensitivity battery's r and L spread, and the
   measured `σh` beside the configured one.
 - Anomaly register: an overflow interval whose pour *can* fill the gap is
