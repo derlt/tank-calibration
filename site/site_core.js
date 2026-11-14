@@ -197,6 +197,9 @@
     sharpMm: 3.0,               // prediction counts only if 2σ ≤ this
     repeatTol: null,            // default 2.5·√2·σread, at least 1 mm
     tapGap: 20,                 // s: a faster second tap is asked "same can?"
+    settleSeconds: 300,         // s: idle time after a batch before the dip (§3.5)
+    dipSeconds: 60,             // s: one dip and its entry, for the time estimate
+    pourSeconds: null,          // { "200": 90, … }: pour one can and let it drain, s
     learnN: 3,                  // intervals before a confirmed miss is an anomaly
     scalePrior: 4,              // pseudo-count for the noise scale estimate
   };
@@ -207,6 +210,7 @@
     if (!(cfg.Lest > 0)) throw new Error("length estimate L is required");
     if (!(cfg.Lpm > 0)) cfg.Lpm = 0.03 * cfg.Lest;
     if (!(cfg.repeatTol > 0)) cfg.repeatTol = Math.max(1.0, 2.5 * Math.SQRT2 * cfg.sigmaRead);
+    cfg.pourSeconds = Object.assign({}, cfg.pourSeconds || {});
     cfg.prior = {
       r: cfg.D / 2, sr: cfg.Dpm / 4,
       L: cfg.Lest, sL: cfg.Lpm / 2,
@@ -246,9 +250,22 @@
     this.cfg = resolveConfig(config);
     this.levels = [];
     this.fit = null;
-    this.batch = null;          // open can tally: { unit, taps: [time, …] }
-    if (saved && saved.batch) this.batch = { unit: saved.batch.unit, taps: saved.batch.taps.slice() };
-    if (saved) this.levels = saved.levels.map((l) => Object.assign({}, l, { dips: l.dips.slice(), times: (l.times || []).slice() }));
+    this.batch = null;          // open can tally: { unit, cans: [{ t, u }, …] }
+    if (saved && saved.batch) {
+      const b = saved.batch;
+      // Older pages saved one unit and a list of tap times.
+      const cans = b.cans ? b.cans.map((c) => ({ t: c.t, u: c.u }))
+        : (b.taps || []).map((time) => ({ t: time, u: b.unit }));
+      this.batch = { unit: b.unit, cans };
+    }
+    if (saved) {
+      this.levels = saved.levels.map((l) => {
+        const L = Object.assign({}, l, { dips: l.dips.slice(), times: (l.times || []).slice() });
+        // Older pages saved a closed batch with one unit and no per-can sizes.
+        if (L.cans && !L.cans.units) L.cans.units = (L.cans.taps || []).map(() => L.cans.unit);
+        return L;
+      });
+    }
     this._refit();
   }
 
@@ -340,29 +357,43 @@
 
   // ---- batch: several cans, then one dip (§3.10).  One tap per can, so the
   // count is a record made can by can, not a number remembered at the dip.
-  Session.prototype.cans = function () { return this.batch ? this.batch.taps.length : 0; };
+  Session.prototype.cans = function () { return this.batch ? this.batch.cans.length : 0; };
+  Session.prototype.canList = function () { return this.batch ? this.batch.cans.slice() : []; };
+
+  /** Litres in the open batch: each can keeps its own size. */
+  Session.prototype.batchVolume = function () {
+    return this.batch ? this.batch.cans.reduce((a, c) => a + c.u, 0) : 0;
+  };
+
+  /** The sizes used in the open batch, largest first: [{unit, count}, …]. */
+  Session.prototype.canUnits = function () {
+    const by = {};
+    for (const c of this.canList()) by[c.u] = (by[c.u] || 0) + 1;
+    return Object.keys(by).map(Number).sort((a, b) => b - a).map((unit) => ({ unit, count: by[unit] }));
+  };
 
   /** True when a tap now would follow the last one too fast to be a new can. */
   Session.prototype.quickTap = function (time) {
     const n = this.cans();
-    return n > 0 && time != null && time - this.batch.taps[n - 1] < this.cfg.tapGap * 1000;
+    return n > 0 && time != null && time - this.batch.cans[n - 1].t < this.cfg.tapGap * 1000;
   };
 
-  /** One can is empty. */
-  Session.prototype.tap = function (time) {
-    const cur = this.current(), unit = this.cfg.pourUnit;
-    if (!unit) throw new Error("set the pour unit (can size) to count cans");
+  /** One can is empty.  unit is that can's size; the batch default is the fallback. */
+  Session.prototype.tap = function (time, unit) {
+    const cur = this.current();
+    const u = unit == null ? (this.batch && this.batch.unit) || this.cfg.pourUnit : unit;
+    if (!(u > 0)) throw new Error("set the can size in litres to count cans");
     if (!cur) throw new Error("start the session first");
     if (cur.state === "pending") throw new Error("finish the dips at the current level first");
-    if (!this.batch) this.batch = { unit, taps: [] };
-    this.batch.taps.push(time == null ? null : time);
-    return { count: this.cans(), volume: this.cans() * unit };
+    if (!this.batch) this.batch = { unit: u, cans: [] };
+    this.batch.cans.push({ t: time == null ? null : time, u });
+    return { count: this.cans(), volume: this.batchVolume(), unit: u };
   };
 
   Session.prototype.untap = function () {
     if (!this.cans()) return 0;
-    this.batch.taps.pop();
-    if (!this.batch.taps.length) this.batch = null;
+    this.batch.cans.pop();
+    if (!this.batch.cans.length) this.batch = null;
     return this.cans();
   };
 
@@ -370,10 +401,18 @@
   Session.prototype.closeBatch = function (opts) {
     const n = this.cans();
     if (!n) throw new Error("no can is counted yet");
-    const o = opts || {}, b = this.batch, full = o.partial ? n - 1 : n;
-    const text = o.partial ? (full ? `${round(full * b.unit, 3)}+?` : "?") : String(round(n * b.unit, 3));
+    const o = opts || {}, b = this.batch, cans = b.cans;
+    // A part can is an unknown extra: the full cans are known, the shell
+    // estimates the rest (§3.9 N+?).
+    const kept = o.partial ? cans.slice(0, -1) : cans;
+    const full = kept.reduce((a, c) => a + c.u, 0);
+    const text = o.partial ? (full ? `${round(full, 3)}+?` : "?") : String(round(full, 3));
     const L = this.pour(text, o);
-    L.cans = { tapped: n, unit: b.unit, partial: !!o.partial, taps: b.taps.slice() };
+    const sizes = this.canUnits();
+    L.cans = {
+      tapped: n, unit: sizes.length === 1 ? sizes[0].unit : null, partial: !!o.partial,
+      taps: cans.map((c) => c.t), units: cans.map((c) => c.u),
+    };
     this.batch = null;
     return L;
   };
@@ -428,7 +467,12 @@
     } else {
       this.levels.pop();
       // A batch that was closed too early opens again with its cans.
-      if (L.cans) this.batch = { unit: L.cans.unit, taps: L.cans.taps.slice() };
+      if (L.cans) {
+        this.batch = {
+          unit: L.cans.unit || L.cans.units[0],
+          cans: L.cans.taps.map((time, i) => ({ t: time, u: L.cans.units[i] })),
+        };
+      }
     }
     this._refit();
     return this.current();
@@ -601,14 +645,22 @@
     });
     // Pours live on the unit grid (§3.10, §6.2): a miss of a whole number of
     // cans that a changed count explains is a count error before anything else.
-    const hint = canHint(res.resid, z, L.step.value, cfg);
+    const counts = L.cans && L.cans.units
+      ? L.cans.units.reduce((a, u) => { a[u] = (a[u] || 0) + 1; return a; }, {}) : null;
+    const hint = canHint(res.resid, z, L.step.value, cfg, L.cans && L.cans.units, counts);
     if (hint) {
-      const k = Math.abs(hint.extra), was = L.step.value / cfg.pourUnit, now = was + hint.extra;
+      const k = Math.abs(hint.extra), total = L.step.value + hint.extra * hint.unit;
+      // A plain pour has no can record; the setup unit still gives the count.
+      const single = L.cans ? L.cans.unit === hint.unit : hint.unit === cfg.pourUnit;
+      const was = single ? L.step.value / hint.unit : null;
       verdict.cans = hint;
-      verdict.message += ` The miss is ${fmt(Math.abs(hint.exact), 2)} can${k > 1 || Math.abs(hint.exact) > 1 ? "s" : ""} of ${fmt(cfg.pourUnit, 0)} L: `
+      verdict.message += ` The miss is ${fmt(Math.abs(hint.exact), 2)} can${k > 1 || Math.abs(hint.exact) > 1 ? "s" : ""} of ${fmt(hint.unit, 0)} L: `
         + `${k} can${k > 1 ? "s" : ""} ${hint.extra > 0 ? "more" : "fewer"} than the count `
-        + `(${fmt(now, 0)}, not ${fmt(was, 0)}) explains it: z ${sgn(z, 1)} becomes ${sgn(hint.zAfter, 1)}.`;
-      verdict.advice = `Count the empty cans now, before the next pour. If there are ${fmt(now, 0)}, edit the pour to ${fmt(now * cfg.pourUnit, 0)} L. `
+        + (single ? `(${fmt(was + hint.extra, 0)}, not ${fmt(was, 0)})` : `(${fmt(total, 0)} L, not ${fmt(L.step.value, 0)} L)`)
+        + ` explains it: z ${sgn(z, 1)} becomes ${sgn(hint.zAfter, 1)}.`;
+      verdict.advice = "Count the empty cans now, before the next pour. "
+        + (single ? `If you count ${fmt(was + hint.extra, 0)} cans, edit the pour to ${fmt(total, 0)} L. `
+          : `If the recount gives ${fmt(total, 0)} L, edit the pour to match it. `)
         + verdict.advice;
     }
     // Pair pattern with the previous interval: the previous level may be the misread one.
@@ -633,15 +685,132 @@
    * went in than recorded (§2), so extra = −resid / unit cans.  A hint needs a
    * whole number of cans (within a quarter can) that brings z below the check.
    */
-  function canHint(resid, z, value, cfg) {
-    const unit = cfg.pourUnit;
-    if (!unit || !z) return null;
-    const exact = -resid / unit, extra = Math.round(exact);
-    if (!extra || Math.abs(exact - extra) > 0.25 || value + extra * unit <= 0) return null;
-    const zAfter = (resid + extra * unit) / (resid / z);
-    if (Math.abs(zAfter) >= cfg.zCheck) return null;
-    return { extra, exact, zAfter };
+  function canHint(resid, z, value, cfg, units, counts) {
+    if (!z) return null;
+    const list = (units && units.length ? units : [cfg.pourUnit]).filter((u) => u > 0);
+    let best = null;
+    for (const unit of list) {
+      const exact = -resid / unit, extra = Math.round(exact);
+      if (!extra || Math.abs(exact - extra) > 0.25 || value + extra * unit <= 0) continue;
+      // Do not remove more cans of this size than the batch holds.
+      if (extra < 0 && counts && counts[unit] != null && -extra > counts[unit]) continue;
+      const zAfter = (resid + extra * unit) / (resid / z);
+      if (Math.abs(zAfter) >= cfg.zCheck) continue;
+      const score = Math.abs(exact - extra);
+      if (!best || score < best.score) best = { extra, exact, unit, zAfter, score };
+    }
+    if (!best) return null;
+    delete best.score;
+    return best;
   }
+
+  // ---- timers and the fill estimate.  Durations are operator settings, not
+  // data: they never enter the fit or the raw file.
+
+  /** Set the timer durations.  pourSeconds merges per can size; null clears one size. */
+  Session.prototype.setTimers = function (o) {
+    const cfg = this.cfg;
+    if (o.settleSeconds != null) {
+      if (!(o.settleSeconds >= 0)) throw new Error("the settle time must be 0 s or more");
+      cfg.settleSeconds = o.settleSeconds;
+    }
+    if (o.dipSeconds != null) {
+      if (!(o.dipSeconds >= 0)) throw new Error("the dip time must be 0 s or more");
+      cfg.dipSeconds = o.dipSeconds;
+    }
+    for (const k of Object.keys(o.pourSeconds || {})) {
+      const v = o.pourSeconds[k];
+      if (v == null || v === "") { delete cfg.pourSeconds[sizeKey(k)]; continue; }
+      if (!(v > 0)) throw new Error("a pour time must be more than 0 s");
+      cfg.pourSeconds[sizeKey(k)] = v;
+    }
+    return cfg;
+  };
+
+  /**
+   * Time per can measured from the taps: the median gap between two taps of
+   * the same size in one batch.  The gap holds the pour, the drain and the
+   * change of can, which is what the estimate needs.
+   */
+  Session.prototype.measuredPourSeconds = function (size) {
+    const gaps = [];
+    const scan = (taps, units) => {
+      for (let i = 1; i < taps.length; i++) {
+        if (taps[i] == null || taps[i - 1] == null || units[i] !== size || units[i - 1] !== size) continue;
+        const g = (taps[i] - taps[i - 1]) / 1000;
+        if (g >= 5 && g <= 1800) gaps.push(g);
+      }
+    };
+    for (const L of this.levels) if (L.cans && L.cans.taps) scan(L.cans.taps, L.cans.units || L.cans.taps.map(() => L.cans.unit));
+    if (this.batch) scan(this.batch.cans.map((c) => c.t), this.batch.cans.map((c) => c.u));
+    if (!gaps.length) return null;
+    gaps.sort((a, b) => a - b);
+    const k = gaps.length;
+    return { seconds: k % 2 ? gaps[(k - 1) / 2] : 0.5 * (gaps[k / 2 - 1] + gaps[k / 2]), n: k };
+  };
+
+  /** Pour time of one can: the setting, else the measured median, else null. */
+  Session.prototype.pourSecondsFor = function (size) {
+    const set = this.cfg.pourSeconds[sizeKey(size)];
+    if (set > 0) return { seconds: set, source: "set" };
+    const m = this.measuredPourSeconds(size);
+    return m ? { seconds: m.seconds, source: "measured", n: m.n } : null;
+  };
+
+  /**
+   * Time to fill to half and to the brim with one can size (§3.4 advisor).
+   * Each step is one level: the advised number of cans, the settle time and
+   * one dip.  The steps follow the running shell, so near the brim they get
+   * smaller as the advisor halves the pour.  A milestone is reached when the
+   * first level at or above it is dipped.  The last step to the brim takes
+   * only the cans the gap needs (the planned overflow pour, §3.7).
+   *
+   * o = { size, pourSeconds, settleSeconds, dipSeconds, now, pourElapsed }
+   *   now          ms, for the settle time already spent at a pending level
+   *   pourElapsed  s spent on the can that is pouring now (pour timer)
+   */
+  Session.prototype.fillPlan = function (o) {
+    const cfg = this.cfg, p = this.fit.p, size = o && o.size;
+    const pourS = o && o.pourSeconds, settle = o.settleSeconds != null ? o.settleSeconds : cfg.settleSeconds;
+    const dipS = o.dipSeconds != null ? o.dipSeconds : cfg.dipSeconds;
+    if (!(size > 0) || !(pourS > 0)) return null;
+    const gi = this.lastGood();
+    if (gi < 0) return null;
+    const cap = capacity(p), half = 0.5 * cap;
+    let V = volume(this.levels[gi].H, p), t = 0, open = 0;
+    const cur = this.current();
+    if (cur && cur.state === "pending" && !cur.start) {
+      // The pour is in; the settle and the dip are still to come.
+      if (cur.step.kind === "known") V = volume(this.levels[cur.from].H, p) + cur.step.value;
+      else if (cur.step.kind === "partial") V = volume(this.levels[cur.from].H, p) + cur.step.base;
+      const spent = cur.pourTime && o.now ? (o.now - cur.pourTime) / 1000 : 0;
+      t = Math.max(0, settle - spent) + dipS;
+    } else if (this.batch) {
+      V += this.batchVolume();
+      open = this.cans();
+    }
+    t -= Math.min(Math.max(o.pourElapsed || 0, 0), pourS);
+    const start = { volume: V, seconds: t };
+    const mark = (levels, cans) => ({ seconds: Math.max(0, t), levels, cans, volume: V });
+    let atHalf = V >= half ? Object.assign(mark(0, 0), { done: true }) : null;
+    let atBrim = V >= cap - 1e-6 ? Object.assign(mark(0, 0), { done: true }) : null;
+    let levels = 0, cans = 0;
+    for (let guard = 0; !atBrim && guard < 100000; guard++) {
+      const H = levelFor(Math.min(V, cap), p);
+      const a = this.advice(H);
+      let n = Math.max(1, Math.round(a.target / size)) - open;
+      if (n < 0) n = 0;
+      open = 0;
+      const gap = cap - V;
+      if (n * size > gap) n = Math.max(1, Math.ceil(gap / size - 1e-9));
+      if (n === 0 && levels === 0 && gap <= 0) break;
+      V += n * size; cans += n; levels++;
+      t += n * pourS + settle + dipS;
+      if (!atHalf && V >= half) atHalf = mark(levels, cans);
+      if (V >= cap - 1e-6) atBrim = mark(levels, cans);
+    }
+    return { size, pourSeconds: pourS, settleSeconds: settle, dipSeconds: dipS, start, half: atHalf, brim: atBrim, capacity: cap };
+  };
 
   /** Pour advisor and brim watch (§3.4, §10). */
   Session.prototype._advise = function (verdict, L) {
@@ -732,8 +901,11 @@
       if (L.suspect) bits.push("suspect dip (pair pattern)");
       if (L.overflow) bits.push("overflow");
       if (L.cans) {
-        const ts = L.cans.taps.filter((x) => x != null);
-        bits.push(`cans ${L.cans.tapped}x${fmt(L.cans.unit, 0)} L` + (L.cans.partial ? " last can part" : "")
+        const ts = L.cans.taps.filter((x) => x != null), by = {};
+        for (const u of L.cans.units) by[u] = (by[u] || 0) + 1;
+        const spec = Object.keys(by).map(Number).sort((a, b) => b - a)
+          .map((u) => `${by[u]}x${fmt(u, 0)}`).join("+");
+        bits.push(`cans ${spec} L` + (L.cans.partial ? " last can part" : "")
           + (ts.length ? ` ${clock(ts[0])}-${clock(ts[ts.length - 1])}` : ""));
       }
       if (L.note) bits.push(L.note);
@@ -798,6 +970,7 @@
     return up || down;
   }
   function round(x, d) { const f = Math.pow(10, d); return Math.round(x * f) / f; }
+  function sizeKey(u) { return String(round(Number(u), 3)); }
   function clock(t) { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; }
   function fmt(x, d) { return x == null || !isFinite(x) ? "—" : Number(x).toFixed(d); }
   function sgn(x, d) { return (x >= 0 ? "+" : "−") + fmt(Math.abs(x), d); }

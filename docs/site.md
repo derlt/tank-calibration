@@ -65,13 +65,14 @@ tape gets 0.2–0.4 mm. Do not use the §9 interval σ (about 1–1.5 mm) here: 
 
 ## Each pour
 
-1. **Pour.** With a pour unit set, tap *+1 can poured* each time a can is
-   empty, then press *Batch done* (see *A batch of cans* below). Without a
-   pour unit, or for a meter or an odd can, open *Enter litres instead*. Tick
-   *whole pour unknown* for `?`, or *plus an unknown extra* for `N+?`. Tick
-   *reached the neck / overflowed* for the last pour.
-2. **Wait.** The page shows the time since the pour. Let the level settle at
-   least 5 minutes (§3.5).
+1. **Pour.** Tap *+1 can poured* each time a can is empty, then press
+   *Batch done* (see *A batch of cans* below). For a meter or an unknown pour,
+   open *Enter litres instead*. Tick *whole pour unknown* for `?`, or *plus an
+   unknown extra* for `N+?`. Tick *reached the neck / overflowed* for the last
+   pour.
+2. **Wait.** The settle timer on the dip card counts down the settle time
+   (5:00 unless you change it) and rings when the level is ready to dip
+   (§3.5).
 3. **Dip.** Enter the reading and press *Check*.
 4. **Read the verdict.**
 
@@ -100,6 +101,12 @@ the next batch.
 - **Tap when each can is empty.** The page shows the count, the litres and the
   time of each can. The count is saved after each tap, so a closed page or a
   locked phone does not lose it.
+- **One size per can.** *Can size for the next can* sets the size of the next
+  tap, so one batch can mix sizes: 2 × 200 L then 4 × 100 L. The buttons below
+  the field give the sizes already used and the default from the setup. The
+  default can size is optional: with none set, enter the size of the first
+  can and the buttons follow. After a reload the field starts at the last
+  can's size.
 - **The advice is a target, not a limit.** The page shows the advised number
   of cans for a rise of about 30 mm. It warns near the brim, and when the
   batch is more than the gap that is left in the shell.
@@ -108,17 +115,90 @@ the next batch.
   batch is open. After *Batch done*, *Undo last entry* opens the batch again
   with its cans.
 - **Last can not fully poured** records the batch as `N+?`: the full cans are
-  known, and the shell estimates the part can.
+  known, and the shell estimates the part can. The part can is the last tap,
+  so tap it with its own size.
 - **Batch done** closes the batch and starts the settle timer from the last
   can. The raw file keeps the count and the times in the note, for example
-  `cans 6x200 L 14:02-14:19`.
+  `cans 6x200 L 14:02-14:19`, or `cans 2x200+4x100 L` for a mixed batch.
 
 After the dip, a confirmed miss of a whole number of cans names the count
 error: *the miss is 0.99 can of 200 L: 1 can more than the count (7, not 6)
 explains it*. Count the empty cans before the next pour. If the count was
 wrong, press *Recount: edit pour*. The message appears only when the miss is
 within a quarter can of a whole number and the changed count brings z below 2
-(§3.10, §6.2).
+(§3.10, §6.2). With mixed sizes the page tests each size in the batch and
+names the one that fits.
+
+## Timers and alarm
+
+Open **Timers and alarm** at the bottom of the Live tab, enter the times, and
+press *Save timers*. Write each time as `m:ss` (`1:30`). A plain number is
+minutes (`1.5` = 1:30).
+
+| Setting | Meaning | Default |
+|---|---|---|
+| Pour time per can size | Pour one can and let it drain into the tank | blank: the time measured from your taps |
+| Settle (idle) after a batch | Wait before the first dip (§3.5) | 5:00 |
+| One dip and its entry | Only used for the time estimate | 1:00 |
+| sound, vibrate, keep the screen on | Device settings: they stay on this phone | all on |
+
+The page warns when the settle time is less than 5 minutes.
+
+**Pour timer.** Press *Start pour timer* when you start to pour a can. The
+can tips, the stream runs, and the clock counts down. *+30 s* and *−30 s*
+change this one run. When the time ends, the panel turns green, says
+*Pour-in finished*, and the alarm rings: three beeps every 2.5 s for one
+minute, with vibration. A red bar at the bottom of the screen stays until you
+press *Stop alarm*. The timer does not count the can. Tap *+1 can poured*
+when the can is empty. That tap is the record, and it also stops the timer
+and the alarm.
+
+**Settle timer.** *Batch done* starts the settle timer from the last can.
+The dip card counts down and rings once when the level is ready to dip.
+
+**Time to half and to the brim.** The Now card shows how long it takes to
+reach half of the capacity and the brim, the clock time when you will be
+done, and the levels and cans that are left. The estimate uses the can size
+on the pour card, its pour time, the settle time and the dip time. Each level
+takes the advised number of cans for a rise of about 30 mm, so near the brim
+the levels get smaller. A milestone is done when the first level at or above
+it is dipped. The estimate follows the running shell and has no time for
+extra dips, so early in the campaign it can be off by several levels.
+
+**Measured pour time.** With no pour time set for a size, the page uses the
+median gap between two taps of that size in one batch. That gap includes the
+change of can.
+
+Sound starts only after a tap on the page. *Test alarm* checks the volume.
+The timers never go into the raw file or the fit.
+
+### Keep the screen on
+
+A locked phone stops the page, its timers and its alarm. With *keep the screen
+on* ticked, the page asks the browser to keep the screen on for as long as the
+campaign is open and the page is visible. A line under the setting says if it
+works on this phone.
+
+| Line | Do |
+|---|---|
+| kept on | Nothing. |
+| open the page over https | Use the published https address, not a copy of the file. |
+| this browser cannot keep it on | Use a recent Chrome (Android) or Safari (iOS 16.4 or later), or set the phone timeout (below). |
+| the phone refused | Turn off the battery saver or Low Power Mode. |
+
+The screen turns off again if you switch to another app or press the power
+button. Come back to the page and it asks again.
+
+If the browser cannot keep the screen on, set the phone instead, for the
+campaign only:
+
+- **Android:** Settings → Display → Screen timeout → the longest time. With
+  the phone on a charger, Developer options → *Stay awake* keeps it on.
+- **iPhone / iPad:** Settings → Display & Brightness → Auto-Lock → Never.
+  Guided Access (Settings → Accessibility) also keeps the phone in the page.
+
+Set it back after the campaign. A screen that stays on uses the battery, so
+keep a charger or a power bank near the tank.
 
 ## Charts during the campaign
 

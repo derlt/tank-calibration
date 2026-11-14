@@ -52,6 +52,135 @@ class TestSitePage(unittest.TestCase):
         self.assertNotIn("/*@CORE@*/", page)
         self.assertNotIn("<script src", page, "the page must run offline")
 
+    def test_tally_is_not_hidden(self):
+        page = (SITE / "page.html").read_text(encoding="utf-8")
+        self.assertNotRegex(
+            page,
+            r'<div id="tally"[^>]*class="[^"]*hidden',
+            "the can tally must show: the size field is the only way to tap a can",
+        )
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_tally_shows_and_keeps_the_size(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click();\n"
+            "el('d-val').value = '400'; el('d-go').click();\n"
+            "out.shown = !el('tally')._classes.has('hidden');\n"
+            "out.unit0 = el('t-unit').value;\n"
+            "el('t-plus').click();\n"
+            "el('t-unit').value = '100';\n"
+            "el('t-plus').click();\n"
+            "out.count = el('t-count').textContent;\n"
+            "out.plus = el('t-plus').textContent;\n"
+            "out.width = el('t-bar').style.width;\n"
+            "// A reload starts the size field at the last can, not the setup default.\n"
+            "const p2 = stub.boot(page, corePath, store);\n"
+            "out.reloaded = p2.el('t-unit').value;\n"
+            "out.reloadedCount = p2.el('t-count').textContent;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertTrue(got["shown"], "the tally must be visible after the session starts")
+        self.assertEqual(got["unit0"], "200", "the setup default fills the size field")
+        self.assertEqual(got["count"], "2 cans · 300 L")
+        self.assertEqual(got["plus"], "+1 can poured (100 L)")
+        self.assertNotIn(got["width"], ("0%", ""), "the progress bar follows the advice")
+        self.assertEqual(got["reloaded"], "100", "a reload keeps the last can's size")
+        self.assertEqual(got["reloadedCount"], "2 cans · 300 L")
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_pour_and_settle_timers(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "let p = stub.boot(page, corePath, store), el = p.el;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "out.etaBefore = el('now-eta').innerHTML;\n"
+            "el('pt-start').click(); out.noTime = el('p-err').textContent; out.opened = el('timers').open;\n"
+            "el('tm-settle').value = '4:30'; el('tm-dip').value = '0.5'; el('tm-pour-200').value = '1:30';\n"
+            "el('tm-save').click();\n"
+            "out.msg = el('tm-msg').textContent; out.err = el('tm-err').textContent;\n"
+            "out.cfg = JSON.parse(store.get('calib-site:active')).config;\n"
+            "out.eta = el('now-eta').innerHTML;\n"
+            "el('pt-start').click();\n"
+            "const tm = JSON.parse(store.get('calib-site:timer'));\n"
+            "out.timer = {dur: tm.pour.dur, size: tm.pour.size, alarmed: tm.pour.alarmed};\n"
+            "out.running = {cls: el('pt').className, start: el('pt-start')._classes.has('hidden'),"
+            " stop: el('pt-stop')._classes.has('hidden'), clock: el('pt-clock').textContent};\n"
+            "el('pt-more').click(); out.more = JSON.parse(store.get('calib-site:timer')).pour.dur;\n"
+            "// The pour ran out while the page was closed: a reload shows it and rings.\n"
+            "tm.pour.start = Date.now() - 200000; tm.pour.dur = 90; store.set('calib-site:timer', JSON.stringify(tm));\n"
+            "p = stub.boot(page, corePath, store); el = p.el;\n"
+            "out.done = {cls: el('pt').className, status: el('pt-status').textContent,"
+            " alarm: !el('alarm')._classes.has('hidden'), text: el('alarm-text').textContent,"
+            " pulse: el('t-plus')._classes.has('pulse')};\n"
+            "out.alarmedSaved = JSON.parse(store.get('calib-site:timer')).pour.alarmed;\n"
+            "// A second reload does not ring again.\n"
+            "p = stub.boot(page, corePath, store); el = p.el;\n"
+            "out.again = el('alarm-text').textContent;\n"
+            "// Counting the can ends the timer.\n"
+            "el('t-plus').click();\n"
+            "out.afterCount = {pour: JSON.parse(store.get('calib-site:timer')).pour || null,"
+            " cls: el('pt').className, alarm: !el('alarm')._classes.has('hidden'), count: el('t-count').textContent};\n"
+            "// Batch done: the settle timer runs, then rings once.\n"
+            "el('p-go').click();\n"
+            "out.settling = el('dip-settle').textContent;\n"
+            "const s = JSON.parse(store.get('calib-site:active'));\n"
+            "s.levels[s.levels.length - 1].pourTime = Date.now() - 300000; store.set('calib-site:active', JSON.stringify(s));\n"
+            "p = stub.boot(page, corePath, store); el = p.el;\n"
+            "out.settled = {text: el('dip-settle').textContent, alarm: el('alarm-text').textContent,"
+            " shown: !el('alarm')._classes.has('hidden')};\n"
+            "el('alarm-stop').click(); out.stopped = el('alarm')._classes.has('hidden');\n"
+            "el('tm-settle').value = 'abc'; el('tm-save').click(); out.bad = el('tm-err').textContent;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertIn("Set the pour time for 200 L", got["etaBefore"])
+        self.assertIn("Set the pour time for 200 L", got["noTime"])
+        self.assertTrue(got["opened"], "a missing pour time opens the timer settings")
+        self.assertEqual(got["err"], "")
+        self.assertIn("below the 5-minute minimum", got["msg"])
+        self.assertEqual(got["cfg"]["settleSeconds"], 270)
+        self.assertEqual(got["cfg"]["dipSeconds"], 30, "a plain number is minutes")
+        self.assertEqual(got["cfg"]["pourSeconds"], {"200": 90})
+        self.assertIn("To half", got["eta"])
+        self.assertIn("To brim", got["eta"])
+        self.assertIn("× 200 L", got["eta"])
+        self.assertEqual(got["timer"], {"dur": 90, "size": 200, "alarmed": False})
+        self.assertEqual(got["running"]["cls"], "timer run")
+        self.assertTrue(got["running"]["start"], "the start button hides while the timer runs")
+        self.assertFalse(got["running"]["stop"])
+        self.assertIn(got["running"]["clock"], ("1:30", "1:29"))
+        self.assertEqual(got["more"], 120)
+        self.assertEqual(got["done"]["cls"], "timer done")
+        self.assertIn("Pour-in finished", got["done"]["status"])
+        self.assertTrue(got["done"]["alarm"])
+        self.assertIn("Pour-in finished: 200 L can", got["done"]["text"])
+        self.assertTrue(got["done"]["pulse"], "the count button asks for the tap")
+        self.assertTrue(got["alarmedSaved"])
+        self.assertEqual(got["again"], "", "one alarm per timer: a second reload does not ring")
+        self.assertIsNone(got["afterCount"]["pour"])
+        self.assertEqual(got["afterCount"]["cls"], "timer")
+        self.assertFalse(got["afterCount"]["alarm"])
+        self.assertEqual(got["afterCount"]["count"], "1 can · 200 L")
+        self.assertRegex(got["settling"], r"Settling: 4:[23]\d left of 4:30")
+        self.assertIn("Dip now", got["settled"]["text"])
+        self.assertEqual(got["settled"]["alarm"], "Settled: dip now")
+        self.assertTrue(got["settled"]["shown"])
+        self.assertTrue(got["stopped"])
+        self.assertIn("Cannot read the time", got["bad"])
+
 
 @unittest.skipUnless(NODE, "node is not installed")
 class TestSiteCore(unittest.TestCase):
@@ -269,6 +398,164 @@ class TestSiteCore(unittest.TestCase):
         self.assertIsNone(h[1], "half a can is not a count error")
         self.assertIsNone(h[2], "a count cannot go to zero cans")
         self.assertEqual(h[3]["extra"], -2)
+
+    def test_mixed_can_sizes(self):
+        got = _node(
+            "const p = {r: 900, L: 3000, h0: 0};\n"
+            "const s = new core.Session({D: 1800, Dpm: 100, Lest: 3000, pourUnit: 200});\n"
+            "const out = {};\n"
+            "let t = 0;\n"
+            "s.start('400', core.levelFor(400, p)); s.dip(core.levelFor(400, p));\n"
+            "s.tap(t += 60000, 200); s.tap(t += 60000, 100); s.tap(t += 60000, 100);\n"
+            "out.batch = {n: s.cans(), vol: s.batchVolume(), units: s.canUnits(), list: s.canList().map((c) => c.u)};\n"
+            "const L = s.closeBatch();\n"
+            "out.text = L.step.text; out.cans = L.cans;\n"
+            "out.hint = core.canHint(-101, -8, 400, s.cfg, L.cans.units);\n"
+            "out.byDefault = core.canHint(-101, -8, 400, s.cfg);\n"
+            "let v = s.dip(core.levelFor(800, p)); if (v.status === 'REDIP') v = s.dip(core.levelFor(800, p));\n"
+            "out.note = s.toRawCsv().trim().split('\\n').pop();\n"
+            "const s3 = new core.Session({D: 1800, Lest: 3000, pourUnit: 200});\n"
+            "s3.start('400', 400); s3.dip(400); s3.tap(1, 200); s3.tap(2, 100); s3.closeBatch();\n"
+            "s3.undo(); out.reopened = s3.canList().map((c) => c.u);\n"
+            "// A batch of one size keeps the can count and the unit.\n"
+            "const s2 = new core.Session({D: 1800, Lest: 3000, pourUnit: 200});\n"
+            "s2.start('400', 400); s2.dip(400); s2.tap(1); s2.tap(2);\n"
+            "const two = s2.closeBatch(); out.two = {text: two.step.text, unit: two.cans.unit};\n"
+            "// A page saved before can sizes were per can.\n"
+            "const old = core.Session.fromJSON({config: {D: 1800, Lest: 3000, pourUnit: 200}, levels: [],"
+            " batch: {unit: 200, taps: [1000, 2000]}});\n"
+            "out.legacy = {n: old.cans(), vol: old.batchVolume(), units: old.canUnits()};\n"
+            "// No default size: the tap carries its own.\n"
+            "const no = new core.Session({D: 1800, Lest: 3000});\n"
+            "no.start('400', 400); no.dip(400);\n"
+            "try { no.tap(1); } catch (e) { out.noUnit = e.message; }\n"
+            "no.tap(1, 50); no.tap(2, 25); out.anyUnit = {vol: no.batchVolume(), units: no.canUnits()};\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["batch"], {"n": 3, "vol": 400, "units": [{"unit": 200, "count": 1}, {"unit": 100, "count": 2}],
+                                        "list": [200, 100, 100]})
+        self.assertEqual(got["text"], "400", "the pour is the sum of the cans")
+        self.assertIsNone(got["cans"]["unit"], "a mixed batch has no single unit")
+        self.assertEqual(got["cans"]["units"], [200, 100, 100])
+        self.assertIn("cans 1x200+2x100 L", got["note"])
+        self.assertEqual(got["hint"]["extra"], 1)
+        self.assertEqual(got["hint"]["unit"], 100, "the hint picks the size that fits")
+        self.assertIsNone(got["byDefault"], "200 L does not fit a 101 L miss")
+        self.assertEqual(got["reopened"], [200, 100], "undo reopens the batch with each size")
+        self.assertEqual(got["two"], {"text": "400", "unit": 200})
+        self.assertEqual(got["legacy"], {"n": 2, "vol": 400, "units": [{"unit": 200, "count": 2}]})
+        self.assertIn("can size", got["noUnit"])
+        self.assertEqual(got["anyUnit"], {"vol": 75, "units": [{"unit": 50, "count": 1}, {"unit": 25, "count": 1}]})
+
+    def test_can_size_migration_and_hint_limits(self):
+        got = _node(
+            "const p = {r: 900, L: 3000, h0: 0};\n"
+            "const out = {};\n"
+            "// A closed batch saved before per-can sizes (the committed page shape).\n"
+            "const lvl = (dips, H) => ({row: 2, step: {text: '400', kind: 'known', value: 400}, dips, times: [1],"
+            " state: dips.length ? 'accepted' : 'pending', from: 0, note: '', overflow: false, H, n: dips.length,"
+            " cans: {tapped: 2, unit: 200, partial: false, taps: [1000, 2000]}});\n"
+            "const cfg = {D: 1800, Lest: 3000, pourUnit: 200};\n"
+            "const old = core.Session.fromJSON({version: 1, config: cfg, levels: [lvl([400], 400)], batch: null});\n"
+            "out.csv = old.toRawCsv();\n"
+            "const old2 = core.Session.fromJSON({version: 1, config: cfg, levels: [lvl([], null)], batch: null});\n"
+            "old2.undo(); out.reopened = old2.canList().map((c) => c.u);\n"
+            "// A plain pour keeps the can-count wording when the setup unit fits.\n"
+            "const s = new core.Session(cfg);\n"
+            "let V = 400;\n"
+            "s.start('400', core.levelFor(V, p)); s.dip(core.levelFor(V, p));\n"
+            "function pour(text, real) {\n"
+            "  s.pour(text); V += real;\n"
+            "  const H = core.levelFor(V, p); let v = s.dip(H);\n"
+            "  if (v.status === 'REDIP') v = s.dip(H);\n"
+            "  return v;\n"
+            "}\n"
+            "for (let i = 0; i < 5; i++) pour('400', 400);\n"
+            "const v = pour('600', 800);\n"
+            "out.plain = {status: v.status, msg: v.message, advice: v.advice};\n"
+            "// The hint never removes more cans of a size than the batch holds.\n"
+            "out.cap = [core.canHint(290, -9, 400, s.cfg, [200, 100, 100], {200: 1, 100: 2}),\n"
+            "           core.canHint(290, -9, 400, s.cfg, [200, 100, 100])];\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertIn("cans 2x200 L", got["csv"], "an old closed batch still exports")
+        self.assertEqual(got["reopened"], [200, 200], "undo reopens an old batch with its unit")
+        self.assertEqual(got["plain"]["status"], "ALARM")
+        self.assertIn("(4, not 3)", got["plain"]["msg"])
+        self.assertIn("If you count 4 cans, edit the pour to 800 L", got["plain"]["advice"])
+        self.assertIsNone(got["cap"][0], "3 fewer 100 L cans is impossible in a 2 x 100 L batch")
+        self.assertEqual(got["cap"][1]["extra"], -3, "without counts the old behaviour stays")
+
+    def test_timer_settings_and_measured_pour_time(self):
+        got = _node(
+            "const s = new core.Session({D: 1800, Lest: 3000, pourUnit: 200});\n"
+            "const out = {};\n"
+            "out.defaults = JSON.parse(JSON.stringify([s.cfg.settleSeconds, s.cfg.dipSeconds, s.cfg.pourSeconds]));\n"
+            "s.start('400', 400); s.dip(400);\n"
+            "out.none = s.pourSecondsFor(200);\n"
+            "// Taps 100 s, 120 s, 110 s apart; one 100 L can between them breaks a pair.\n"
+            "s.tap(0, 200); s.tap(100000, 200); s.tap(220000, 200); s.tap(330000, 200); s.tap(400000, 100);\n"
+            "out.measured = s.pourSecondsFor(200); out.other = s.pourSecondsFor(100);\n"
+            "s.setTimers({settleSeconds: 420, dipSeconds: 45, pourSeconds: {200: 95, '100.0': 50}});\n"
+            "out.set = [s.pourSecondsFor(200), s.pourSecondsFor(100), s.cfg.settleSeconds, s.cfg.dipSeconds];\n"
+            "const back = core.Session.fromJSON(JSON.parse(JSON.stringify(s.toJSON())));\n"
+            "out.saved = [back.cfg.settleSeconds, back.cfg.pourSeconds];\n"
+            "s.setTimers({pourSeconds: {200: null}}); out.cleared = s.pourSecondsFor(200);\n"
+            "for (const bad of [{settleSeconds: -1}, {pourSeconds: {200: 0}}]) {\n"
+            "  try { s.setTimers(bad); out.bad = (out.bad || 0) + 1000; } catch (e) { out.bad = (out.bad || 0) + 1; } }\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["defaults"], [300, 60, {}])
+        self.assertIsNone(got["none"])
+        self.assertEqual(got["measured"], {"seconds": 110, "source": "measured", "n": 3})
+        self.assertIsNone(got["other"], "one 100 L can has no gap of its own size")
+        self.assertEqual(got["set"][0], {"seconds": 95, "source": "set"})
+        self.assertEqual(got["set"][1], {"seconds": 50, "source": "set"}, "100.0 and 100 are one size")
+        self.assertEqual(got["set"][2:], [420, 45])
+        self.assertEqual(got["saved"], [420, {"200": 95, "100": 50}])
+        self.assertEqual(got["cleared"]["source"], "measured", "a cleared setting falls back to the taps")
+        self.assertEqual(got["bad"], 2)
+
+    def test_fill_plan(self):
+        got = _node(
+            "const p = {r: 900, L: 3000, h0: 0};\n"
+            "const s = new core.Session({D: 1800, Dpm: 20, Lest: 3000, Lpm: 30, h0pm: 2, pourUnit: 200});\n"
+            "let V = 400;\n"
+            "s.start('400', core.levelFor(V, p)); s.dip(core.levelFor(V, p));\n"
+            "for (let i = 0; i < 4; i++) { s.pour('400'); V += 400; let v = s.dip(core.levelFor(V, p));"
+            " if (v.status === 'REDIP') s.dip(core.levelFor(V, p)); }\n"
+            "const cap = core.capacity(s.fit.p), V0 = core.volume(s.levels[s.lastGood()].H, s.fit.p);\n"
+            "const o = {size: 200, pourSeconds: 90, settleSeconds: 300, dipSeconds: 60};\n"
+            "const out = {cap, V0, a: s.fillPlan(o)};\n"
+            "out.big = s.fillPlan(Object.assign({}, o, {size: 400, pourSeconds: 150}));\n"
+            "out.elapsed = s.fillPlan(Object.assign({}, o, {pourElapsed: 30}));\n"
+            "out.noTime = s.fillPlan({size: 200});\n"
+            "s.tap(1, 200); s.tap(2, 200); out.open = s.fillPlan(o);\n"
+            "s.closeBatch(); s.current().pourTime = 1000;\n"
+            "out.pend = s.fillPlan(Object.assign({}, o, {now: 1000 + 120000}));\n"
+            "console.log(JSON.stringify(out));"
+        )
+        a, cap, v0 = got["a"], got["cap"], got["V0"]
+        self.assertIsNone(got["noTime"], "no pour time, no estimate")
+        for m in (a["half"], a["brim"]):
+            # Every level: its cans, one settle and one dip.
+            self.assertAlmostEqual(m["seconds"], 90 * m["cans"] + 360 * m["levels"], places=6)
+        self.assertGreaterEqual(v0 + 200 * a["half"]["cans"], cap / 2)
+        self.assertLess(v0 + 200 * (a["half"]["cans"] - 1), cap / 2 + 200 * 3, "half is the first level past it")
+        self.assertGreaterEqual(v0 + 200 * a["brim"]["cans"], cap)
+        self.assertLess(v0 + 200 * (a["brim"]["cans"] - 1), cap, "the last pour takes only the cans the gap needs")
+        self.assertLess(a["half"]["seconds"], a["brim"]["seconds"])
+        self.assertGreater(a["brim"]["levels"], a["half"]["levels"])
+        self.assertLessEqual(got["big"]["brim"]["cans"], a["brim"]["cans"] / 2 + 1, "bigger cans, fewer cans")
+        self.assertAlmostEqual(got["elapsed"]["brim"]["seconds"], a["brim"]["seconds"] - 30, places=6)
+        # Two cans already in the open batch count toward the first level.
+        op = got["open"]
+        self.assertAlmostEqual(op["start"]["volume"], v0 + 400, places=6)
+        self.assertGreaterEqual(op["start"]["volume"] + 200 * op["brim"]["cans"], cap)
+        # A pending level: the pour is in, 3 min of settle and the dip are left.
+        pe = got["pend"]
+        self.assertAlmostEqual(pe["start"]["seconds"], 180 + 60, places=6)
+        self.assertAlmostEqual(pe["start"]["volume"], v0 + 400, places=6)
 
     def test_power_on_synthetic_campaigns(self):
         got = _node(

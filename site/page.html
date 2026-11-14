@@ -82,6 +82,34 @@
   .chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.5rem 0; }
   .chips span { background: var(--ok-bg); color: var(--ok); border-radius: 6px; padding: 0 0.4rem; font: 600 0.78rem var(--mono); }
   .chips span.todo { background: #eef1f4; color: #9aa7b3; }
+  .sizes { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem; }
+  .sizes button { min-height: 2.3rem; padding: 0.2rem 0.7rem; font-size: 0.9rem; background: #fff; color: var(--brand); }
+  .sizes button[aria-pressed=true] { background: var(--brand); color: #fff; }
+  .timer { border: 1px solid var(--line); border-radius: 10px; padding: 0.6rem; margin: 0.7rem 0 0.2rem; display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 0.8rem; align-items: center; }
+  .timer.run { border-color: var(--info); background: var(--info-bg); }
+  .timer.done { border-color: var(--ok); background: var(--ok-bg); }
+  .timer .clock { font: 650 2.3rem/1.05 var(--mono); }
+  .timer.done .clock { color: var(--ok); }
+  .timer .acts { grid-column: 1 / -1; display: flex; gap: 0.4rem; flex-wrap: wrap; }
+  .timer .acts button { flex: 1 1 auto; }
+  .pour-anim { width: 110px; height: 82px; display: block; }
+  .pour-anim .tank-bg { fill: #fff; }
+  .pour-anim .tank { fill: none; stroke: var(--brand); stroke-width: 1.5; }
+  .pour-anim .liq { fill: var(--info); }
+  .pour-anim .can { fill: #dfe6ec; stroke: var(--brand); stroke-width: 1.5; }
+  .pour-anim .can-g { transform-box: view-box; transform-origin: 42px 10px; transition: transform 0.5s ease; }
+  .pour-anim .stream { fill: none; stroke: var(--info); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 5 4; opacity: 0; }
+  .timer.run .can-g { transform: rotate(55deg); }
+  .timer.run .stream { opacity: 1; animation: flow 0.45s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -9; } }
+  button.pulse { animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 7px rgba(29, 122, 62, 0.35); } }
+  .alarm { position: fixed; left: 0.6rem; right: 0.6rem; bottom: calc(0.6rem + env(safe-area-inset-bottom)); z-index: 20; background: var(--bad); color: #fff; border-radius: 12px; padding: 0.8rem 1rem; display: flex; gap: 0.6rem; align-items: center; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25); max-width: 740px; margin: 0 auto; }
+  .alarm b { flex: 1; font-size: 1.05rem; }
+  .alarm button { background: #fff; color: var(--bad); border-color: #fff; }
+  .eta { margin: 0.6rem 0 0; font-size: 0.93rem; }
+  .eta div { margin: 0.15rem 0; }
+  @media (prefers-reduced-motion: reduce) { .timer.run .stream, button.pulse { animation: none; } .pour-anim .can-g { transition: none; } }
   .legend { display: flex; flex-wrap: wrap; gap: 0.2rem 0.9rem; font-size: 0.8rem; color: var(--muted); margin: 0.2rem 0 0.4rem; }
   .legend i { display: inline-block; width: 0.65rem; height: 0.65rem; border-radius: 50%; margin-right: 0.3rem; vertical-align: -0.05rem; }
   textarea { width: 100%; min-height: 9rem; font-family: var(--mono); font-size: 0.8rem; border: 1px solid var(--line); border-radius: 8px; padding: 0.5rem; }
@@ -115,7 +143,7 @@
       <label>D is good to ±, mm<input id="s-Dpm" type="number" inputmode="decimal" value="200"></label>
       <label>Length estimate L, mm<input id="s-L" type="number" inputmode="decimal" placeholder="5280"></label>
       <label>L is good to ±, mm (blank = 3 %)<input id="s-Lpm" type="number" inputmode="decimal"></label>
-      <label>Pour unit, L (can or meter step)<input id="s-unit" type="number" inputmode="decimal" placeholder="100"></label>
+      <label>Default can size, L<input id="s-unit" type="number" inputmode="decimal" placeholder="200"></label>
     </div>
     <details style="margin-top:0.7rem">
       <summary>Noise settings</summary>
@@ -143,22 +171,48 @@
       <h2>Now</h2>
       <div class="kv" id="now-kv"></div>
       <p id="now-advice" style="margin:0.6rem 0 0;font-weight:650"></p>
+      <div id="now-eta" class="eta"></div>
       <p id="now-drift" class="muted" style="margin:0.3rem 0 0"></p>
     </div>
 
     <div class="card" id="pour-card" style="margin-top:0.8rem">
       <h2>1 · Pour</h2>
-      <div id="tally" class="hidden">
-        <div class="big-num" id="t-count"></div>
+      <div id="tally">
+        <div class="row" style="align-items:end">
+          <label style="min-width:7rem">Can size for the next can, L<input id="t-unit" type="number" inputmode="decimal" step="0.5"></label>
+        </div>
+        <div class="sizes" id="t-units"></div>
+        <div class="big-num" id="t-count" style="margin-top:0.6rem"></div>
         <div class="tally-bar"><i id="t-bar"></i></div>
         <p class="muted" id="t-target" style="margin:0"></p>
+        <div class="timer" id="pt">
+          <svg class="pour-anim" viewBox="0 0 120 90" aria-hidden="true">
+            <defs><clipPath id="pt-clip"><rect x="36" y="48" width="76" height="38" rx="14"/></clipPath></defs>
+            <rect class="tank-bg" x="36" y="48" width="76" height="38" rx="14"/>
+            <rect class="liq" id="pt-tank" clip-path="url(#pt-clip)" x="36" y="86" width="76" height="0"/>
+            <rect class="tank" x="36" y="48" width="76" height="38" rx="14"/>
+            <path class="stream" d="M43 12 C 52 14, 56 30, 58 50"/>
+            <g class="can-g"><rect class="can" x="18" y="10" width="24" height="32" rx="3"/><rect class="liq" id="pt-can" x="20" y="14" width="20" height="26"/></g>
+          </svg>
+          <div>
+            <div class="clock" id="pt-clock">—:—</div>
+            <div class="muted" id="pt-status"></div>
+            <div class="tally-bar"><i id="pt-bar"></i></div>
+          </div>
+          <div class="acts">
+            <button class="secondary" id="pt-start">▶ Start pour timer</button>
+            <button class="secondary small hidden" id="pt-less">−30 s</button>
+            <button class="secondary small hidden" id="pt-more">+30 s</button>
+            <button class="danger small hidden" id="pt-stop">Stop timer</button>
+          </div>
+        </div>
         <button class="huge" id="t-plus"></button>
         <div class="chips" id="t-chips"></div>
         <div class="row">
           <button class="secondary small" id="t-undo">Undo last can</button>
           <label class="check"><input type="checkbox" id="t-part"> last can not fully poured</label>
         </div>
-        <p class="muted">Tap when each can is empty. The count is saved after each tap. One dip follows the batch.</p>
+        <p class="muted">Start the timer when you start to pour a can. Tap <b>+1 can poured</b> when the can is empty. Each can keeps the size shown above, so one batch can mix sizes. The count is saved after each tap. One dip follows the batch.</p>
       </div>
       <details id="p-manual">
         <summary>Enter litres instead (meter, odd can, unknown pour)</summary>
@@ -184,6 +238,7 @@
     <div class="card hidden" id="dip-card" style="margin-top:0.8rem">
       <h2 id="dip-title">2 · Dip</h2>
       <p id="dip-settle" class="muted" style="margin-top:0"></p>
+      <div class="tally-bar hidden" id="dip-bar-wrap"><i id="dip-bar"></i></div>
       <div class="row">
         <label style="min-width:9rem"><span id="dip-label">Reading, mm</span><input id="d-val" class="big" type="number" inputmode="decimal" step="0.5"></label>
         <button id="d-go">Check</button>
@@ -199,6 +254,27 @@
       <button class="secondary small" id="a-override">Accept anyway</button>
       <button class="danger small" id="a-undo">Undo last entry</button>
     </div>
+
+    <details class="card" id="timers" style="margin-top:0.8rem">
+      <summary><b>Timers and alarm</b></summary>
+      <div class="grid" style="margin-top:0.6rem">
+        <label>Settle (idle) after a batch, m:ss<input id="tm-settle" placeholder="5:00"></label>
+        <label>One dip and its entry, m:ss<input id="tm-dip" placeholder="1:00"></label>
+      </div>
+      <h2 style="margin-top:0.9rem">Pour time per can, m:ss</h2>
+      <p class="muted" style="margin-top:0">The time to pour one can and let it drain out into the tank. Blank = the time measured from your taps, when the page has one.</p>
+      <div class="grid" id="tm-sizes"></div>
+      <div class="row" style="margin-top:0.6rem">
+        <label class="check"><input type="checkbox" id="tm-sound"> sound</label>
+        <label class="check"><input type="checkbox" id="tm-vib"> vibrate</label>
+        <label class="check"><input type="checkbox" id="tm-wake"> keep the screen on while the campaign is open</label>
+      </div>
+      <div class="row" style="margin-top:0.6rem"><button id="tm-save">Save timers</button><button class="secondary" id="tm-test">Test alarm</button></div>
+      <p id="tm-msg" class="muted"></p>
+      <p id="tm-err" class="error"></p>
+      <p class="muted" id="tm-wake-state"></p>
+      <p class="muted">A locked phone stops the page and its alarm. If the screen still turns off, set the phone's own screen timeout longer (see How it works).</p>
+    </details>
   </section>
 
   <!-- ===================================================== log -->
@@ -286,6 +362,7 @@
 <script id="site-core">
 /*@CORE@*/
 </script>
+<div id="alarm" class="alarm hidden" role="alert"><b id="alarm-text"></b><button id="alarm-stop">Stop alarm</button></div>
 <script>
 (function () {
   "use strict";
@@ -297,7 +374,6 @@
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   let S = null;           // the session
   let tab = "live";
-  let timer = null;
 
   // ------------------------------------------------------------ storage
   function save() { if (S) localStorage.setItem(KEY, JSON.stringify(S.toJSON())); }
@@ -346,6 +422,7 @@
     if (!(cfg.Lest > 0)) throw new Error("Enter the length estimate L.");
     const dip = num("s-dip");
     if (dip == null) throw new Error("Enter the first reading.");
+    resetTallySize();   // a new campaign takes its own default can size
     const s = new C.Session(cfg);
     s.start($("s-step").value.trim() || "?", dip, "", Date.now());
     s.levels[0].pourTime = null;
@@ -360,17 +437,32 @@
   $("p-unknown").addEventListener("change", () => { if ($("p-unknown").checked) $("p-extra").checked = false; });
   $("p-extra").addEventListener("change", () => { if ($("p-extra").checked) $("p-unknown").checked = false; });
   $("t-plus").addEventListener("click", guard("p-err", () => {
-    const now = Date.now();
+    const now = Date.now(), u = activeUnit();
+    if (!(u > 0)) throw new Error("Enter the can size in litres.");
     if (S.quickTap(now) && !confirm(`Less than ${S.cfg.tapGap} s since the last can. Is this a new can?`)) return;
-    S.tap(now); save();
+    S.tap(now, u); save();
+    // The can is counted: its pour timer and alarm are done.
+    if (T.pour) { delete T.pour; saveTimer(); }
+    stopAlarm();
+    unlockAudio();
     if (navigator.vibrate) navigator.vibrate(40);
   }));
+  $("t-units").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-unit]");
+    if (!b) return;
+    $("t-unit").value = b.dataset.unit;
+    render();
+  });
+  $("t-unit").addEventListener("input", () => { $("p-err").textContent = ""; if (tab === "live" && S) render(); });
   $("t-undo").addEventListener("click", guard("p-err", () => { S.untap(); save(); }));
   $("t-part").addEventListener("change", () => render());
   $("p-go").addEventListener("click", guard("p-err", () => {
     if (S.cans()) {
-      const b = S.batch, L = S.closeBatch({ partial: $("t-part").checked, overflow: $("p-over").checked, note: $("p-note").value.trim() });
-      L.pourTime = b.taps[b.taps.length - 1] || Date.now();
+      const L = S.closeBatch({ partial: $("t-part").checked, overflow: $("p-over").checked, note: $("p-note").value.trim() });
+      const ts = L.cans.taps.filter((x) => x != null);
+      L.pourTime = ts.length ? ts[ts.length - 1] : Date.now();
+      if (T.pour) { delete T.pour; saveTimer(); }
+      stopAlarm(); unlockAudio();
       $("p-note").value = ""; $("t-part").checked = false; $("p-over").checked = false;
       save();
       setTimeout(() => $("d-val").focus(), 50);
@@ -385,6 +477,8 @@
     }
     const L = S.pour(text, { overflow: $("p-over").checked, note: $("p-note").value.trim() });
     L.pourTime = Date.now();
+    if (T.pour) { delete T.pour; saveTimer(); }
+    stopAlarm(); unlockAudio();
     $("p-note").value = ""; $("p-unknown").checked = false; $("p-extra").checked = false; $("p-over").checked = false;
     save();
     setTimeout(() => $("d-val").focus(), 50);
@@ -435,6 +529,7 @@
         const s = C.Session.fromJSON(JSON.parse(t));
         if (S && !confirm("Replace the open session? It goes to the archive.")) return;
         if (S) pushArchive();
+        resetTallySize();
         S = s; save(); tab = "live"; render();
       } catch (e) { $("f-err").textContent = "Cannot read that file: " + e.message; }
     });
@@ -447,6 +542,7 @@
   $("f-new").addEventListener("click", () => {
     if (S && !confirm("Close this session? Export it first. It goes to this browser's archive.")) return;
     if (S) pushArchive();
+    resetTallySize();
     S = null; localStorage.removeItem(KEY); render();
   });
   $("f-archive").addEventListener("click", (ev) => {
@@ -455,6 +551,7 @@
     if (b.dataset.act === "open") {
       if (S && !confirm("Replace the open session? It goes to the archive.")) return;
       if (S) pushArchive();
+      resetTallySize();
       S = C.Session.fromJSON(item.session); save(); tab = "live"; render();
     } else {
       download(`${item.tank}_site.json`, JSON.stringify(item.session, null, 2), "application/json");
@@ -530,18 +627,10 @@
       const n = pend.dips.length;
       $("dip-title").textContent = n === 0 ? "2 · Dip" : `2 · Dip again (reading ${n + 1})`;
       $("dip-label").textContent = n === 0 ? `Reading after ${pend.step.text} L, mm` : "Next reading, mm — earlier readings hidden";
-      clearInterval(timer);
-      const tick = () => {
-        const t0 = n === 0 ? pend.pourTime : (pend.times || [])[n - 1];
-        if (!t0) { $("dip-settle").textContent = ""; return; }
-        const s = Math.round((Date.now() - t0) / 1000);
-        const mm = Math.floor(s / 60), ss = String(s % 60).padStart(2, "0");
-        $("dip-settle").textContent = n === 0
-          ? `${mm}:${ss} since the pour. Let the level settle at least 5 minutes (§3.5).`
-          : `${mm}:${ss} since the last reading. A misread needs only a fresh reading; a moving level needs 5 minutes.`;
-      };
-      tick(); timer = setInterval(tick, 1000);
-    } else { clearInterval(timer); $("dip-settle").textContent = ""; }
+    }
+    tickSettle(Date.now());
+    renderTimers();
+    tickEta(Date.now());
 
     // verdict
     const v = L && L.verdict;
@@ -568,30 +657,354 @@
     $("a-undo").disabled = !L;
   }
 
+  function activeUnit() {
+    const v = num("t-unit");
+    return v > 0 ? v : unit();
+  }
+
+  /** A new or loaded session sets the size field from its own batch, and drops the old timers. */
+  function resetTallySize() {
+    $("t-unit").value = "";
+    delete $("t-unit").dataset.set;
+    clearTimers();
+    timersSig = "";
+  }
+
   function renderTally(adv) {
-    const u = unit(), n = S.cans();
-    $("tally").classList.toggle("hidden", !u);
+    const def = unit(), n = S.cans();
+    $("tally").classList.remove("hidden");
     $("p-manual").classList.toggle("hidden", n > 0);
-    if (!u) { $("p-manual").open = true; $("p-go").textContent = "Poured"; return; }
-    const target = adv && adv.units ? adv.units : 0, part = $("t-part").checked && n > 0;
-    const vol = part ? `${f((n - 1) * u, 0)} L + part can` : `${f(n * u, 0)} L`;
-    $("t-count").textContent = `${n}${target ? " of " + target : ""} can${(target || n) === 1 ? "" : "s"} · ${vol}`;
-    $("t-bar").style.width = `${target ? Math.min(100, 100 * n / target) : 0}%`;
-    $("t-plus").textContent = `+1 can poured (${f(u, 0)} L)`;
-    let note = target ? `Advice: ${target} × ${f(u, 0)} L = ${f(target * u, 0)} L (≈ ${f(target * u / Math.max(adv.slope, 1e-3), 0)} mm rise).` : "";
-    let warn = false;
-    if (adv && n * u > adv.gap) { note = `${f(n * u, 0)} L is more than the shell gap (≈ ${f(adv.gap, 0)} L): expect an overflow.`; warn = true; }
-    else if (adv && adv.halve) { note = "Near the brim: small batches. " + note; warn = true; }
-    else if (target && n > target) note += ` ${n - target} more than the advice.`;
+    // After a reload the field starts at the last can's size, then the default.
+    const last = n ? S.canList()[n - 1].u : null;
+    if (!$("t-unit").dataset.set && (last > 0 || def > 0)) {
+      $("t-unit").value = String(last > 0 ? last : def);
+      $("t-unit").dataset.set = "1";
+    }
+    const act = activeUnit(), part = $("t-part").checked && n > 0;
+    const vol = S.batchVolume(), known = part ? vol - S.canList()[n - 1].u : vol;
+
+    $("t-count").textContent = `${n} can${n === 1 ? "" : "s"} · ${f(known, 0)} L` + (part ? " + part can" : "");
+
+    const sizes = [];
+    for (const u of [def, act].concat(S.canUnits().map((x) => x.unit))) if (u > 0 && sizes.indexOf(u) < 0) sizes.push(u);
+    if (!sizes.length) $("p-manual").open = true;
+    $("t-units").innerHTML = sizes.map((u) => `<button data-unit="${u}" aria-pressed="${u === act}">${f(u, 0)} L</button>`).join("");
+
+    $("t-plus").disabled = !(act > 0);
+    $("t-plus").textContent = act > 0 ? `+1 can poured (${f(act, 0)} L)` : "Enter the can size, L";
+
+    const cans = adv && act ? Math.max(1, Math.round(adv.target / act)) : 0;
+    $("t-bar").style.width = `${cans ? Math.min(100, 100 * n / cans) : 0}%`;
+    let note = "", warn = false;
+    if (adv) {
+      note = `Advice ≈ ${f(adv.target, 0)} L` + (cans ? ` = ${cans} × ${f(act, 0)} L` : "") + " (≈ 30 mm rise).";
+      if (vol > adv.gap) { note = `${f(vol, 0)} L is more than the shell gap (≈ ${f(adv.gap, 0)} L): expect an overflow.`; warn = true; }
+      else if (adv.halve) { note = "Near the brim: small batches. " + note; warn = true; }
+      else if (cans && n > cans) note += ` ${n - cans} more than the advice.`;
+    }
     $("t-target").textContent = note;
     $("t-target").className = warn ? "error" : "muted";
-    const hhmm = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+
+    const hhmm = (x) => { const d = new Date(x); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+    const list = S.canList(), want = Math.max(n, cans);
     let chips = "";
-    for (let i = 0; i < Math.max(n, target); i++) chips += i < n ? `<span>${i + 1} · ${S.batch.taps[i] ? hhmm(S.batch.taps[i]) : ""}</span>` : `<span class="todo">${i + 1}</span>`;
+    for (let i = 0; i < want; i++) {
+      chips += i < n
+        ? `<span>${i + 1} · ${list[i].t ? hhmm(list[i].t) : ""} · ${f(list[i].u, 0)}</span>`
+        : `<span class="todo">${i + 1}</span>`;
+    }
     $("t-chips").innerHTML = chips;
     $("t-undo").disabled = n === 0;
     $("t-part").disabled = n === 0;
-    $("p-go").textContent = n ? `Batch done: ${n} can${n > 1 ? "s" : ""} → dip` : "Poured";
+    $("p-go").textContent = n ? `Batch done: ${n} can${n > 1 ? "s" : ""}, ${f(vol, 0)} L → dip` : "Poured";
+    tickPour(Date.now());
+  }
+
+  // ------------------------------------------------------------ timers and alarm
+  // Pour timer: one can, from "start" to "the can has drained".  Settle timer:
+  // from the end of a batch to the dip.  Both keep absolute times in storage,
+  // so a reload or a tab in the background shows the right time.
+  const TIMER = "calib-site:timer", PREFS = "calib-site:prefs";
+  function loadJSON(k, d) { try { return JSON.parse(localStorage.getItem(k) || "null") || d; } catch (e) { return d; } }
+  let T = loadJSON(TIMER, {});   // { pour: { start, dur, size, alarmed }, settled: "row@time" }
+  const P = Object.assign({ sound: true, vibrate: true, wake: true }, loadJSON(PREFS, {}));
+  let timersSig = "", lastEta = 0;
+  function saveTimer() { localStorage.setItem(TIMER, JSON.stringify(T)); }
+  function clearTimers() { T = {}; localStorage.removeItem(TIMER); stopAlarm(); releaseWake(); }
+
+  /** "1:30" = 90 s, "1:02:00" = 3720 s, "1.5" = 1.5 min = 90 s.  Blank = null. */
+  function parseDur(text) {
+    const s = String(text == null ? "" : text).trim().replace(",", ".");
+    if (s === "") return null;
+    let m = s.match(/^(\d+):(\d{1,2}):(\d{1,2})$/);
+    if (m) return 3600 * +m[1] + 60 * +m[2] + +m[3];
+    m = s.match(/^(\d+):(\d{1,2})$/);
+    if (m && +m[2] < 60) return 60 * +m[1] + +m[2];
+    if (/^\d+(\.\d+)?$/.test(s)) return Math.round(60 * parseFloat(s));
+    throw new Error(`Cannot read the time "${text}". Write m:ss, for example 1:30.`);
+  }
+  function fmtClock(sec) {
+    const s = Math.max(0, Math.round(sec)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = String(s % 60).padStart(2, "0");
+    return h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
+  }
+  function fmtSpan(sec) {
+    const m = Math.round(sec / 60);
+    if (m < 1) return "< 1 min";
+    if (m < 60) return `${m} min`;
+    const h = Math.floor(m / 60), r = m % 60;
+    return r ? `${h} h ${r} min` : `${h} h`;
+  }
+  function hhmm(ms) {
+    const d = new Date(ms), now = new Date();
+    const s = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    const days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 864e5);
+    return days === 0 ? s : days === 1 ? `tomorrow ${s}` : `${s} (+${days} days)`;
+  }
+  function pourTimeFor(u) { return S && u > 0 ? S.pourSecondsFor(u) : null; }
+  function sizeId(u) { return "tm-pour-" + String(u).replace(/[^0-9]/g, "_"); }
+
+  // ---- sound, vibration, screen
+  let actx = null, alarmOn = false, alarmUntil = 0, lastRing = 0, wake = null;
+  const TITLE = document.title;
+  function unlockAudio() {
+    // Browsers start sound only from a tap: make the audio ready on each tap.
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC || !P.sound) return;
+    try { if (!actx) actx = new AC(); if (actx.state === "suspended") actx.resume(); } catch (e) { actx = null; }
+  }
+  function ring() {
+    if (!P.sound || !actx) return;
+    const t0 = actx.currentTime;
+    for (let i = 0; i < 3; i++) {
+      const o = actx.createOscillator(), g = actx.createGain(), a = t0 + i * 0.3;
+      o.type = "square"; o.frequency.value = i === 2 ? 1320 : 880;
+      g.gain.setValueAtTime(0.0001, a);
+      g.gain.exponentialRampToValueAtTime(0.35, a + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, a + 0.25);
+      o.connect(g); g.connect(actx.destination);
+      o.start(a); o.stop(a + 0.27);
+    }
+  }
+  function alarm(text) {
+    alarmOn = true; alarmUntil = Date.now() + 60000; lastRing = 0;
+    $("alarm-text").textContent = text;
+    $("alarm").classList.remove("hidden");
+    document.title = "⏰ " + text;
+    ringTick(Date.now());
+  }
+  function ringTick(now) {
+    if (!alarmOn) return;
+    if (now > alarmUntil) { alarmOn = false; return; }      // one minute of sound; the banner stays
+    if (now - lastRing < 2500) return;
+    lastRing = now;
+    ring();
+    if (P.vibrate && navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]);
+  }
+  function stopAlarm() {
+    const was = alarmOn || !$("alarm").classList.contains("hidden");
+    alarmOn = false;
+    $("alarm").classList.add("hidden");
+    document.title = TITLE;
+    if (was && navigator.vibrate) navigator.vibrate(0);
+  }
+  $("alarm-stop").addEventListener("click", () => { stopAlarm(); render(); });
+  // Screen Wake Lock: the browser keeps the screen on while the page is
+  // visible.  It needs https (or a local file in some browsers) and a recent
+  // browser; a battery saver can refuse it.  The browser drops the lock when
+  // the page is hidden, so the heartbeat asks again when it is visible.
+  let wakeState = "off", wakeRetry = 0;
+  function wakeSupport() {
+    if (!navigator.wakeLock) return window.isSecureContext === false ? "insecure" : "unsupported";
+    return "ok";
+  }
+  function keepAwake() {
+    if (!P.wake || wake) return;
+    const sup = wakeSupport();
+    if (sup !== "ok") { wakeState = sup; return; }
+    const now = Date.now();
+    if (now < wakeRetry) return;
+    wake = "asking";
+    navigator.wakeLock.request("screen").then((w) => {
+      wake = w; wakeState = "on";
+      if (w.addEventListener) w.addEventListener("release", () => { wake = null; wakeState = "off"; });
+    }).catch(() => { wake = null; wakeState = "denied"; wakeRetry = Date.now() + 10000; });
+  }
+  function releaseWake() {
+    if (wake && wake !== "asking" && wake.release) wake.release().catch(() => {});
+    wake = null; wakeState = "off";
+  }
+  function showWake() {
+    const msg = !P.wake ? "Screen: the phone's own timeout applies."
+      : wakeState === "on" ? "Screen: kept on while this page is open and visible."
+        : wakeState === "insecure" ? "Screen: cannot keep it on from this address. Open the page over https."
+          : wakeState === "unsupported" ? "Screen: this browser cannot keep it on. Set the phone's screen timeout longer."
+            : wakeState === "denied" ? "Screen: the phone refused (battery saver?). The page asks again every 10 s."
+              : "Screen: asking the browser…";
+    $("tm-wake-state").textContent = msg;
+  }
+
+  // ---- pour timer
+  $("pt-start").addEventListener("click", guard("p-err", () => {
+    const u = activeUnit();
+    if (!(u > 0)) throw new Error("Enter the can size in litres.");
+    const d = pourTimeFor(u);
+    if (!d) { $("timers").open = true; throw new Error(`Set the pour time for ${f(u, 0)} L cans under Timers and alarm.`); }
+    stopAlarm(); unlockAudio();
+    T.pour = { start: Date.now(), dur: d.seconds, size: u, alarmed: false };
+    saveTimer(); keepAwake();
+  }));
+  $("pt-stop").addEventListener("click", () => { delete T.pour; saveTimer(); stopAlarm(); render(); });
+  $("pt-more").addEventListener("click", () => {
+    if (!T.pour) return;
+    T.pour.dur += 30;
+    if (T.pour.dur - (Date.now() - T.pour.start) / 1000 > 0) { T.pour.alarmed = false; stopAlarm(); }
+    saveTimer(); render();
+  });
+  $("pt-less").addEventListener("click", () => {
+    if (!T.pour) return;
+    T.pour.dur = Math.max(5, T.pour.dur - 30);
+    saveTimer(); render();
+  });
+
+  function tickPour(now) {
+    if (!S) return;
+    const pt = T.pour, u = activeUnit(), d = pourTimeFor(u), box = $("pt");
+    const run = !!pt;
+    for (const id of ["pt-less", "pt-more", "pt-stop"]) $(id).classList.toggle("hidden", !run);
+    $("pt-start").classList.toggle("hidden", run);
+    const gi = S.lastGood(), p = S.fit.p;
+    const tankFrac = gi >= 0 ? Math.min(1, (C.volume(S.levels[gi].H, p) + S.batchVolume()) / C.capacity(p)) : 0;
+    $("pt-tank").setAttribute("y", String(86 - 38 * tankFrac));
+    $("pt-tank").setAttribute("height", String(38 * tankFrac));
+    let frac = 0;
+    if (!pt) {
+      box.className = "timer";
+      $("pt-clock").textContent = d ? fmtClock(d.seconds) : "—:—";
+      $("pt-status").textContent = !(u > 0) ? "Enter the can size to use the timer."
+        : d ? `Pour time of one ${f(u, 0)} L can` + (d.source === "measured" ? ` (measured from ${d.n} tap gap${d.n > 1 ? "s" : ""}).` : ".")
+          : `Set the pour time for ${f(u, 0)} L cans under Timers and alarm.`;
+      $("pt-start").textContent = d ? `▶ Start pour timer (${fmtClock(d.seconds)})` : "▶ Start pour timer";
+      $("t-plus").classList.remove("pulse");
+    } else {
+      const left = pt.dur - (now - pt.start) / 1000;
+      frac = Math.min(1, Math.max(0, 1 - left / pt.dur));
+      if (left > 0) {
+        box.className = "timer run";
+        $("pt-clock").textContent = fmtClock(Math.ceil(left));
+        $("pt-status").textContent = `Pouring a ${f(pt.size, 0)} L can: ${fmtClock(Math.ceil(left))} left of ${fmtClock(pt.dur)}.`;
+        $("t-plus").classList.remove("pulse");
+      } else {
+        box.className = "timer done";
+        $("pt-clock").textContent = "0:00";
+        $("pt-status").textContent = `Pour-in finished (${f(pt.size, 0)} L, ${fmtClock(pt.dur)}). When the can is empty, tap +1 can poured.`;
+        $("t-plus").classList.add("pulse");
+        if (!pt.alarmed) { pt.alarmed = true; saveTimer(); alarm(`Pour-in finished: ${f(pt.size, 0)} L can`); }
+      }
+    }
+    $("pt-bar").style.width = `${100 * frac}%`;
+    $("pt-can").setAttribute("height", String(26 * (1 - frac)));
+    $("pt-can").setAttribute("y", String(14 + 26 * frac));
+  }
+
+  // ---- settle timer (dip card)
+  function tickSettle(now) {
+    const pend = pending(), wrap = $("dip-bar-wrap");
+    if (!pend) { $("dip-settle").textContent = ""; wrap.classList.add("hidden"); return; }
+    const n = pend.dips.length;
+    const t0 = n === 0 ? pend.pourTime : (pend.times || [])[n - 1];
+    if (!t0) { $("dip-settle").textContent = ""; wrap.classList.add("hidden"); return; }
+    const el = (now - t0) / 1000, settle = S.cfg.settleSeconds;
+    if (n > 0) {
+      wrap.classList.add("hidden");
+      $("dip-settle").textContent = `${fmtClock(el)} since the last reading. A misread needs only a fresh reading; a moving level needs ${fmtClock(settle)}.`;
+      return;
+    }
+    wrap.classList.toggle("hidden", !(settle > 0));
+    $("dip-bar").style.width = `${settle > 0 ? Math.min(100, 100 * el / settle) : 100}%`;
+    if (settle > 0 && el < settle) {
+      $("dip-settle").textContent = `Settling: ${fmtClock(Math.ceil(settle - el))} left of ${fmtClock(settle)}. Dip when the timer ends (§3.5).`;
+      $("dip-settle").className = "muted";
+      return;
+    }
+    $("dip-settle").textContent = `Settled: ${fmtClock(el)} since the pour. Dip now.`;
+    $("dip-settle").className = "";
+    const key = `${pend.row}@${t0}`;
+    if (settle > 0 && T.settled !== key) { T.settled = key; saveTimer(); alarm("Settled: dip now"); }
+  }
+
+  // ---- time to half and to the brim
+  function tickEta(now) {
+    lastEta = now;
+    const box = $("now-eta");
+    if (!S || S.lastGood() < 0) { box.innerHTML = ""; return; }
+    const list = S.canList(), last = list.length ? list[list.length - 1].u : null;
+    const u = activeUnit() || last, d = pourTimeFor(u);
+    if (!(u > 0)) { box.innerHTML = ""; return; }
+    if (!d) { box.innerHTML = `<div class="muted">Set the pour time for ${f(u, 0)} L cans (Timers and alarm, below) to see the time to half and to the brim.</div>`; return; }
+    const pe = T.pour && T.pour.size === u ? (now - T.pour.start) / 1000 : 0;
+    const plan = S.fillPlan({ size: u, pourSeconds: d.seconds, now, pourElapsed: pe });
+    if (!plan) { box.innerHTML = ""; return; }
+    const line = (name, m, V) => !m ? `<div><b>${name}</b>: —</div>`
+      : m.done ? `<div><b>${name}</b> (${f(V, 0)} L): reached</div>`
+        : `<div><b>${name}</b> (${f(V, 0)} L): ≈ ${fmtSpan(m.seconds)} · done ≈ <b>${hhmm(now + 1000 * m.seconds)}</b> · ${m.levels} level${m.levels > 1 ? "s" : ""} · ${m.cans} × ${f(u, 0)} L</div>`;
+    box.innerHTML = line("To half", plan.half, plan.capacity / 2) + line("To brim", plan.brim, plan.capacity)
+      + `<div class="muted">${fmtClock(d.seconds)} per can${d.source === "measured" ? " (measured)" : ""}, settle ${fmtClock(plan.settleSeconds)}, dip ${fmtClock(plan.dipSeconds)} per level. From the running shell and the pour advice, without extra dips.</div>`;
+  }
+
+  // ---- settings
+  function timerSizes() {
+    const out = [], add = (u) => { u = Number(u); if (u > 0 && out.indexOf(u) < 0) out.push(u); };
+    add(unit()); add(activeUnit());
+    for (const c of S.canList()) add(c.u);
+    for (const L of S.levels) if (L.cans) for (const u of (L.cans.units || [L.cans.unit])) add(u);
+    for (const k of Object.keys(S.cfg.pourSeconds)) add(k);
+    return out.sort((a, b) => b - a);
+  }
+  function renderTimers() {
+    const sizes = timerSizes(), cfg = S.cfg;
+    const sig = JSON.stringify([sizes, cfg.settleSeconds, cfg.dipSeconds, cfg.pourSeconds, P]);
+    if (sig === timersSig) return;
+    timersSig = sig;
+    $("tm-settle").value = fmtClock(cfg.settleSeconds);
+    $("tm-dip").value = fmtClock(cfg.dipSeconds);
+    $("tm-sizes").innerHTML = sizes.length ? sizes.map((u) => {
+      const set = cfg.pourSeconds[String(u)], m = S.measuredPourSeconds(u);
+      return `<label>${f(u, 0)} L can<input id="${sizeId(u)}" value="${set ? fmtClock(set) : ""}" placeholder="${m ? "measured " + fmtClock(m.seconds) : "1:30"}"></label>`;
+    }).join("") : `<p class="muted">Enter a can size on the pour card first.</p>`;
+    $("tm-sound").checked = !!P.sound; $("tm-vib").checked = !!P.vibrate; $("tm-wake").checked = !!P.wake;
+  }
+  $("tm-save").addEventListener("click", guard("tm-err", () => {
+    $("tm-msg").textContent = "";
+    const o = { settleSeconds: parseDur($("tm-settle").value), dipSeconds: parseDur($("tm-dip").value), pourSeconds: {} };
+    for (const u of timerSizes()) o.pourSeconds[String(u)] = parseDur($(sizeId(u)).value);
+    S.setTimers(o);
+    P.sound = !!$("tm-sound").checked; P.vibrate = !!$("tm-vib").checked; P.wake = !!$("tm-wake").checked;
+    localStorage.setItem(PREFS, JSON.stringify(P));
+    if (!P.wake) releaseWake();
+    save(); timersSig = "";
+    $("tm-msg").textContent = "Saved." + (S.cfg.settleSeconds < 300
+      ? ` The settle time ${fmtClock(S.cfg.settleSeconds)} is below the 5-minute minimum of §3.5: a level that still moves gives a bad dip.` : "");
+    unlockAudio();
+  }));
+  $("tm-test").addEventListener("click", () => { unlockAudio(); alarm("Test alarm"); });
+
+  // ---- one clock for every timer
+  function heartbeat() {
+    const now = Date.now();
+    ringTick(now);
+    if (!S) return;
+    // Every tab: an alarm must ring while the operator looks at a chart.
+    if (!pending()) tickPour(now);
+    tickSettle(now);
+    if (now - lastEta > 10000) tickEta(now);
+    // Keep the screen on for the whole campaign, not only during a timer: the
+    // phone must not lock between cans or while an alarm rings.
+    if (P.wake && !document.hidden) keepAwake(); else if (!P.wake) releaseWake();
+    showWake();
+  }
+  setInterval(heartbeat, 500);
+  if (document.addEventListener) {
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) heartbeat();  });
   }
 
   function stateTag(L) {
@@ -605,7 +1018,7 @@
     for (const L of S.levels) {
       const blind = L.state === "pending" && L.dips.length > 0;
       const c = !blind && L.check ? L.check : {};
-      h += `<tr><td>${L.row}</td><td>${esc(L.step.text)}${L.cans ? ` · ${L.cans.tapped}×${f(L.cans.unit, 0)}` : ""}</td><td>${blind ? "• • •" : L.dips.map((d) => f(d)).join(" / ")}</td>`
+      h += `<tr><td>${L.row}</td><td>${esc(L.step.text)}${L.cans ? ` · ${L.cans.unit ? `${L.cans.tapped}×${f(L.cans.unit, 0)}` : `${L.cans.tapped} cans`}` : ""}</td><td>${blind ? "• • •" : L.dips.map((d) => f(d)).join(" / ")}</td>`
         + `<td>${blind || L.H == null ? "—" : f(L.H)}</td><td>${f(c.predicted)}</td><td>${c.sd ? f(2 * c.sd) : "—"}</td>`
         + `<td>${c.e == null ? "—" : sg(c.e)}</td><td>${c.resid == null ? "—" : sg(c.resid)}</td><td>${c.z == null ? "—" : sg(c.z)}</td>`
         + `<td class=l>${stateTag(L)}${L.suspect ? ' <span class="tag t-pending">suspect</span>' : ""}</td><td class=l>${esc(L.note || "")}</td></tr>`;

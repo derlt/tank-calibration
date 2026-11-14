@@ -25,6 +25,16 @@ All notable changes to this project are documented here. The format follows
   second tap in less than 20 s. The raw file keeps the count in the note. An
   ALARM whose miss is a whole number of pour units names the count error
   (§3.10, §6.2).
+- Each can carries its own size, so one batch can mix cans (2 × 200 L then
+  4 × 100 L). The default can size is optional. The count-error hint tests
+  every size in the batch.
+- Timers on the page: a pour timer for each can with a small animation, a
+  countdown, ±30 s, and a sound and vibration alarm when the pour-in ends;
+  a settle timer after each batch that rings when the level is ready to dip.
+  The pour time per can size, the settle time and the dip time are settings.
+  The Now card estimates the time to half and to the brim from the running
+  shell and the pour advice (`Session.fillPlan`). With no pour time set, the
+  page uses the time measured between taps.
 - The page shows four charts on the **Log & charts** tab: Miss, Slope profile,
   Drift with its ±3σ√n band, and z-score alarm (§6.6). A row of buttons or a
   swipe changes the chart. `Session.series()` in `site_core.js` supplies the
