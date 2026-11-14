@@ -97,11 +97,7 @@
   .pour-anim .tank { fill: none; stroke: var(--brand); stroke-width: 1.5; }
   .pour-anim .liq { fill: var(--info); }
   .pour-anim .can { fill: #dfe6ec; stroke: var(--brand); stroke-width: 1.5; }
-  .pour-anim .can-g { transform-box: view-box; transform-origin: 42px 10px; transition: transform 0.5s ease; }
-  .pour-anim .stream { fill: none; stroke: var(--info); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 5 4; opacity: 0; }
-  .timer.run .can-g { transform: rotate(55deg); }
-  .timer.run .stream { opacity: 1; animation: flow 0.45s linear infinite; }
-  @keyframes flow { to { stroke-dashoffset: -9; } }
+  .pour-anim .stream { fill: none; stroke: var(--info); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 5 4; }
   button.pulse { animation: pulse 1s ease-in-out infinite; }
   @keyframes pulse { 50% { box-shadow: 0 0 0 7px rgba(29, 122, 62, 0.35); } }
   .alarm { position: fixed; left: 0.6rem; right: 0.6rem; bottom: calc(0.6rem + env(safe-area-inset-bottom)); z-index: 20; background: var(--bad); color: #fff; border-radius: 12px; padding: 0.8rem 1rem; display: flex; gap: 0.6rem; align-items: center; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25); max-width: 740px; margin: 0 auto; }
@@ -109,7 +105,7 @@
   .alarm button { background: #fff; color: var(--bad); border-color: #fff; }
   .eta { margin: 0.6rem 0 0; font-size: 0.93rem; }
   .eta div { margin: 0.15rem 0; }
-  @media (prefers-reduced-motion: reduce) { .timer.run .stream, button.pulse { animation: none; } .pour-anim .can-g { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { button.pulse { animation: none; } }
   .legend { display: flex; flex-wrap: wrap; gap: 0.2rem 0.9rem; font-size: 0.8rem; color: var(--muted); margin: 0.2rem 0 0.4rem; }
   .legend i { display: inline-block; width: 0.65rem; height: 0.65rem; border-radius: 50%; margin-right: 0.3rem; vertical-align: -0.05rem; }
   textarea { width: 100%; min-height: 9rem; font-family: var(--mono); font-size: 0.8rem; border: 1px solid var(--line); border-radius: 8px; padding: 0.5rem; }
@@ -191,8 +187,8 @@
             <rect class="tank-bg" x="36" y="48" width="76" height="38" rx="14"/>
             <rect class="liq" id="pt-tank" clip-path="url(#pt-clip)" x="36" y="86" width="76" height="0"/>
             <rect class="tank" x="36" y="48" width="76" height="38" rx="14"/>
-            <path class="stream" d="M43 12 C 52 14, 56 30, 58 50"/>
-            <g class="can-g"><rect class="can" x="18" y="10" width="24" height="32" rx="3"/><rect class="liq" id="pt-can" x="20" y="14" width="20" height="26"/></g>
+            <path class="stream" id="pt-stream" d="M43 12 C 52 14, 56 30, 58 50" opacity="0"/>
+            <g class="can-g" id="pt-can-g"><rect class="can" x="18" y="10" width="24" height="32" rx="3"/><rect class="liq" id="pt-can" x="20" y="14" width="20" height="26"/></g>
           </svg>
           <div>
             <div class="clock" id="pt-clock">—:—</div>
@@ -201,8 +197,8 @@
           </div>
           <div class="acts">
             <button class="secondary" id="pt-start">▶ Start pour timer</button>
-            <button class="secondary small hidden" id="pt-less">−30 s</button>
-            <button class="secondary small hidden" id="pt-more">+30 s</button>
+            <button class="secondary small hidden" id="pt-less">−20 s</button>
+            <button class="secondary small hidden" id="pt-more">+20 s</button>
             <button class="danger small hidden" id="pt-stop">Stop timer</button>
           </div>
         </div>
@@ -1713,7 +1709,7 @@
   const P = Object.assign({ sound: true, vibrate: true, wake: true }, loadJSON(PREFS, {}));
   let timersSig = "", lastEta = 0;
   function saveTimer() { localStorage.setItem(TIMER, JSON.stringify(T)); }
-  function clearTimers() { T = {}; localStorage.removeItem(TIMER); stopAlarm(); releaseWake(); }
+  function clearTimers() { T = {}; localStorage.removeItem(TIMER); stopAlarm(); releaseWake(); stopPourAnim(); }
 
   /** "1:30" = 90 s, "1:02:00" = 3720 s, "1.5" = 1.5 min = 90 s.  Blank = null. */
   function parseDur(text) {
@@ -1839,13 +1835,13 @@
   $("pt-stop").addEventListener("click", () => { delete T.pour; saveTimer(); stopAlarm(); render(); });
   $("pt-more").addEventListener("click", () => {
     if (!T.pour) return;
-    T.pour.dur += 30;
+    T.pour.dur += 20;
     if (T.pour.dur - (Date.now() - T.pour.start) / 1000 > 0) { T.pour.alarmed = false; stopAlarm(); }
     saveTimer(); render();
   });
   $("pt-less").addEventListener("click", () => {
     if (!T.pour) return;
-    T.pour.dur = Math.max(5, T.pour.dur - 30);
+    T.pour.dur = Math.max(5, T.pour.dur - 20);
     saveTimer(); render();
   });
 
@@ -1885,6 +1881,37 @@
       }
     }
     $("pt-bar").style.width = `${100 * frac}%`;
+    drawPour(pt ? frac : 0, now);
+    if (pt && frac < 1) startPourAnim(); else stopPourAnim();
+  }
+
+  // The pour animation is drawn from JavaScript, not CSS: CSS transforms on
+  // an SVG group and CSS keyframes are not reliable on every phone browser,
+  // and a reduced-motion setting turns them off.  Here the can tips, the
+  // stream runs and the can empties, frame by frame.
+  const raf = window.requestAnimationFrame ? (fn) => window.requestAnimationFrame(fn) : (fn) => setTimeout(fn, 40);
+  const caf = window.cancelAnimationFrame ? (id) => window.cancelAnimationFrame(id) : (id) => clearTimeout(id);
+  let animId = null;
+  function startPourAnim() { if (animId == null) animId = raf(animatePour); }
+  function stopPourAnim() { if (animId != null) { caf(animId); animId = null; } }
+  function animatePour() {
+    animId = null;
+    if (!T.pour) return;
+    const now = Date.now(), left = T.pour.dur - (now - T.pour.start) / 1000;
+    const frac = Math.min(1, Math.max(0, 1 - left / T.pour.dur));
+    drawPour(frac, now);
+    if (frac < 1) animId = raf(animatePour);
+  }
+  /** frac 0 = can full, 1 = can empty.  The can tips in 1.5 s, upright at the end. */
+  function drawPour(frac, now) {
+    const pt = T.pour;
+    const spent = pt ? (now - pt.start) / 1000 : 0;
+    const left = pt ? pt.dur - spent : 0;
+    const flowing = !!pt && spent > 0 && left > 0;
+    const tilt = flowing ? 55 * Math.min(1, spent / 1.5) * Math.min(1, left / 1) : 0;
+    $("pt-can-g").setAttribute("transform", tilt ? `rotate(${tilt.toFixed(1)} 42 10)` : "");
+    $("pt-stream").setAttribute("opacity", flowing ? "1" : "0");
+    if (flowing) $("pt-stream").setAttribute("stroke-dashoffset", String(-((now / 45) % 9)));
     $("pt-can").setAttribute("height", String(26 * (1 - frac)));
     $("pt-can").setAttribute("y", String(14 + 26 * frac));
   }

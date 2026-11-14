@@ -120,6 +120,16 @@ class TestSitePage(unittest.TestCase):
             "out.running = {cls: el('pt').className, start: el('pt-start')._classes.has('hidden'),"
             " stop: el('pt-stop')._classes.has('hidden'), clock: el('pt-clock').textContent};\n"
             "el('pt-more').click(); out.more = JSON.parse(store.get('calib-site:timer')).pour.dur;\n"
+            "// The animation is drawn in JS: the can tips, the stream runs, the can empties.\n"
+            "const tm2 = JSON.parse(store.get('calib-site:timer')); tm2.pour.start = Date.now() - 30000;"
+            " store.set('calib-site:timer', JSON.stringify(tm2));\n"
+            "p = stub.boot(page, corePath, store); el = p.el;\n"
+            "out.anim = {tilt: el('pt-can-g').transform, stream: el('pt-stream').opacity,"
+            " can: +el('pt-can').height, clock: el('pt-clock').textContent};\n"
+            "const tm3 = JSON.parse(store.get('calib-site:timer')); tm3.pour.start = Date.now() - 750;"
+            " store.set('calib-site:timer', JSON.stringify(tm3));\n"
+            "p = stub.boot(page, corePath, store); el = p.el;\n"
+            "out.anim2 = {tilt: el('pt-can-g').transform, can: +el('pt-can').height};\n"
             "// The pour ran out while the page was closed: a reload shows it and rings.\n"
             "tm.pour.start = Date.now() - 200000; tm.pour.dur = 90; store.set('calib-site:timer', JSON.stringify(tm));\n"
             "p = stub.boot(page, corePath, store); el = p.el;\n"
@@ -162,7 +172,13 @@ class TestSitePage(unittest.TestCase):
         self.assertTrue(got["running"]["start"], "the start button hides while the timer runs")
         self.assertFalse(got["running"]["stop"])
         self.assertIn(got["running"]["clock"], ("1:30", "1:29"))
-        self.assertEqual(got["more"], 120)
+        self.assertEqual(got["more"], 110, "the step is 20 s: 90 + 20")
+        self.assertRegex(got["anim"]["tilt"], r"^rotate\(5[0-5]\.?\d* 42 10\)$", "the can tips")
+        self.assertEqual(got["anim"]["stream"], "1", "the stream shows")
+        self.assertAlmostEqual(got["anim"]["can"], 26 * (1 - 30 / 110), delta=0.2)
+        self.assertIn(got["anim"]["clock"], ("1:20", "1:19"))
+        self.assertRegex(got["anim2"]["tilt"], r"^rotate\((2[0-9]|3[0-5])\.?\d* 42 10\)$", "the tip takes 1.5 s")
+        self.assertGreater(got["anim2"]["can"], 20)
         self.assertEqual(got["done"]["cls"], "timer done")
         self.assertIn("Pour-in finished", got["done"]["status"])
         self.assertTrue(got["done"]["alarm"])

@@ -29,7 +29,7 @@ All notable changes to this project are documented here. The format follows
   4 × 100 L). The default can size is optional. The count-error hint tests
   every size in the batch.
 - Timers on the page: a pour timer for each can with a small animation, a
-  countdown, ±30 s, and a sound and vibration alarm when the pour-in ends;
+  countdown, ±20 s, and a sound and vibration alarm when the pour-in ends;
   a settle timer after each batch that rings when the level is ready to dip.
   The pour time per can size, the settle time and the dip time are settings.
   The Now card estimates the time to half and to the brim from the running

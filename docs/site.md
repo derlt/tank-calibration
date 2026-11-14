@@ -145,7 +145,7 @@ minutes (`1.5` = 1:30).
 The page warns when the settle time is less than 5 minutes.
 
 **Pour timer.** Press *Start pour timer* when you start to pour a can. The
-can tips, the stream runs, and the clock counts down. *+30 s* and *−30 s*
+can tips, the stream runs, and the clock counts down. *+20 s* and *−20 s*
 change this one run. When the time ends, the panel turns green, says
 *Pour-in finished*, and the alarm rings: three beeps every 2.5 s for one
 minute, with vibration. A red bar at the bottom of the screen stays until you
