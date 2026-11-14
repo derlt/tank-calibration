@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14324a">
+<title>calib site — live dip check</title>
+<!-- Built file: edit site/page.html and site/site_core.js, then run
+     `uv run python -m calib site-page`.  Works offline: no network, no install. -->
+<style>
+  :root {
+    --bg: #f4f6f8; --card: #ffffff; --ink: #14202b; --muted: #5b6b7a; --line: #d5dde5;
+    --brand: #14324a; --ok: #1d7a3e; --ok-bg: #e3f4e8; --warn: #9a5b00; --warn-bg: #fff2d6;
+    --bad: #b3261e; --bad-bg: #fde4e1; --info: #1f5d99; --info-bg: #e2eefb;
+    --radius: 12px; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { background: var(--brand); color: #fff; padding: 0.7rem 1rem; position: sticky; top: 0; z-index: 5; display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+  header h1 { font-size: 1.05rem; margin: 0; font-weight: 650; flex: 1; min-width: 10rem; }
+  header .pill { background: rgba(255,255,255,0.15); border-radius: 999px; padding: 0.15rem 0.6rem; font-size: 0.8rem; }
+  main { max-width: 760px; margin: 0 auto; padding: 0.8rem; display: grid; gap: 0.8rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.9rem; }
+  .card h2 { font-size: 0.95rem; margin: 0 0 0.6rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .grid { display: grid; gap: 0.6rem; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); }
+  label { display: grid; gap: 0.2rem; font-size: 0.85rem; color: var(--muted); }
+  label.check { display: flex; align-items: center; gap: 0.45rem; color: var(--ink); font-size: 0.95rem; }
+  input[type=text], input[type=number], input:not([type]), select { font: inherit; font-size: 1.05rem; padding: 0.55rem 0.6rem; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); width: 100%; }
+  input.big { font-size: 1.6rem; font-family: var(--mono); padding: 0.5rem 0.7rem; }
+  input[type=checkbox] { width: 1.3rem; height: 1.3rem; }
+  button { font: inherit; font-weight: 600; border-radius: 10px; border: 1px solid var(--brand); background: var(--brand); color: #fff; padding: 0.65rem 1rem; min-height: 2.9rem; cursor: pointer; }
+  button.secondary { background: #fff; color: var(--brand); }
+  button.danger { background: #fff; color: var(--bad); border-color: var(--bad); }
+  button.small { min-height: 2.2rem; padding: 0.3rem 0.7rem; font-size: 0.9rem; }
+  button:disabled { opacity: 0.45; cursor: default; }
+  .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: end; }
+  .row > * { flex: 1 1 auto; }
+  .row > button { flex: 0 0 auto; }
+  .muted { color: var(--muted); font-size: 0.88rem; }
+  .mono { font-family: var(--mono); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 0.2rem 0.8rem; font-size: 0.93rem; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; font-family: var(--mono); }
+  .verdict { border-radius: var(--radius); padding: 0.9rem 1rem; border: 2px solid; }
+  .verdict h3 { margin: 0 0 0.35rem; font-size: 1.25rem; }
+  .verdict p { margin: 0.25rem 0; }
+  .verdict .advice { font-weight: 650; font-size: 1.05rem; margin-top: 0.5rem; }
+  .v-ok { background: var(--ok-bg); border-color: var(--ok); }
+  .v-ok h3 { color: var(--ok); }
+  .v-warn { background: var(--warn-bg); border-color: var(--warn); }
+  .v-warn h3 { color: var(--warn); }
+  .v-bad { background: var(--bad-bg); border-color: var(--bad); }
+  .v-bad h3 { color: var(--bad); }
+  .v-info { background: var(--info-bg); border-color: var(--info); }
+  .v-info h3 { color: var(--info); }
+  .tag { display: inline-block; border-radius: 6px; padding: 0 0.4rem; font-size: 0.78rem; font-weight: 650; font-family: var(--mono); }
+  .t-accepted, .t-start { background: var(--ok-bg); color: var(--ok); }
+  .t-learning, .t-unknown, .t-overflow { background: var(--info-bg); color: var(--info); }
+  .t-anomaly { background: var(--bad-bg); color: var(--bad); }
+  .t-pending, .t-override, .t-watch { background: var(--warn-bg); color: var(--warn); }
+  .table { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.86rem; }
+  th, td { padding: 0.3rem 0.4rem; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--card); }
+  td.l, th.l { text-align: left; }
+  td { font-family: var(--mono); }
+  .tabs { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+  .tabs button { background: #fff; color: var(--brand); min-height: 2.3rem; padding: 0.3rem 0.8rem; }
+  .tabs button[aria-pressed=true] { background: var(--brand); color: #fff; }
+  .hidden { display: none !important; }
+  svg text { font: 11px system-ui, sans-serif; fill: var(--muted); }
+  textarea { width: 100%; min-height: 9rem; font-family: var(--mono); font-size: 0.8rem; border: 1px solid var(--line); border-radius: 8px; padding: 0.5rem; }
+  .error { color: var(--bad); font-weight: 600; }
+  .big-num { font-family: var(--mono); font-size: 1.5rem; font-weight: 650; }
+  details summary { cursor: pointer; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="hdr-title">calib site — live dip check</h1>
+  <span class="pill" id="hdr-phase">no session</span>
+  <span class="pill" id="hdr-count"></span>
+</header>
+<main>
+  <nav class="tabs" id="tabs">
+    <button data-tab="live" aria-pressed="true">Live</button>
+    <button data-tab="log" aria-pressed="false">Log &amp; chart</button>
+    <button data-tab="shell" aria-pressed="false">Shell</button>
+    <button data-tab="files" aria-pressed="false">Files</button>
+    <button data-tab="replay" aria-pressed="false">Replay</button>
+    <button data-tab="help" aria-pressed="false">How it works</button>
+  </nav>
+
+  <!-- ===================================================== setup -->
+  <section id="setup" class="card hidden">
+    <h2>New campaign</h2>
+    <div class="grid">
+      <label>Tank name<input id="s-tank" value="tank"></label>
+      <label>Diameter estimate D, mm<input id="s-D" type="number" inputmode="decimal" placeholder="2480"></label>
+      <label>D is good to ±, mm<input id="s-Dpm" type="number" inputmode="decimal" value="200"></label>
+      <label>Length estimate L, mm<input id="s-L" type="number" inputmode="decimal" placeholder="5280"></label>
+      <label>L is good to ±, mm (blank = 3 %)<input id="s-Lpm" type="number" inputmode="decimal"></label>
+      <label>Pour unit, L (can or meter step)<input id="s-unit" type="number" inputmode="decimal" placeholder="100"></label>
+    </div>
+    <details style="margin-top:0.7rem">
+      <summary>Noise settings</summary>
+      <div class="grid" style="margin-top:0.5rem">
+        <label>Reading repeatability σ, mm<input id="s-sr" type="number" inputmode="decimal" value="0.4"></label>
+        <label>Pour noise, % of pour<input id="s-rel" type="number" inputmode="decimal" value="0.5"></label>
+        <label>Pour noise, fixed L<input id="s-abs" type="number" inputmode="decimal" value="3"></label>
+        <label>Datum: 0 ± mm<input id="s-h0" type="number" inputmode="decimal" value="80"></label>
+      </div>
+      <p class="muted">The repeatability σ comes from a repeat study: many dips at one level, without pouring. Your study at 501 mm and 1033 mm gave 0.2–0.4 mm. Every ± here means "the truth is almost surely inside" (2σ).</p>
+    </details>
+    <h2 style="margin-top:0.9rem">First level</h2>
+    <div class="grid">
+      <label>Liquid before the first dip, L (? = unknown heel)<input id="s-step" value="?"></label>
+      <label>First reading, mm<input id="s-dip" class="big" type="number" inputmode="decimal" step="0.5"></label>
+    </div>
+    <p class="muted">Sound the bottom first and record the heel as this row (§3.3). The first level always needs two readings: no prediction can test it.</p>
+    <div class="row" style="margin-top:0.6rem"><button id="s-go">Start campaign</button></div>
+    <p id="s-err" class="error"></p>
+  </section>
+
+  <!-- ===================================================== live -->
+  <section id="live" class="hidden">
+    <div class="card" id="now-card">
+      <h2>Now</h2>
+      <div class="kv" id="now-kv"></div>
+      <p id="now-advice" style="margin:0.6rem 0 0;font-weight:650"></p>
+      <p id="now-drift" class="muted" style="margin:0.3rem 0 0"></p>
+    </div>
+
+    <div class="card" id="pour-card" style="margin-top:0.8rem">
+      <h2>1 · Pour</h2>
+      <div class="row">
+        <label style="min-width:9rem">Pour, L<input id="p-vol" class="big" type="number" inputmode="decimal"></label>
+        <button class="secondary small" id="p-advice">Use advice</button>
+        <button class="secondary small" id="p-minus">− unit</button>
+        <button class="secondary small" id="p-plus">+ unit</button>
+      </div>
+      <div class="row" style="margin-top:0.5rem">
+        <label class="check"><input type="checkbox" id="p-unknown"> whole pour unknown (?)</label>
+        <label class="check"><input type="checkbox" id="p-extra"> plus an unknown extra (N+?)</label>
+        <label class="check"><input type="checkbox" id="p-over"> liquid reached the neck / overflowed</label>
+      </div>
+      <label style="margin-top:0.5rem">Note (optional)<input id="p-note"></label>
+      <div class="row" style="margin-top:0.6rem"><button id="p-go">Poured</button></div>
+      <p id="p-err" class="error"></p>
+    </div>
+
+    <div class="card hidden" id="dip-card" style="margin-top:0.8rem">
+      <h2 id="dip-title">2 · Dip</h2>
+      <p id="dip-settle" class="muted" style="margin-top:0"></p>
+      <div class="row">
+        <label style="min-width:9rem"><span id="dip-label">Reading, mm</span><input id="d-val" class="big" type="number" inputmode="decimal" step="0.5"></label>
+        <button id="d-go">Check</button>
+      </div>
+      <p id="d-err" class="error"></p>
+    </div>
+
+    <div id="verdict" class="verdict hidden" style="margin-top:0.8rem"></div>
+
+    <div class="row" style="margin-top:0.8rem" id="level-actions">
+      <button class="secondary small" id="a-redip">Take another reading</button>
+      <button class="secondary small" id="a-edit">Recount: edit pour</button>
+      <button class="secondary small" id="a-override">Accept anyway</button>
+      <button class="danger small" id="a-undo">Undo last entry</button>
+    </div>
+  </section>
+
+  <!-- ===================================================== log -->
+  <section id="log" class="card hidden">
+    <h2>Reading minus prediction</h2>
+    <div id="chart"></div>
+    <p class="muted">Each point is one level: the adopted reading minus the predicted level, with its ±2σ bar. Dashed lines: the ±3 mm action bar.</p>
+    <h2 style="margin-top:0.8rem">Levels</h2>
+    <div class="table"><table id="log-table"></table></div>
+  </section>
+
+  <!-- ===================================================== shell -->
+  <section id="shell" class="card hidden">
+    <h2>Running shell</h2>
+    <div class="kv" id="shell-kv"></div>
+    <p class="muted">The running shell is a tool for the live check. It is not the adopted shell. After the campaign, run <span class="mono">calib init</span> and <span class="mono">calib fit</span> on the exported raw file: the full fit (brim constraint, pair rule, block test, bootstrap) makes the deliverable.</p>
+  </section>
+
+  <!-- ===================================================== files -->
+  <section id="files" class="card hidden">
+    <h2>Export</h2>
+    <div class="row">
+      <button id="f-csv">Download raw CSV</button>
+      <button class="secondary" id="f-json">Download session JSON</button>
+      <button class="secondary" id="f-show">Show CSV</button>
+    </div>
+    <p class="muted">The raw CSV has one row per level with the adopted reading (the mean of the two readings that agree). Every reading is in the note and in the session JSON. Use the CSV with <span class="mono">calib init</span>.</p>
+    <textarea id="f-text" class="hidden" readonly></textarea>
+    <h2 style="margin-top:0.9rem">Import</h2>
+    <label>Session JSON<input type="file" id="f-import" accept=".json,application/json"></label>
+    <h2 style="margin-top:0.9rem">New campaign</h2>
+    <div class="row"><button class="danger" id="f-new">Close this session and start a new one</button></div>
+    <p class="muted">The closed session stays in this browser's archive. Export it first.</p>
+    <div id="f-archive"></div>
+    <p id="f-err" class="error"></p>
+  </section>
+
+  <!-- ===================================================== replay -->
+  <section id="replay" class="card hidden">
+    <h2>Replay a raw file</h2>
+    <p class="muted" style="margin-top:0">This runs an old <span class="mono">step_volume,measured_height,note</span> file through the check, as if every level had been dipped now. When the check asks for another reading, the replay repeats the recorded one: the answer a correct reading gives.</p>
+    <div class="grid">
+      <label>Raw CSV<input type="file" id="r-file" accept=".csv,text/csv,text/plain"></label>
+      <label>D estimate, mm<input id="r-D" type="number" inputmode="decimal"></label>
+      <label>D ±, mm<input id="r-Dpm" type="number" inputmode="decimal" value="200"></label>
+      <label>L estimate, mm<input id="r-L" type="number" inputmode="decimal"></label>
+      <label>Pour unit, L<input id="r-unit" type="number" inputmode="decimal"></label>
+      <label>Overflow row (optional)<input id="r-over" type="number" inputmode="numeric"></label>
+    </div>
+    <div class="row" style="margin-top:0.6rem"><button id="r-go">Replay</button></div>
+    <p id="r-err" class="error"></p>
+    <p id="r-sum"></p>
+    <div class="table"><table id="r-table"></table></div>
+  </section>
+
+  <!-- ===================================================== help -->
+  <section id="help" class="card hidden">
+    <h2>How the check works</h2>
+    <p><b>The question.</b> You just read the tape. Is the reading good, or must you dip again? You must know <i>now</i>: after the next pour that level is gone.</p>
+    <p><b>Test 1: the prediction.</b> The page knows your diameter and length estimates, the readings you accepted, and the pour. From these it learns the tank shape, and it predicts the level that this pour must give. If your reading falls inside the band, accept it and pour the next can.</p>
+    <p><b>Test 2: the repeat reading.</b> If the reading misses the band, or if no prediction is possible (the first level, an unknown pour), the page asks for a second reading. It hides the first reading and the prediction, so that the second reading cannot copy them. Two readings that agree within about 1 mm make a good dip.</p>
+    <table style="margin:0.5rem 0">
+      <tr><th class="l">Repeat</th><th class="l">Prediction</th><th class="l">Meaning</th><th class="l">Action</th></tr>
+      <tr><td class="l">—</td><td class="l">inside</td><td class="l">good reading</td><td class="l">pour next</td></tr>
+      <tr><td class="l">differ</td><td class="l">any</td><td class="l">misread, or level still moving</td><td class="l">dip a third time; wait if it creeps</td></tr>
+      <tr><td class="l">agree</td><td class="l">inside</td><td class="l">the first reading slipped a little</td><td class="l">pour next</td></tr>
+      <tr><td class="l">agree</td><td class="l">miss &lt; action bar</td><td class="l">watch item</td><td class="l">pour next</td></tr>
+      <tr><td class="l">agree</td><td class="l">miss ≥ action bar</td><td class="l">the pour or the tank is off</td><td class="l">recount the pour; OBJECT? / LOSS?</td></tr>
+    </table>
+    <p><b>The first pours.</b> The page does not know the bottom shape yet. For the first 3 intervals a confirmed miss is "learning": the level is kept and teaches the shape.</p>
+    <p><b>Too wide to judge.</b> When the band is wider than ±3 mm (very large pours, an early shell), the prediction cannot catch a 3 mm slip. Then the page asks for a second reading.</p>
+    <p><b>What it catches.</b> In a simulation of 100 campaigns per slip size, a reading off by 3 mm was caught 92 % of the time, and 4 mm or more every time. An honest reading triggered a second dip 3–6 % of the time.</p>
+    <p class="muted">Method: CALIBRATION_METHODOLOGY.md §10a. Residual convention §2: resid = pour − predicted pour. resid &lt; 0: the rise came too cheap (object, or more liquid than recorded). resid &gt; 0: the rise came too small (loss, or less liquid than recorded).</p>
+  </section>
+</main>
+
+<script id="site-core">
+/*@CORE@*/
+</script>
+<script>
+(function () {
+  "use strict";
+  const C = window.CalibSite;
+  const KEY = "calib-site:active", ARCH = "calib-site:archive";
+  const $ = (id) => document.getElementById(id);
+  const f = (x, d = 1) => (x == null || !isFinite(x) ? "—" : Number(x).toFixed(d));
+  const sg = (x, d = 1) => (x == null || !isFinite(x) ? "—" : (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(d));
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  let S = null;           // the session
+  let tab = "live";
+  let timer = null;
+
+  // ------------------------------------------------------------ storage
+  function save() { if (S) localStorage.setItem(KEY, JSON.stringify(S.toJSON())); }
+  function load() {
+    const t = localStorage.getItem(KEY);
+    if (!t) return null;
+    try { return C.Session.fromJSON(JSON.parse(t)); } catch (e) { console.error(e); return null; }
+  }
+  function archive() { try { return JSON.parse(localStorage.getItem(ARCH) || "[]"); } catch (e) { return []; } }
+
+  // ------------------------------------------------------------ helpers
+  const num = (id) => { const v = $(id).value.trim().replace(",", "."); return v === "" ? null : parseFloat(v); };
+  function download(name, text, type) {
+    const blob = new Blob([text], { type });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+  function guard(errId, fn) {
+    return function () {
+      $(errId).textContent = "";
+      try { fn.apply(this, arguments); } catch (e) { $(errId).textContent = e.message; console.error(e); }
+      render();
+    };
+  }
+  function pending() { const L = S && S.current(); return L && L.state === "pending" ? L : null; }
+
+  // ------------------------------------------------------------ tabs
+  $("tabs").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-tab]");
+    if (!b) return;
+    tab = b.dataset.tab; render();
+  });
+
+  // ------------------------------------------------------------ setup
+  $("s-go").addEventListener("click", guard("s-err", () => {
+    const cfg = {
+      tank: $("s-tank").value.trim() || "tank",
+      D: num("s-D"), Dpm: num("s-Dpm") || 200, Lest: num("s-L"), Lpm: num("s-Lpm"),
+      pourUnit: num("s-unit"), sigmaRead: num("s-sr") || 0.4,
+      pourRel: (num("s-rel") == null ? 0.5 : num("s-rel")) / 100, pourAbs: num("s-abs") == null ? 3 : num("s-abs"),
+      h0pm: num("s-h0") || 80,
+    };
+    if (!(cfg.D > 0)) throw new Error("Enter the diameter estimate D.");
+    if (!(cfg.Lest > 0)) throw new Error("Enter the length estimate L.");
+    const dip = num("s-dip");
+    if (dip == null) throw new Error("Enter the first reading.");
+    const s = new C.Session(cfg);
+    s.start($("s-step").value.trim() || "?", dip, "", Date.now());
+    s.levels[0].pourTime = null;
+    S = s; save(); tab = "live";
+  }));
+
+  // ------------------------------------------------------------ pour
+  function unit() { return S && S.cfg.pourUnit ? S.cfg.pourUnit : null; }
+  $("p-advice").addEventListener("click", () => { const L = S && S.current(); if (L && L.verdict && L.verdict.next) $("p-vol").value = Math.round(L.verdict.next.target); else if (S) $("p-vol").value = Math.round(S.advice(S.levels[S.lastGood()].H).target); });
+  $("p-plus").addEventListener("click", () => { const u = unit() || 50; $("p-vol").value = (num("p-vol") || 0) + u; });
+  $("p-minus").addEventListener("click", () => { const u = unit() || 50; $("p-vol").value = Math.max(u, (num("p-vol") || u) - u); });
+  $("p-unknown").addEventListener("change", () => { if ($("p-unknown").checked) $("p-extra").checked = false; });
+  $("p-extra").addEventListener("change", () => { if ($("p-extra").checked) $("p-unknown").checked = false; });
+  $("p-go").addEventListener("click", guard("p-err", () => {
+    let text;
+    if ($("p-unknown").checked) text = "?";
+    else {
+      const v = num("p-vol");
+      if (!(v > 0)) throw new Error("Enter the pour in litres, or tick 'whole pour unknown'.");
+      text = $("p-extra").checked ? `${v}+?` : String(v);
+    }
+    const L = S.pour(text, { overflow: $("p-over").checked, note: $("p-note").value.trim() });
+    L.pourTime = Date.now();
+    $("p-note").value = ""; $("p-unknown").checked = false; $("p-extra").checked = false; $("p-over").checked = false;
+    save();
+    setTimeout(() => $("d-val").focus(), 50);
+  }));
+
+  // ------------------------------------------------------------ dip
+  function doDip() {
+    const v = num("d-val");
+    if (v == null) throw new Error("Enter the reading in mm.");
+    S.dip(v, Date.now());
+    $("d-val").value = "";
+    save();
+  }
+  $("d-go").addEventListener("click", guard("d-err", doDip));
+  $("d-val").addEventListener("keydown", (e) => { if (e.key === "Enter") guard("d-err", doDip)(); });
+
+  // ------------------------------------------------------------ level actions
+  $("a-redip").addEventListener("click", () => {
+    const L = S.current(); if (!L) return;
+    L.state = "pending"; L.verdict = Object.assign({}, L.verdict || {}, { status: "REDIP", hidden: true, color: "warn", title: "Extra reading", message: "The earlier readings are hidden.", advice: "Dip again." });
+    save(); render(); $("d-val").focus();
+  });
+  $("a-edit").addEventListener("click", guard("d-err", () => {
+    const L = S.current();
+    const t = prompt("Pour after the recount, L (? = unknown, 200+? = 200 plus unknown):", L.step.text);
+    if (t == null) return;
+    S.editPour(t.trim()); save();
+  }));
+  $("a-override").addEventListener("click", guard("d-err", () => {
+    const why = prompt("Why do you accept this level against the check?", "");
+    if (why == null) return;
+    S.override(why.trim()); save();
+  }));
+  $("a-undo").addEventListener("click", guard("d-err", () => {
+    if (!confirm("Remove the last entry (the last reading, or the last pour if it has no reading)?")) return;
+    if (S.levels.length === 1 && S.levels[0].dips.length <= 1) { S = null; localStorage.removeItem(KEY); return; }
+    S.undo(); save();
+  }));
+
+  // ------------------------------------------------------------ files
+  $("f-csv").addEventListener("click", () => download(`${S.cfg.tank}_raw.csv`, S.toRawCsv(), "text/csv"));
+  $("f-json").addEventListener("click", () => download(`${S.cfg.tank}_site.json`, JSON.stringify(S.toJSON(), null, 2), "application/json"));
+  $("f-show").addEventListener("click", () => { const t = $("f-text"); t.value = S.toRawCsv(); t.classList.toggle("hidden"); t.select(); });
+  $("f-import").addEventListener("change", (ev) => {
+    const file = ev.target.files[0]; if (!file) return;
+    file.text().then((t) => {
+      try {
+        const s = C.Session.fromJSON(JSON.parse(t));
+        if (S && !confirm("Replace the open session? It goes to the archive.")) return;
+        if (S) pushArchive();
+        S = s; save(); tab = "live"; render();
+      } catch (e) { $("f-err").textContent = "Cannot read that file: " + e.message; }
+    });
+  });
+  function pushArchive() {
+    const a = archive();
+    a.unshift({ when: new Date().toISOString(), tank: S.cfg.tank, session: S.toJSON() });
+    localStorage.setItem(ARCH, JSON.stringify(a.slice(0, 20)));
+  }
+  $("f-new").addEventListener("click", () => {
+    if (S && !confirm("Close this session? Export it first. It goes to this browser's archive.")) return;
+    if (S) pushArchive();
+    S = null; localStorage.removeItem(KEY); render();
+  });
+  $("f-archive").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-i]"); if (!b) return;
+    const item = archive()[+b.dataset.i];
+    if (b.dataset.act === "open") {
+      if (S && !confirm("Replace the open session? It goes to the archive.")) return;
+      if (S) pushArchive();
+      S = C.Session.fromJSON(item.session); save(); tab = "live"; render();
+    } else {
+      download(`${item.tank}_site.json`, JSON.stringify(item.session, null, 2), "application/json");
+    }
+  });
+
+  // ------------------------------------------------------------ replay
+  $("r-go").addEventListener("click", guard("r-err", () => {
+    const file = $("r-file").files[0];
+    if (!file) throw new Error("Choose a raw CSV.");
+    const cfg = { D: num("r-D"), Dpm: num("r-Dpm") || 200, Lest: num("r-L"), pourUnit: num("r-unit") };
+    if (!(cfg.D > 0) || !(cfg.Lest > 0)) throw new Error("Enter D and L estimates.");
+    const over = num("r-over");
+    file.text().then((t) => {
+      try {
+        const rows = C.readRawText(t);
+        const r = C.replayRows(rows, cfg, { overflowRows: new Set(over ? [over] : []) });
+        const st = r.status, p = st.fit.p;
+        $("r-sum").innerHTML = `${rows.length} levels · <b>${st.redips}</b> extra readings · states ${esc(JSON.stringify(st.counts))}<br>`
+          + `running shell r ${f(p.r)} ± ${f(st.fit.sd.r)}, L ${f(p.L)} ± ${f(st.fit.sd.L)}, h0 ${f(p.h0)} ± ${f(st.fit.sd.h0)} mm`;
+        let h = "<tr><th>row</th><th>H</th><th>pour</th><th>dips</th><th class=l>first</th><th class=l>final</th><th>pred</th><th>±2σ</th><th>e mm</th><th>z</th></tr>";
+        for (const o of r.out) {
+          h += `<tr><td>${o.row}</td><td>${f(o.H)}</td><td>${esc(o.step)}</td><td>${o.dips}</td><td class=l>${esc(o.firstStatus)}</td><td class=l>${esc(o.status)}</td><td>${f(o.predicted)}</td><td>${o.sd ? f(2 * o.sd) : "—"}</td><td>${sg(o.e)}</td><td>${sg(o.z)}</td></tr>`;
+        }
+        $("r-table").innerHTML = h;
+      } catch (e) { $("r-err").textContent = e.message; }
+    });
+  }));
+
+  // ------------------------------------------------------------ render
+  function render() {
+    for (const b of $("tabs").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.tab === tab));
+    const has = !!S;
+    $("setup").classList.toggle("hidden", has || tab !== "live");
+    for (const id of ["live", "log", "shell", "files", "replay", "help"]) {
+      const need = id === "replay" || id === "help" || id === "files" ? true : has;
+      $(id).classList.toggle("hidden", tab !== id || !need);
+    }
+    for (const id of ["f-csv", "f-json", "f-show", "f-new"]) $(id).disabled = !has;
+    renderArchive();
+    if (!has) { $("hdr-phase").textContent = "no session"; $("hdr-count").textContent = ""; $("hdr-title").textContent = "calib site — live dip check"; return; }
+    const st = S.status();
+    $("hdr-title").textContent = `${S.cfg.tank} — live dip check`;
+    $("hdr-phase").textContent = st.learning ? `learning (${st.intervals}/${S.cfg.learnN})` : "checking";
+    $("hdr-count").textContent = `${S.levels.length} levels · ${st.redips} extra dips`;
+    renderLive(st); renderLog(); renderShell(st);
+  }
+
+  function renderLive(st) {
+    const L = S.current();
+    const pend = pending();
+    const gi = S.lastGood();
+    const G = gi >= 0 ? S.levels[gi] : null;
+    const p = st.fit.p;
+    const adv = G ? S.advice(G.H) : null;
+    $("now-kv").innerHTML = G ? [
+      ["level", `${f(G.H)} mm (row ${G.row}, ${G.n > 1 ? "2 readings" : "1 reading"})`],
+      ["liquid (running shell)", `${f(C.volume(G.H, p), 0)} L of ${f(st.capacity, 0)} L`],
+      ["brim", `≈ ${f(adv.brim, 0)} ± ${f(2 * adv.brimSd, 0)} mm · ${f(adv.toBrim, 0)} mm to go`],
+      ["slope", `${f(adv.slope, 2)} L/mm`],
+    ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("") : "";
+    $("now-advice").textContent = adv && !pend ? adv.text : "";
+    $("now-drift").textContent = st.intervals > 2
+      ? `Running books − shell: ${sg(st.drift)} L (alarm beyond ±${f(st.driftLimit, 0)} L)${st.driftAlarm ? " — DRIFT: stop and audit (tilt? can size? leak?)" : ""}`
+      : "";
+    $("now-drift").className = st.driftAlarm ? "error" : "muted";
+
+    // pour and dip cards
+    $("pour-card").classList.toggle("hidden", !!pend);
+    $("dip-card").classList.toggle("hidden", !pend);
+    if (pend) {
+      const n = pend.dips.length;
+      $("dip-title").textContent = n === 0 ? "2 · Dip" : `2 · Dip again (reading ${n + 1})`;
+      $("dip-label").textContent = n === 0 ? `Reading after ${pend.step.text} L, mm` : "Next reading, mm — earlier readings hidden";
+      clearInterval(timer);
+      const tick = () => {
+        const t0 = n === 0 ? pend.pourTime : (pend.times || [])[n - 1];
+        if (!t0) { $("dip-settle").textContent = ""; return; }
+        const s = Math.round((Date.now() - t0) / 1000);
+        const mm = Math.floor(s / 60), ss = String(s % 60).padStart(2, "0");
+        $("dip-settle").textContent = n === 0
+          ? `${mm}:${ss} since the pour. Let the level settle at least 5 minutes (§3.5).`
+          : `${mm}:${ss} since the last reading. A misread needs only a fresh reading; a moving level needs 5 minutes.`;
+      };
+      tick(); timer = setInterval(tick, 1000);
+    } else { clearInterval(timer); $("dip-settle").textContent = ""; }
+
+    // verdict
+    const v = L && L.verdict;
+    const box = $("verdict");
+    if (!v) { box.classList.add("hidden"); }
+    else {
+      box.classList.remove("hidden");
+      box.className = `verdict v-${v.color || "info"}`;
+      if (pend && (v.hidden || v.status === "REDIP")) {
+        box.innerHTML = `<h3>${esc(v.title)}</h3><p>${esc(v.message)}</p><p class="advice">${esc(v.advice)}</p>`
+          + `<p class="muted">${pend.dips.length} reading(s) recorded. The page shows them after the next reading.</p>`;
+      } else {
+        let extra = "";
+        if (v.unknown) extra += `<p class="mono">x = ${f(v.unknown.x)} ± ${f(2 * v.unknown.sigma)} L</p>`;
+        if (L.dips.length > 1 && !pend) extra += `<p class="muted">Readings: ${L.dips.map((d) => f(d)).join(" / ")} mm → adopted ${f(L.H)} mm</p>`;
+        box.innerHTML = `<h3>${esc(v.title)}</h3><p>${esc(v.message)}</p>${extra}<p class="advice">${esc(v.advice)}</p>`
+          + (v.next && !pend ? `<p>${esc(v.next.text)}</p>` : "");
+      }
+    }
+    const decided = L && L.state !== "pending";
+    $("a-redip").disabled = !L || !decided;
+    $("a-edit").disabled = !L || L.start;
+    $("a-override").disabled = !L || !(L.state === "pending" && L.dips.length >= 2);
+    $("a-undo").disabled = !L;
+  }
+
+  function stateTag(L) {
+    const s = L.state === "accepted" && L.watch ? "watch" : L.state;
+    return `<span class="tag t-${s}">${esc(s)}</span>`;
+  }
+
+  function renderLog() {
+    if (tab !== "log") return;
+    let h = "<tr><th>row</th><th>pour L</th><th>readings</th><th>adopted</th><th>pred</th><th>±2σ</th><th>e mm</th><th>resid L</th><th>z</th><th class=l>state</th><th class=l>note</th></tr>";
+    for (const L of S.levels) {
+      const blind = L.state === "pending" && L.dips.length > 0;
+      const c = !blind && L.check ? L.check : {};
+      h += `<tr><td>${L.row}</td><td>${esc(L.step.text)}</td><td>${blind ? "• • •" : L.dips.map((d) => f(d)).join(" / ")}</td>`
+        + `<td>${blind || L.H == null ? "—" : f(L.H)}</td><td>${f(c.predicted)}</td><td>${c.sd ? f(2 * c.sd) : "—"}</td>`
+        + `<td>${c.e == null ? "—" : sg(c.e)}</td><td>${c.resid == null ? "—" : sg(c.resid)}</td><td>${c.z == null ? "—" : sg(c.z)}</td>`
+        + `<td class=l>${stateTag(L)}${L.suspect ? ' <span class="tag t-pending">suspect</span>' : ""}</td><td class=l>${esc(L.note || "")}</td></tr>`;
+    }
+    $("log-table").innerHTML = h;
+    $("chart").innerHTML = chart();
+  }
+
+  function chart() {
+    const pts = S.levels.filter((L) => L.check && L.state !== "pending" && L.H != null);
+    const W = 700, H = 240, l = 40, r = 10, t = 10, b = 28;
+    const p = S.fit.p, top = Math.max(C.brim(p), ...S.levels.filter((L) => L.H != null).map((L) => L.H));
+    const ylim = Math.max(6, ...pts.map((L) => Math.min(Math.abs(L.check.e) + 1, 15)));
+    const X = (h) => l + (W - l - r) * Math.min(Math.max(h / top, 0), 1);
+    const Y = (e) => t + (H - t - b) * (1 - (Math.min(Math.max(e, -ylim), ylim) + ylim) / (2 * ylim));
+    const col = { accepted: "#1d7a3e", learning: "#1f5d99", anomaly: "#b3261e", override: "#9a5b00" };
+    let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="reading minus prediction by level">`;
+    for (const e of [-3, 3]) s += `<line x1="${l}" x2="${W - r}" y1="${Y(e)}" y2="${Y(e)}" stroke="#b3261e" stroke-dasharray="4 4" opacity="0.6"/>`;
+    s += `<line x1="${l}" x2="${W - r}" y1="${Y(0)}" y2="${Y(0)}" stroke="#5b6b7a"/>`;
+    for (let e = -Math.floor(ylim); e <= ylim; e += Math.max(1, Math.round(ylim / 4))) s += `<text x="${l - 6}" y="${Y(e) + 4}" text-anchor="end">${e}</text>`;
+    const step = top > 2000 ? 500 : 250;
+    for (let h = 0; h <= top; h += step) s += `<text x="${X(h)}" y="${H - 8}" text-anchor="middle">${h}</text>`;
+    s += `<text x="${l}" y="${t + 8}">mm</text>`;
+    for (const L of pts) {
+      const c = L.check, x = X(L.H), k = col[L.state] || "#5b6b7a";
+      s += `<line x1="${x}" x2="${x}" y1="${Y(-2 * c.sd)}" y2="${Y(2 * c.sd)}" stroke="${k}" opacity="0.35" stroke-width="3"/>`;
+      s += `<circle cx="${x}" cy="${Y(c.e)}" r="${L.watch ? 5 : 4}" fill="${L.watch ? "#fff" : k}" stroke="${k}" stroke-width="2"><title>row ${L.row}: ${f(L.H)} mm, e ${sg(c.e)} mm, z ${sg(c.z)}, ${L.state}</title></circle>`;
+    }
+    return s + "</svg>";
+  }
+
+  function renderShell(st) {
+    if (tab !== "shell") return;
+    const p = st.fit.p, sd = st.fit.sd, pr = S.cfg.prior;
+    $("shell-kv").innerHTML = [
+      ["r", `${f(p.r)} ± ${f(2 * sd.r)} mm (prior ${f(pr.r, 0)} ± ${f(2 * pr.sr, 0)})`],
+      ["L", `${f(p.L)} ± ${f(2 * sd.L)} mm (prior ${f(pr.L, 0)} ± ${f(2 * pr.sL, 0)})`],
+      ["h0", `${f(p.h0)} ± ${f(2 * sd.h0)} mm (prior 0 ± ${f(2 * pr.sh0, 0)})`],
+      ["capacity", `${f(st.capacity, 0)} L`],
+      ["brim", `${f(st.brim, 0)} mm`],
+      ["fit intervals", `${st.intervals}${st.learning ? " (learning)" : ""}`],
+      ["noise scale", `${f(st.scale, 2)} from ${st.scaleN} checked levels`],
+      ["reading σ", `${f(S.cfg.sigmaRead, 2)} mm · repeat limit ${f(S.cfg.repeatTol, 1)} mm`],
+      ["pour noise", `${f(100 * S.cfg.pourRel, 2)} % + ${f(S.cfg.pourAbs, 1)} L`],
+      ["states", esc(JSON.stringify(st.counts))],
+    ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("") + "<dt>±</dt><dd>2σ</dd>";
+  }
+
+  function renderArchive() {
+    const a = archive();
+    $("f-archive").innerHTML = a.length ? "<h2 style='margin-top:0.9rem'>Archive</h2>" + a.map((it, i) =>
+      `<div class="row" style="margin:0.3rem 0"><span class="muted">${esc(it.when.slice(0, 16).replace("T", " "))} · ${esc(it.tank)} · ${it.session.levels.length} levels</span>`
+      + `<button class="secondary small" data-i="${i}" data-act="open">Open</button><button class="secondary small" data-i="${i}" data-act="get">Download</button></div>`).join("") : "";
+  }
+
+  S = load();
+  render();
+})();
+</script>
+</body>
+</html>

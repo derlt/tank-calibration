@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- On-site live dip check (§10a): `site/calib_site.html`, one offline page for
+  a phone or tablet. It checks each dip before the next pour, while a re-dip
+  is still possible. A running shell fitted on the accepted levels, with the
+  on-site D and L estimates as priors, predicts each level; a miss, an unknown
+  pour or a blunt prediction asks for a blind second reading. Confirmed misses
+  become LEARNING, WATCH or ALARM (OBJECT? / LOSS?). The page exports the raw
+  CSV for `calib init`.
+- `calib site-page` builds the page from `site/page.html` and the one rules
+  file `site/site_core.js`; `--check` fails on a stale page.
+- `site/replay.js` replays a raw CSV through the live check;
+  `site/simulate.js` measures the detection rate on synthetic campaigns.
+- `docs/site.md`: the operator guide.
+- The page is also published as a Cloudflare Worker with static assets
+  (`wrangler.jsonc`, `make deploy`). The addresses are kept in `.env`.
+
 ### Fixed
 
 - Workbook charts use bare `RRGGBB` in `a:srgbClr`. The matplotlib constants

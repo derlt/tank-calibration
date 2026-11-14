@@ -2,7 +2,7 @@
 
 **Scope.** This method straps any horizontal, near-circular, flat-ended cylindrical tank from pour/level data: pour a known volume, read the level, repeat. It produces four artifacts: a strapping table, a fitted shell model, an anomaly register, and a live field protocol. It is distilled from four tank campaigns; every rule below was forced by a lesson from one of them (Appendix A).
 
-**Methods used, in one line each:** pour-and-dip strapping at controlled rise increments; bound-constrained nonlinear least squares (trust-region reflective) with multi-start; robust-loss comparison (Huber); grid profiling for parameter uncertainty; constrained refit (SLSQP or penalty) for the brim and neck constraints; residual-signature analysis (pair rule, single-sided rule); adjacent-pair detector scatter with drift-shape taxonomy; quantized-pour grid search; interval blocking; telescoping block sums; back-prediction with propagated uncertainty; sensitivity battery; parametric bootstrap with per-dip covariance; closure audit; per-pour z-test validation in the field; spreadsheet formula gate.
+**Methods used, in one line each:** pour-and-dip strapping at controlled rise increments; bound-constrained nonlinear least squares (trust-region reflective) with multi-start; robust-loss comparison (Huber); grid profiling for parameter uncertainty; constrained refit (SLSQP or penalty) for the brim and neck constraints; residual-signature analysis (pair rule, single-sided rule); adjacent-pair detector scatter with drift-shape taxonomy; quantized-pour grid search; interval blocking; telescoping block sums; back-prediction with propagated uncertainty; sensitivity battery; parametric bootstrap with per-dip covariance; closure audit; per-pour z-test validation in the field; one-step-ahead prediction from a prior-regularized running fit with a blind repeat reading (live check, before any shell is adopted); spreadsheet formula gate.
 
 ---
 
@@ -256,6 +256,27 @@ The shipped workbook implements all seven as live charts. Consult the pair scatt
 - **POUR-SIZE advisor:** next pour ≈ `m × 30 mm`; warn below the §7.1 floor and above 100 mm of rise.
 - Print the closure line every run.
 
+## 10a. Live campaign check (no adopted shell yet)
+
+**Method: one-step-ahead prediction from a prior-regularized running fit; blind repeat reading on demand.**
+
+§10 needs an adopted shell. A first campaign has none. The question on site is narrower: *is this dip good, or must I dip again?* It must be answered **before the next pour**. After that pour the level is gone, and the pair rule (§6.1) can only point at a dip that nobody can re-read.
+
+- **10a.1 Running shell.** After every decided level, refit `(r, L, h0)` by the difference fit (§5.1) on the **accepted intervals only**, plus one residual per prior: `r = D/2`, `L`, `h0 = 0`, each with the on-site ± taken as 2σ. Weak priors are harmless: the data take over within a few pours. The level under test never enters the fit that judges it.
+- **10a.2 Prediction.** For pour `s` from accepted level `H_a`: `Ĥ = F⁻¹(F(H_a) + s)`. Its σ in mm combines the anchor reading `σr·m_a/m`, the new reading `σr`, the pour `(rel·s + abs)/m`, and the shell `∇Ĥᵀ·Cov·∇Ĥ`. Multiply by a noise scale `c = max(1, median|z|/0.6745)` taken from earlier one-step misses, shrunk toward 1 while they are few.
+- **10a.3 Reading noise is a measurement.** `σr` is the repeatability of one reading: many dips at one still level, no pouring. It is smaller than the interval noise of §9 (0.2–0.4 mm against 0.8–1.2 mm-equivalent in the source campaigns): most interval scatter is pour noise and settling, not the tape.
+- **10a.4 Decision on the first reading.** Accept when `|z| < 2`, the miss is `< 3 mm`, **and** the test is sharp (`2σ ≤ 3 mm`). Otherwise ask for a second reading. A blunt test cannot catch a 3 mm slip, so it does not get to accept one.
+- **10a.5 Always two readings** where no prediction exists: the first level, an unknown pour (`?`, `N+?`), and a blunt prediction.
+- **10a.6 Blind repeat.** Hide the earlier readings and the prediction until the new reading is in. A reader who knows the expected number tends to read it.
+- **10a.7 Repeat test.** Two readings agree when they differ by `≤ max(1 mm, 2.5·√2·σr)`. Adopt their mean. No agreeing pair → read again; readings that move in one direction → not settled (§3.5, §6.4): wait.
+- **10a.8 Confirmed miss.** Two agreeing readings that still miss the prediction make the **dip good**, so the cause is the pour or the tank:
+  - fewer than 3 fit intervals → LEARNING: the bottom shape and the datum are not known yet; keep the level in the fit;
+  - below the action bar (§6) → WATCH: keep it in the fit (§6.5);
+  - at or above the action bar → ALARM: recount the pour; if the count stands, `OBJECT?` (`resid < 0`) or `LOSS?` (`resid > 0`), exclude the interval from the running fit, keep the level as the next anchor, register it (§6.2);
+  - a previous interval of opposite sign with net ≤ 15 % → the earlier level was the misread one; mark it suspect for §6.1 in the final fit.
+- **10a.9 The record.** One raw row per level with the adopted reading; every reading and the live state go in the note. The running shell is a tool for the live check, never the deliverable: the campaign file goes through `calib init` and `calib fit` (§5–§9) as usual.
+- **10a.10 Expected performance.** On synthetic campaigns like the source tanks (σr = 0.4 mm, pours 0.5 % + 3 L, D known to ±200 mm): one reading slipped by 3 mm is caught 92 % of the time, 4 mm or more every time; an honest reading triggers an extra dip 3–6 % of the time; a false ALARM ≤ 0.3 %.
+
 ## 11. Deliverables (per tank)
 
 - [ ] `*_raw.csv` — immutable, notes only.
@@ -317,4 +338,7 @@ Tank X — adopted shell
 - **Chart backbone + QA (§11):** corrected books tracked the fitted curve to 23 L max (mean 8 L) over 45 intervals — the agreement number that lets the smooth curve carry the commercial table, with the empirical record attached.
 - **Datum in the deliverable (§11):** the fitted datum put 67 L below tape zero and 1.3 % of capacity below the lowest dip — the honest table starts at the verified dip and labels the rest extrapolated.
 - **Formula gate (§11):** Excel 365 rejected a shipped workbook: one extra parenthesis in 101 generated formulas, plus 200 non-canonical double-sheet ranges. A parenthesis + parse gate now runs before any spreadsheet ships.
+- **Live check before the next pour (§10a):** replayed live, two campaigns flagged their known faults at the level where they happened: a shared-dip pair (+3.4 / −3.5 mm) at its first dip, and the superposed phantom unit + dip slip at z = −10. Both called for a re-dip of a level that was still there. The pair rule found them only after the level was gone.
+- **Learning phase (§10a.8):** the first three replayed pours missed the prediction by up to 10 mm. The datum was −30 mm and the shell did not know it yet. Confirmed early misses teach the shape; they are not anomalies.
+- **Reading σ ≠ interval σ (§10a.3):** 25 repeat dips at one level scattered 0.36 mm, while the fitted interval noise ran 0.8–1.2 mm-equivalent. Using the interval σ for the repeat test would have passed 3 mm slips as agreement.
 - **Sign check (§2):** an over-recorded pour produced `resid > 0` in the §2 convention, exposing swapped pour labels in the draft — the exact bug class the single-convention rule exists for.

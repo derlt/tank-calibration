@@ -1,0 +1,10 @@
+{
+  // Static-assets Worker for the on-site dip-check page (§10a).
+  // Build the public directory with `make deploy`, then `npx wrangler deploy`.
+  "name": "tank-calibration-site",
+  "compatibility_date": "2026-11-14",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./site/public"
+  }
+}

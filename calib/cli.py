@@ -15,6 +15,7 @@ from .formula_gate import gate_workbook
 from .geometry import Shell
 from .pipeline import run
 from .scaffold import infer_config, preflight, tank_stem, write_config
+from .site_page import SITE, page_is_current, write_page
 
 
 def _cmd_fit(args) -> int:
@@ -316,6 +317,23 @@ def _cmd_gate(args) -> int:
     return 0 if result["ok"] else 1
 
 
+def _cmd_site_page(args) -> int:
+    """Write the offline on-site page (§10a)."""
+    if args.check:
+        if page_is_current():
+            print(f"{SITE / 'calib_site.html'} is current")
+            return 0
+        print(
+            f"{SITE / 'calib_site.html'} is stale: run `calib site-page`",
+            file=sys.stderr,
+        )
+        return 1
+    out = write_page(Path(args.out) if args.out else None)
+    print(f"wrote {out}")
+    print("copy this one file to the phone or tablet; it runs offline in the browser")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="calib",
@@ -374,6 +392,15 @@ def main(argv: list[str] | None = None) -> int:
     p_joint.add_argument("--h0", choices=["fit", "locked"], default="fit")
     p_joint.add_argument("--json", action="store_true")
     p_joint.set_defaults(func=_cmd_joint)
+
+    p_site = sub.add_parser(
+        "site-page", help="write the offline on-site dip-check page (§10a)"
+    )
+    p_site.add_argument("-o", "--out", help="output HTML (default: site/calib_site.html)")
+    p_site.add_argument(
+        "--check", action="store_true", help="fail if the built page is stale"
+    )
+    p_site.set_defaults(func=_cmd_site_page)
 
     p_gate = sub.add_parser("gate", help="run the formula gate on a workbook")
     p_gate.add_argument("workbook")

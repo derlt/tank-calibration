@@ -158,6 +158,16 @@ Add `--interactive` to `calib field` to type each pour as `step,height`.
 - Clone to a short path such as `C:\src\tank-calibration` to avoid long-path
   problems.
 
+## On site
+
+`site/calib_site.html` checks each dip on site, before the next pour, while a
+re-dip is still possible. It needs no adopted shell: it learns the tank from
+your diameter and length estimates and the dips so far. It runs offline in a
+phone or tablet browser. At the end it exports the raw CSV for `calib init`.
+The page is also published as a Worker. Its address is in `.env`, which is
+not committed.
+See [docs/site.md](docs/site.md) and §10a of the method.
+
 ## Commands
 
 | Command | Purpose |
@@ -168,6 +178,7 @@ Add `--interactive` to `calib field` to type each pour as `step,height`.
 | `calib field PRESETS CSV` | Per-pour z-test against an adopted shell (§10). |
 | `calib field PRESETS --interactive` | Type pours one at a time. |
 | `calib joint CONFIG...` | One common `r`, separate lengths (§5.4). |
+| `calib site-page [-o FILE]` | Write the offline on-site dip-check page (§10a). |
 | `calib gate WORKBOOK` | Formula gate over every cell (§11). |
 
 ## What the fit writes
@@ -264,6 +275,8 @@ Short version:
 - `calib/blocking.py` — interval blocking for small pours.
 - `calib/unknowns.py` — back-prediction, one σ formula, sensitivity battery.
 - `calib/field.py` — live per-pour protocol.
+- `site/site_core.js` — live dip check before a shell is adopted (§10a);
+  `calib/site_page.py` builds the offline page.
 - `calib/report.py` — strapping table, commercial chart, register, shell record.
 - `calib/charts.py` — the seven views.
 - `calib/workbook.py` — values-only workbook and audit sheet.
@@ -285,11 +298,12 @@ recovers it within the quoted uncertainty.
 uv run python -m unittest discover -s tests -v
 ```
 
-72 tests cover geometry, step parsing, corrections, the trusted set, fit
+81 tests cover geometry, step parsing, corrections, the trusted set, fit
 recovery, the pair rule, object bookkeeping, noise split, telescoping blocks,
 blocking, unknowns, the field protocol, the formula gate, the config scaffold
 and preflight, a locked datum (with and without an overflow), the audit
-objective, and an end-to-end run with the workbook gate.
+objective, an end-to-end run with the workbook gate, and the on-site page.
+The on-site core tests run under Node; without Node they skip.
 
 ## Development
 
@@ -308,7 +322,9 @@ uv run python -m coverage report -m
 | Command | Runs |
 |---|---|
 | `make` | `test` |
-| `make test` | the 72 tests |
+| `make test` | the 81 tests |
+| `make site` | rebuild `site/calib_site.html` |
+| `make deploy` | publish the page as a Cloudflare Worker |
 | `make lint` | `ruff check .` |
 | `make coverage` | tests with a coverage report |
 | `make demo` | generate, fit and gate the demo |

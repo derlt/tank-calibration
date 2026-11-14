@@ -102,6 +102,20 @@ OVERFLOW, DRIFT, unknown pours with ±2σ, pour-size advisor, closure line.
 `calib field` runs a CSV or an interactive session. The presets file is the
 adopted shell, so the tool cannot drift from the fit.
 
+## §10a Live campaign check
+
+| Rule | Implementation |
+|---|---|
+| 10a.1 Running shell with priors | `site_core.js` `fitShell` (Levenberg–Marquardt, one residual per prior); `Session._refit` on accepted intervals only |
+| 10a.2 Prediction and its σ | `predictLevel`, `Session._predict`; noise scale in `Session._refit` |
+| 10a.4–10a.5 First-reading decision, sharpness | `Session._evaluate` |
+| 10a.6 Blind repeat | `verdict.hidden`; the page hides earlier readings and the prediction while a level is pending |
+| 10a.7 Repeat test, creep | `adopt`, `UNSETTLED` in `Session._evaluate` |
+| 10a.8 LEARNING, WATCH, ALARM, pair pattern | `Session._evaluate` |
+| 10a.9 Record | `Session.toRawCsv` (reads back with `data.read_raw`), `Session.toJSON` |
+| 10a.10 Performance | `site/simulate.js`; `tests/test_site.py` |
+| Offline page | `site/page.html` + core → `calib site-page` → `site/calib_site.html` |
+
 ## §11 Deliverables
 
 | Deliverable | Where |
