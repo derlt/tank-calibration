@@ -20,6 +20,15 @@ All notable changes to this project are documented here. The format follows
 - `site/replay.js` replays a raw CSV through the live check;
   `site/simulate.js` measures the detection rate on synthetic campaigns.
 - `docs/site.md`: the operator guide.
+- Batch pours on the page: one tap for each can, a saved count with the time
+  of each can, an advised can count, a brim warning, and a question on a
+  second tap in less than 20 s. The raw file keeps the count in the note. An
+  ALARM whose miss is a whole number of pour units names the count error
+  (§3.10, §6.2).
+- The page shows four charts on the **Log & charts** tab: Miss, Slope profile,
+  Drift with its ±3σ√n band, and z-score alarm (§6.6). A row of buttons or a
+  swipe changes the chart. `Session.series()` in `site_core.js` supplies the
+  data.
 - The page is also published as a Cloudflare Worker with static assets
   (`wrangler.jsonc`, `make deploy`). The addresses are kept in `.env`.
 

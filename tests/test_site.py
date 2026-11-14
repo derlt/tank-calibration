@@ -83,7 +83,8 @@ class TestSiteCore(unittest.TestCase):
             f"const r = core.replayRows(rows, cfg, {{overflowRows: new Set([22]), second: {second}}});\n"
             "const L = r.session.levels;\n"
             "console.log(JSON.stringify({out: r.out, status: r.status,"
-            " unknown: L[15].verdict.unknown, csv: r.session.toRawCsv()}));"
+            " unknown: L[15].verdict.unknown, csv: r.session.toRawCsv(),"
+            " series: r.session.series(), scale: r.session.scale}));"
         )
 
     def test_demo_misread_is_caught_live(self):
@@ -112,6 +113,29 @@ class TestSiteCore(unittest.TestCase):
         p = res["status"]["fit"]["p"]
         self.assertLess(abs(p["r"] - 900.0), 10.0)
         self.assertLess(abs(p["L"] - 3000.0), 60.0)
+
+    def test_chart_series_follow_the_python_charts(self):
+        res = self._demo(second_fix=True)
+        series, p = res["series"], res["status"]["fit"]["p"]
+        shell = Shell(p["r"], p["L"], p["h0"])
+        rows = [d["row"] for d in series]
+        self.assertNotIn(1, rows, "the first level has no interval")
+        self.assertNotIn(16, rows, "an unknown pour has no residual")
+        self.assertNotIn(22, rows, "an overflow reading is not shell level")
+        self.assertEqual(len(rows), 19)
+        drift, var = 0.0, 0.0
+        for d in series:
+            pred = float(shell.volume(d["H"]) - shell.volume(d["H1"]))
+            m = float(shell.slope(d["H"]))
+            v = 2 * (m * 1.0) ** 2 + (0.003 * d["s"] + 1.0) ** 2
+            drift += d["s"] - pred
+            var += v
+            self.assertAlmostEqual(d["resid"], d["s"] - pred, places=6)  # §2 sign
+            self.assertAlmostEqual(d["z"], d["resid"] / (res["scale"] * v**0.5), places=6)
+            self.assertAlmostEqual(d["drift"], drift, places=6)
+            self.assertAlmostEqual(d["limit"], 3 * var**0.5, places=6)
+            self.assertAlmostEqual(d["mid"], 0.5 * (d["H"] + d["H1"]), places=9)
+            self.assertGreater(d["rise"], 0)
 
     def test_exported_csv_reads_back(self):
         res = self._demo(second_fix=True)
@@ -181,6 +205,70 @@ class TestSiteCore(unittest.TestCase):
         self.assertEqual(got["alarm"], {"status": "ALARM", "cause": "OBJECT?"})
         self.assertIn(got["afterRecount"], ("ACCEPT", "WATCH"))
         self.assertTrue(got["roundTrip"])
+
+    def test_batch_can_tally(self):
+        # Truth shell r 900, L 3000, h0 0.  Batches of 200 L cans, one dip each.
+        got = _node(
+            "const p = {r: 900, L: 3000, h0: 0};\n"
+            "const s = new core.Session({D: 1800, Dpm: 100, Lest: 3000, pourUnit: 200});\n"
+            "const out = {};\n"
+            "let V = 400, t = 0;\n"
+            "s.start('400', core.levelFor(V, p)); s.dip(core.levelFor(V, p));\n"
+            "function batch(n, real, opts) {\n"
+            "  for (let i = 0; i < n; i++) { t += 180000; s.tap(t); }\n"
+            "  const L = s.closeBatch(opts); V += (real == null ? n : real) * 200;\n"
+            "  const H = core.levelFor(V, p); let v = s.dip(H);\n"
+            "  if (v.status === 'REDIP') v = s.dip(H);\n"
+            "  return {L, v};\n"
+            "}\n"
+            "for (let i = 0; i < 5; i++) batch(2);\n"
+            "out.quick0 = s.quickTap(t + 5000);\n"
+            "s.tap(t + 1000); out.quick = [s.quickTap(t + 6000), s.quickTap(t + 61000)];\n"
+            "s.tap(t + 2000); out.afterTaps = s.cans();\n"
+            "const saved = core.Session.fromJSON(JSON.parse(JSON.stringify(s.toJSON())));\n"
+            "out.restored = saved.cans();\n"
+            "s.undo(); out.afterUndo = s.cans(); out.levelsKept = s.levels.length;\n"
+            "s.untap(); out.empty = [s.cans(), s.batch];\n"
+            "try { s.closeBatch(); } catch (e) { out.noCan = e.message; }\n"
+            "const good = batch(3);\n"
+            "out.good = {text: good.L.step.text, status: good.v.status, cans: good.L.cans.tapped};\n"
+            "const bad = batch(3, 4);\n"
+            "out.bad = {status: bad.v.status, hint: bad.v.cans, msg: bad.v.message, advice: bad.v.advice};\n"
+            "s.editPour('800'); out.fixed = s.current().verdict.status;\n"
+            "for (let i = 0; i < 2; i++) { t += 180000; s.tap(t); }\n"
+            "const part = s.closeBatch({partial: true}); out.part = part.step.text;\n"
+            "s.undo(); out.reopened = s.cans();\n"
+            "s.untap(); out.one = s.closeBatch({partial: true}).step.text; s.undo(); s.untap();\n"
+            "out.csv = s.toRawCsv();\n"
+            "out.hints = [core.canHint(-198, -10, 1200, s.cfg), core.canHint(-90, -5, 1200, s.cfg),"
+            " core.canHint(205, 9, 200, s.cfg), core.canHint(395, 9, 1200, s.cfg)];\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertFalse(got["quick0"], "the first can of a batch is never a double tap")
+        self.assertEqual(got["quick"], [True, False], "a tap inside 20 s asks 'same can?'")
+        self.assertEqual(got["afterTaps"], 2)
+        self.assertEqual(got["restored"], 2, "an open tally survives a page reload")
+        self.assertEqual(got["afterUndo"], 1, "undo removes a can before it touches a level")
+        self.assertEqual(got["levelsKept"], 6)
+        self.assertEqual(got["empty"], [0, None])
+        self.assertIn("no can", got["noCan"])
+        self.assertEqual(got["good"], {"text": "600", "status": "ACCEPT", "cans": 3})
+        # Three taps, four cans poured: the miss is one whole can.
+        self.assertEqual(got["bad"]["status"], "ALARM")
+        self.assertEqual(got["bad"]["hint"]["extra"], 1)
+        self.assertLess(abs(got["bad"]["hint"]["zAfter"]), 2.0)
+        self.assertIn("1 can more than the count (4, not 3)", got["bad"]["msg"])
+        self.assertIn("edit the pour to 800 L", got["bad"]["advice"])
+        self.assertEqual(got["fixed"], "ACCEPT", "the recount clears the alarm")
+        self.assertEqual(got["part"], "200+?")
+        self.assertEqual(got["reopened"], 2, "undo of a closed batch opens it again")
+        self.assertEqual(got["one"], "?")
+        self.assertRegex(got["csv"], r"600,[0-9.]+,.*cans 3x200 L \d\d:\d\d-\d\d:\d\d")
+        h = got["hints"]
+        self.assertEqual(h[0]["extra"], 1)
+        self.assertIsNone(h[1], "half a can is not a count error")
+        self.assertIsNone(h[2], "a count cannot go to zero cans")
+        self.assertEqual(h[3]["extra"], -2)
 
     def test_power_on_synthetic_campaigns(self):
         got = _node(

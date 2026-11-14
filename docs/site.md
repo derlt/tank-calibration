@@ -65,9 +65,11 @@ tape gets 0.2–0.4 mm. Do not use the §9 interval σ (about 1–1.5 mm) here: 
 
 ## Each pour
 
-1. **Pour.** Enter the litres. Tick *whole pour unknown* for `?`, or *plus an
-   unknown extra* for `N+?`. Tick *reached the neck / overflowed* for the last
-   pour.
+1. **Pour.** With a pour unit set, tap *+1 can poured* each time a can is
+   empty, then press *Batch done* (see *A batch of cans* below). Without a
+   pour unit, or for a meter or an odd can, open *Enter litres instead*. Tick
+   *whole pour unknown* for `?`, or *plus an unknown extra* for `N+?`. Tick
+   *reached the neck / overflowed* for the last pour.
 2. **Wait.** The page shows the time since the pour. Let the level settle at
    least 5 minutes (§3.5).
 3. **Dip.** Enter the reading and press *Check*.
@@ -87,6 +89,52 @@ tape gets 0.2–0.4 mm. Do not use the §9 interval σ (about 1–1.5 mm) here: 
 *Accept anyway* keeps a level against the check. Its interval stays out of the
 running fit and the note says so. *Undo last entry* removes the last reading,
 or the last pour when it has no reading.
+
+## A batch of cans
+
+A level often needs more than one can: 1200 L with a 200 L can is six cans,
+then one dip. The can count is the weak point. One can too many or too few is
+a pour error of a full unit, and the level that could show it is gone after
+the next batch.
+
+- **Tap when each can is empty.** The page shows the count, the litres and the
+  time of each can. The count is saved after each tap, so a closed page or a
+  locked phone does not lose it.
+- **The advice is a target, not a limit.** The page shows the advised number
+  of cans for a rise of about 30 mm. It warns near the brim, and when the
+  batch is more than the gap that is left in the shell.
+- **A second tap in less than 20 s** asks if it is a new can.
+- **Undo last can** removes one tap. *Undo last entry* does the same while a
+  batch is open. After *Batch done*, *Undo last entry* opens the batch again
+  with its cans.
+- **Last can not fully poured** records the batch as `N+?`: the full cans are
+  known, and the shell estimates the part can.
+- **Batch done** closes the batch and starts the settle timer from the last
+  can. The raw file keeps the count and the times in the note, for example
+  `cans 6x200 L 14:02-14:19`.
+
+After the dip, a confirmed miss of a whole number of cans names the count
+error: *the miss is 0.99 can of 200 L: 1 can more than the count (7, not 6)
+explains it*. Count the empty cans before the next pour. If the count was
+wrong, press *Recount: edit pour*. The message appears only when the miss is
+within a quarter can of a whole number and the changed count brings z below 2
+(§3.10, §6.2).
+
+## Charts during the campaign
+
+The **Log & charts** tab shows four charts. Tap a button above the chart, or
+swipe the chart left or right, to change the chart.
+
+| Chart | What it shows | What to look for |
+|---|---|---|
+| Miss | Reading minus predicted level, at the time of the dip, with its ±2σ bar | Points outside the ±3 mm lines |
+| Slope | Pour ÷ rise for each interval, on the slope line of the running shell | A point off the smooth line: a wrong pour count or a wrong dip |
+| Drift | Running sum of the residuals, with the ±3σ√n band (§10 DRIFT) | A spike that returns = one misread dip. A step = one event. A ramp = stop and audit (§6.6) |
+| z alarm | z = residual ÷ σ for each interval, with the ±2 and ±3 lines | Points outside ±2 (CHECK) or ±3 (ALARM) |
+
+Slope, Drift and z alarm use the running shell as it is now. Thus they can
+differ from the z in the Levels table, which is the z at the time of the dip.
+An unknown pour and an overflow reading have no point on these charts.
 
 ## After the campaign
 

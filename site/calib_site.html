@@ -70,6 +70,19 @@
   .tabs button[aria-pressed=true] { background: var(--brand); color: #fff; }
   .hidden { display: none !important; }
   svg text { font: 11px system-ui, sans-serif; fill: var(--muted); }
+  .seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 0; border: 1px solid var(--brand); border-radius: 10px; overflow: hidden; margin-bottom: 0.6rem; }
+  .seg button { border: 0; border-radius: 0; background: #fff; color: var(--brand); min-height: 2.9rem; padding: 0.3rem 0.2rem; font-size: 0.95rem; }
+  .seg button + button { border-left: 1px solid var(--brand); }
+  .seg button[aria-pressed=true] { background: var(--brand); color: #fff; }
+  #chart { touch-action: pan-y; min-height: 260px; }
+  .tally-bar { height: 0.7rem; background: var(--info-bg); border-radius: 999px; overflow: hidden; margin: 0.5rem 0; }
+  .tally-bar i { display: block; height: 100%; background: var(--info); }
+  button.huge { width: 100%; min-height: 4.8rem; font-size: 1.3rem; margin-top: 0.3rem; }
+  .chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.5rem 0; }
+  .chips span { background: var(--ok-bg); color: var(--ok); border-radius: 6px; padding: 0 0.4rem; font: 600 0.78rem var(--mono); }
+  .chips span.todo { background: #eef1f4; color: #9aa7b3; }
+  .legend { display: flex; flex-wrap: wrap; gap: 0.2rem 0.9rem; font-size: 0.8rem; color: var(--muted); margin: 0.2rem 0 0.4rem; }
+  .legend i { display: inline-block; width: 0.65rem; height: 0.65rem; border-radius: 50%; margin-right: 0.3rem; vertical-align: -0.05rem; }
   textarea { width: 100%; min-height: 9rem; font-family: var(--mono); font-size: 0.8rem; border: 1px solid var(--line); border-radius: 8px; padding: 0.5rem; }
   .error { color: var(--bad); font-weight: 600; }
   .big-num { font-family: var(--mono); font-size: 1.5rem; font-weight: 650; }
@@ -85,7 +98,7 @@
 <main>
   <nav class="tabs" id="tabs">
     <button data-tab="live" aria-pressed="true">Live</button>
-    <button data-tab="log" aria-pressed="false">Log &amp; chart</button>
+    <button data-tab="log" aria-pressed="false">Log &amp; charts</button>
     <button data-tab="shell" aria-pressed="false">Shell</button>
     <button data-tab="files" aria-pressed="false">Files</button>
     <button data-tab="replay" aria-pressed="false">Replay</button>
@@ -134,15 +147,32 @@
 
     <div class="card" id="pour-card" style="margin-top:0.8rem">
       <h2>1 · Pour</h2>
-      <div class="row">
-        <label style="min-width:9rem">Pour, L<input id="p-vol" class="big" type="number" inputmode="decimal"></label>
-        <button class="secondary small" id="p-advice">Use advice</button>
-        <button class="secondary small" id="p-minus">− unit</button>
-        <button class="secondary small" id="p-plus">+ unit</button>
+      <div id="tally" class="hidden">
+        <div class="big-num" id="t-count"></div>
+        <div class="tally-bar"><i id="t-bar"></i></div>
+        <p class="muted" id="t-target" style="margin:0"></p>
+        <button class="huge" id="t-plus"></button>
+        <div class="chips" id="t-chips"></div>
+        <div class="row">
+          <button class="secondary small" id="t-undo">Undo last can</button>
+          <label class="check"><input type="checkbox" id="t-part"> last can not fully poured</label>
+        </div>
+        <p class="muted">Tap when each can is empty. The count is saved after each tap. One dip follows the batch.</p>
       </div>
+      <details id="p-manual">
+        <summary>Enter litres instead (meter, odd can, unknown pour)</summary>
+        <div class="row" style="margin-top:0.5rem">
+          <label style="min-width:9rem">Pour, L<input id="p-vol" class="big" type="number" inputmode="decimal"></label>
+          <button class="secondary small" id="p-advice">Use advice</button>
+          <button class="secondary small" id="p-minus">− unit</button>
+          <button class="secondary small" id="p-plus">+ unit</button>
+        </div>
+        <div class="row" style="margin-top:0.5rem">
+          <label class="check"><input type="checkbox" id="p-unknown"> whole pour unknown (?)</label>
+          <label class="check"><input type="checkbox" id="p-extra"> plus an unknown extra (N+?)</label>
+        </div>
+      </details>
       <div class="row" style="margin-top:0.5rem">
-        <label class="check"><input type="checkbox" id="p-unknown"> whole pour unknown (?)</label>
-        <label class="check"><input type="checkbox" id="p-extra"> plus an unknown extra (N+?)</label>
         <label class="check"><input type="checkbox" id="p-over"> liquid reached the neck / overflowed</label>
       </div>
       <label style="margin-top:0.5rem">Note (optional)<input id="p-note"></label>
@@ -172,9 +202,17 @@
 
   <!-- ===================================================== log -->
   <section id="log" class="card hidden">
-    <h2>Reading minus prediction</h2>
+    <nav class="seg" id="chart-pick" aria-label="Chart">
+      <button data-chart="miss" aria-pressed="true">Miss</button>
+      <button data-chart="slope" aria-pressed="false">Slope</button>
+      <button data-chart="drift" aria-pressed="false">Drift</button>
+      <button data-chart="z" aria-pressed="false">z alarm</button>
+    </nav>
+    <h2 id="chart-title"></h2>
     <div id="chart"></div>
-    <p class="muted">Each point is one level: the adopted reading minus the predicted level, with its ±2σ bar. Dashed lines: the ±3 mm action bar.</p>
+    <div class="legend" id="chart-legend"></div>
+    <p class="muted" id="chart-note"></p>
+    <p class="muted">Tap a button, or swipe the chart left or right, to change the chart.</p>
     <h2 style="margin-top:0.8rem">Levels</h2>
     <div class="table"><table id="log-table"></table></div>
   </section>
@@ -443,6 +481,7 @@
     zAlarm: 3.0, mmAlarm: 3.0,  // action bar of §6
     sharpMm: 3.0,               // prediction counts only if 2σ ≤ this
     repeatTol: null,            // default 2.5·√2·σread, at least 1 mm
+    tapGap: 20,                 // s: a faster second tap is asked "same can?"
     learnN: 3,                  // intervals before a confirmed miss is an anomaly
     scalePrior: 4,              // pseudo-count for the noise scale estimate
   };
@@ -492,6 +531,8 @@
     this.cfg = resolveConfig(config);
     this.levels = [];
     this.fit = null;
+    this.batch = null;          // open can tally: { unit, taps: [time, …] }
+    if (saved && saved.batch) this.batch = { unit: saved.batch.unit, taps: saved.batch.taps.slice() };
     if (saved) this.levels = saved.levels.map((l) => Object.assign({}, l, { dips: l.dips.slice(), times: (l.times || []).slice() }));
     this._refit();
   }
@@ -499,7 +540,7 @@
   Session.prototype.toJSON = function () {
     const c = {};
     for (const k of Object.keys(DEFAULTS)) c[k] = this.cfg[k];
-    return { version: 1, config: c, levels: this.levels };
+    return { version: 1, config: c, levels: this.levels, batch: this.batch };
   };
   Session.fromJSON = function (obj) { return new Session(obj.config, obj); };
 
@@ -582,6 +623,46 @@
     return L;
   };
 
+  // ---- batch: several cans, then one dip (§3.10).  One tap per can, so the
+  // count is a record made can by can, not a number remembered at the dip.
+  Session.prototype.cans = function () { return this.batch ? this.batch.taps.length : 0; };
+
+  /** True when a tap now would follow the last one too fast to be a new can. */
+  Session.prototype.quickTap = function (time) {
+    const n = this.cans();
+    return n > 0 && time != null && time - this.batch.taps[n - 1] < this.cfg.tapGap * 1000;
+  };
+
+  /** One can is empty. */
+  Session.prototype.tap = function (time) {
+    const cur = this.current(), unit = this.cfg.pourUnit;
+    if (!unit) throw new Error("set the pour unit (can size) to count cans");
+    if (!cur) throw new Error("start the session first");
+    if (cur.state === "pending") throw new Error("finish the dips at the current level first");
+    if (!this.batch) this.batch = { unit, taps: [] };
+    this.batch.taps.push(time == null ? null : time);
+    return { count: this.cans(), volume: this.cans() * unit };
+  };
+
+  Session.prototype.untap = function () {
+    if (!this.cans()) return 0;
+    this.batch.taps.pop();
+    if (!this.batch.taps.length) this.batch = null;
+    return this.cans();
+  };
+
+  /** Close the batch: the tally becomes the pour of a new level. */
+  Session.prototype.closeBatch = function (opts) {
+    const n = this.cans();
+    if (!n) throw new Error("no can is counted yet");
+    const o = opts || {}, b = this.batch, full = o.partial ? n - 1 : n;
+    const text = o.partial ? (full ? `${round(full * b.unit, 3)}+?` : "?") : String(round(n * b.unit, 3));
+    const L = this.pour(text, o);
+    L.cans = { tapped: n, unit: b.unit, partial: !!o.partial, taps: b.taps.slice() };
+    this.batch = null;
+    return L;
+  };
+
   /** Change the pour of the pending (or last) level after a recount. */
   Session.prototype.editPour = function (stepText) {
     const L = this.current();
@@ -623,6 +704,7 @@
   Session.prototype.undo = function () {
     const L = this.current();
     if (!L) return null;
+    if (this.cans()) { this.untap(); return L; }
     if (L.dips.length > 0) {
       L.dips.pop();
       if (L.times) L.times.pop();
@@ -630,6 +712,8 @@
       else this._evaluate(L);
     } else {
       this.levels.pop();
+      // A batch that was closed too early opens again with its cans.
+      if (L.cans) this.batch = { unit: L.cans.unit, taps: L.cans.taps.slice() };
     }
     this._refit();
     return this.current();
@@ -800,6 +884,18 @@
         + "A repeat pour of the same size into this band tells an object from a pour error. Pour the next can.",
       cause: res.resid < 0 ? "OBJECT?" : "LOSS?",
     });
+    // Pours live on the unit grid (§3.10, §6.2): a miss of a whole number of
+    // cans that a changed count explains is a count error before anything else.
+    const hint = canHint(res.resid, z, L.step.value, cfg);
+    if (hint) {
+      const k = Math.abs(hint.extra), was = L.step.value / cfg.pourUnit, now = was + hint.extra;
+      verdict.cans = hint;
+      verdict.message += ` The miss is ${fmt(Math.abs(hint.exact), 2)} can${k > 1 || Math.abs(hint.exact) > 1 ? "s" : ""} of ${fmt(cfg.pourUnit, 0)} L: `
+        + `${k} can${k > 1 ? "s" : ""} ${hint.extra > 0 ? "more" : "fewer"} than the count `
+        + `(${fmt(now, 0)}, not ${fmt(was, 0)}) explains it: z ${sgn(z, 1)} becomes ${sgn(hint.zAfter, 1)}.`;
+      verdict.advice = `Count the empty cans now, before the next pour. If there are ${fmt(now, 0)}, edit the pour to ${fmt(now * cfg.pourUnit, 0)} L. `
+        + verdict.advice;
+    }
     // Pair pattern with the previous interval: the previous level may be the misread one.
     const prev = this.levels[L.from];
     if (prev && prev.check && prev.check.resid != null && prev.check.resid * res.resid < 0) {
@@ -816,6 +912,21 @@
     }
     setState("anomaly"); L.verdict = verdict; this._refit(); this._advise(verdict, L); return verdict;
   };
+
+  /**
+   * Can-count hypothesis for a confirmed miss.  resid < 0 means more liquid
+   * went in than recorded (§2), so extra = −resid / unit cans.  A hint needs a
+   * whole number of cans (within a quarter can) that brings z below the check.
+   */
+  function canHint(resid, z, value, cfg) {
+    const unit = cfg.pourUnit;
+    if (!unit || !z) return null;
+    const exact = -resid / unit, extra = Math.round(exact);
+    if (!extra || Math.abs(exact - extra) > 0.25 || value + extra * unit <= 0) return null;
+    const zAfter = (resid + extra * unit) / (resid / z);
+    if (Math.abs(zAfter) >= cfg.zCheck) return null;
+    return { extra, exact, zAfter };
+  }
 
   /** Pour advisor and brim watch (§3.4, §10). */
   Session.prototype._advise = function (verdict, L) {
@@ -866,6 +977,33 @@
     };
   };
 
+  /**
+   * Chart series against the running shell as it is now (§6.6): one entry per
+   * decided interval with a known pour.  resid = s - pred (§2), z = resid / σ,
+   * drift D_k = Σ resid, with its 3σ√n limit (§10 DRIFT).  Pending levels stay
+   * blind; overflow readings and unknown pours carry no residual.
+   */
+  Session.prototype.series = function () {
+    const p = this.fit.p, cfg = this.cfg, top = brim(p), out = [];
+    let drift = 0, s2 = 0;
+    for (const L of this.levels) {
+      if (L.start || L.H == null || L.state === "pending" || L.overflow) continue;
+      if (L.step.kind !== "known" || L.from == null || L.from < 0) continue;
+      const H1 = this.levels[L.from].H, rise = L.H - H1;
+      if (!(rise > 0) || L.H > top) continue;
+      const s = L.step.value, pred = volume(L.H, p) - volume(H1, p), resid = s - pred;
+      const m = Math.max(slope(L.H, p), 1e-3);
+      const v = 2 * m * m * cfg.sigmaRead * cfg.sigmaRead + Math.pow(pourSigma(s, cfg), 2);
+      const sigma = this.scale * Math.sqrt(v);
+      drift += resid; s2 += v;
+      out.push({
+        row: L.row, H: L.H, H1, mid: 0.5 * (H1 + L.H), rise, s, pred, resid, m, mm: resid / m,
+        sigma, z: resid / sigma, drift, limit: 3 * Math.sqrt(s2), state: L.state, watch: !!L.watch,
+      });
+    }
+    return out;
+  };
+
   /** Raw file for calib init / calib fit (§3.9).  One row per level, adopted reading. */
   Session.prototype.toRawCsv = function () {
     const out = ["step_volume,measured_height,note"];
@@ -878,6 +1016,11 @@
       if (L.watch) bits.push("watch");
       if (L.suspect) bits.push("suspect dip (pair pattern)");
       if (L.overflow) bits.push("overflow");
+      if (L.cans) {
+        const ts = L.cans.taps.filter((x) => x != null);
+        bits.push(`cans ${L.cans.tapped}x${fmt(L.cans.unit, 0)} L` + (L.cans.partial ? " last can part" : "")
+          + (ts.length ? ` ${clock(ts[0])}-${clock(ts[ts.length - 1])}` : ""));
+      }
       if (L.note) bits.push(L.note);
       const note = bits.join("; ").replace(/[",\r\n]/g, " ");
       out.push(`${L.step.text},${round(L.H, 2)},${note}`);
@@ -940,12 +1083,13 @@
     return up || down;
   }
   function round(x, d) { const f = Math.pow(10, d); return Math.round(x * f) / f; }
+  function clock(t) { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; }
   function fmt(x, d) { return x == null || !isFinite(x) ? "—" : Number(x).toFixed(d); }
   function sgn(x, d) { return (x >= 0 ? "+" : "−") + fmt(Math.abs(x), d); }
 
   const api = {
     area, volume, slope, capacity, brim, levelFor, fitShell, predictLevel, parseStep,
-    resolveConfig, Session, DEFAULTS, adopt, NAMES, replayRows, readRawText,
+    resolveConfig, Session, DEFAULTS, adopt, canHint, NAMES, replayRows, readRawText,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.CalibSite = api;
@@ -1024,12 +1168,28 @@
   $("p-minus").addEventListener("click", () => { const u = unit() || 50; $("p-vol").value = Math.max(u, (num("p-vol") || u) - u); });
   $("p-unknown").addEventListener("change", () => { if ($("p-unknown").checked) $("p-extra").checked = false; });
   $("p-extra").addEventListener("change", () => { if ($("p-extra").checked) $("p-unknown").checked = false; });
+  $("t-plus").addEventListener("click", guard("p-err", () => {
+    const now = Date.now();
+    if (S.quickTap(now) && !confirm(`Less than ${S.cfg.tapGap} s since the last can. Is this a new can?`)) return;
+    S.tap(now); save();
+    if (navigator.vibrate) navigator.vibrate(40);
+  }));
+  $("t-undo").addEventListener("click", guard("p-err", () => { S.untap(); save(); }));
+  $("t-part").addEventListener("change", () => render());
   $("p-go").addEventListener("click", guard("p-err", () => {
+    if (S.cans()) {
+      const b = S.batch, L = S.closeBatch({ partial: $("t-part").checked, overflow: $("p-over").checked, note: $("p-note").value.trim() });
+      L.pourTime = b.taps[b.taps.length - 1] || Date.now();
+      $("p-note").value = ""; $("t-part").checked = false; $("p-over").checked = false;
+      save();
+      setTimeout(() => $("d-val").focus(), 50);
+      return;
+    }
     let text;
     if ($("p-unknown").checked) text = "?";
     else {
       const v = num("p-vol");
-      if (!(v > 0)) throw new Error("Enter the pour in litres, or tick 'whole pour unknown'.");
+      if (!(v > 0)) throw new Error(unit() ? "Tap one can at least, or enter the pour in litres." : "Enter the pour in litres, or tick 'whole pour unknown'.");
       text = $("p-extra").checked ? `${v}+?` : String(v);
     }
     const L = S.pour(text, { overflow: $("p-over").checked, note: $("p-note").value.trim() });
@@ -1068,7 +1228,7 @@
     S.override(why.trim()); save();
   }));
   $("a-undo").addEventListener("click", guard("d-err", () => {
-    if (!confirm("Remove the last entry (the last reading, or the last pour if it has no reading)?")) return;
+    if (!confirm(S.cans() ? "Remove the last can from the count?" : "Remove the last entry (the last reading, or the last pour if it has no reading)?")) return;
     if (S.levels.length === 1 && S.levels[0].dips.length <= 1) { S = null; localStorage.removeItem(KEY); return; }
     S.undo(); save();
   }));
@@ -1174,6 +1334,7 @@
     // pour and dip cards
     $("pour-card").classList.toggle("hidden", !!pend);
     $("dip-card").classList.toggle("hidden", !pend);
+    renderTally(adv);
     if (pend) {
       const n = pend.dips.length;
       $("dip-title").textContent = n === 0 ? "2 · Dip" : `2 · Dip again (reading ${n + 1})`;
@@ -1216,6 +1377,32 @@
     $("a-undo").disabled = !L;
   }
 
+  function renderTally(adv) {
+    const u = unit(), n = S.cans();
+    $("tally").classList.toggle("hidden", !u);
+    $("p-manual").classList.toggle("hidden", n > 0);
+    if (!u) { $("p-manual").open = true; $("p-go").textContent = "Poured"; return; }
+    const target = adv && adv.units ? adv.units : 0, part = $("t-part").checked && n > 0;
+    const vol = part ? `${f((n - 1) * u, 0)} L + part can` : `${f(n * u, 0)} L`;
+    $("t-count").textContent = `${n}${target ? " of " + target : ""} can${(target || n) === 1 ? "" : "s"} · ${vol}`;
+    $("t-bar").style.width = `${target ? Math.min(100, 100 * n / target) : 0}%`;
+    $("t-plus").textContent = `+1 can poured (${f(u, 0)} L)`;
+    let note = target ? `Advice: ${target} × ${f(u, 0)} L = ${f(target * u, 0)} L (≈ ${f(target * u / Math.max(adv.slope, 1e-3), 0)} mm rise).` : "";
+    let warn = false;
+    if (adv && n * u > adv.gap) { note = `${f(n * u, 0)} L is more than the shell gap (≈ ${f(adv.gap, 0)} L): expect an overflow.`; warn = true; }
+    else if (adv && adv.halve) { note = "Near the brim: small batches. " + note; warn = true; }
+    else if (target && n > target) note += ` ${n - target} more than the advice.`;
+    $("t-target").textContent = note;
+    $("t-target").className = warn ? "error" : "muted";
+    const hhmm = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+    let chips = "";
+    for (let i = 0; i < Math.max(n, target); i++) chips += i < n ? `<span>${i + 1} · ${S.batch.taps[i] ? hhmm(S.batch.taps[i]) : ""}</span>` : `<span class="todo">${i + 1}</span>`;
+    $("t-chips").innerHTML = chips;
+    $("t-undo").disabled = n === 0;
+    $("t-part").disabled = n === 0;
+    $("p-go").textContent = n ? `Batch done: ${n} can${n > 1 ? "s" : ""} → dip` : "Poured";
+  }
+
   function stateTag(L) {
     const s = L.state === "accepted" && L.watch ? "watch" : L.state;
     return `<span class="tag t-${s}">${esc(s)}</span>`;
@@ -1227,36 +1414,151 @@
     for (const L of S.levels) {
       const blind = L.state === "pending" && L.dips.length > 0;
       const c = !blind && L.check ? L.check : {};
-      h += `<tr><td>${L.row}</td><td>${esc(L.step.text)}</td><td>${blind ? "• • •" : L.dips.map((d) => f(d)).join(" / ")}</td>`
+      h += `<tr><td>${L.row}</td><td>${esc(L.step.text)}${L.cans ? ` · ${L.cans.tapped}×${f(L.cans.unit, 0)}` : ""}</td><td>${blind ? "• • •" : L.dips.map((d) => f(d)).join(" / ")}</td>`
         + `<td>${blind || L.H == null ? "—" : f(L.H)}</td><td>${f(c.predicted)}</td><td>${c.sd ? f(2 * c.sd) : "—"}</td>`
         + `<td>${c.e == null ? "—" : sg(c.e)}</td><td>${c.resid == null ? "—" : sg(c.resid)}</td><td>${c.z == null ? "—" : sg(c.z)}</td>`
         + `<td class=l>${stateTag(L)}${L.suspect ? ' <span class="tag t-pending">suspect</span>' : ""}</td><td class=l>${esc(L.note || "")}</td></tr>`;
     }
     $("log-table").innerHTML = h;
-    $("chart").innerHTML = chart();
+    renderChart();
   }
 
-  function chart() {
-    const pts = S.levels.filter((L) => L.check && L.state !== "pending" && L.H != null);
-    const W = 700, H = 240, l = 40, r = 10, t = 10, b = 28;
-    const p = S.fit.p, top = Math.max(C.brim(p), ...S.levels.filter((L) => L.H != null).map((L) => L.H));
-    const ylim = Math.max(6, ...pts.map((L) => Math.min(Math.abs(L.check.e) + 1, 15)));
+  // ------------------------------------------------------------ charts
+  const COL = { accepted: "#1d7a3e", learning: "#1f5d99", anomaly: "#b3261e", override: "#9a5b00" };
+  const INK = "#5b6b7a", MODEL = "#1a6fa8", BAD = "#b3261e", WARN = "#ff9f1c";
+  const CHARTS = {
+    miss: {
+      title: "Reading minus prediction", draw: chartMiss,
+      note: "Each point is one level: the adopted reading minus the predicted level at the time of the dip, with its ±2σ bar. Dashed lines: the ±3 mm action bar.",
+    },
+    slope: {
+      title: "Slope profile", draw: chartSlope,
+      note: "Line: the slope dV/dH of the running shell. Points: pour ÷ rise for each interval, at the middle of the interval. A point that jumps off the smooth line is not possible for this tank: a wrong pour count or a wrong dip.",
+    },
+    drift: {
+      title: "Drift", draw: chartDrift,
+      note: "The running sum of the residuals (pour minus predicted pour), against the running shell as it is now. Band: the ±3σ√n limit. Flat wobble = noise. One spike that returns = one misread dip. A step = one event: up is a loss or an over-recorded pour, down is an object or an under-recorded pour. A ramp = a persistent effect: stop and audit.",
+    },
+    z: {
+      title: "z-score alarm", draw: chartZ,
+      note: "z = residual ÷ σ for each interval, against the running shell as it is now. Dashed lines ±2: CHECK. Dotted lines ±3: ALARM. The Levels table keeps the z from the time of the dip, so early levels can differ.",
+    },
+  };
+  const ORDER = Object.keys(CHARTS);
+  let which = "miss";
+
+  function pickChart(k) {
+    if (!CHARTS[k] || k === which) return;
+    which = k; renderChart();
+  }
+  $("chart-pick").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-chart]");
+    if (b) pickChart(b.dataset.chart);
+  });
+  (function swipe() {
+    let x0 = null, y0 = 0;
+    const el = $("chart");
+    el.addEventListener("touchstart", (ev) => { const t = ev.changedTouches[0]; x0 = t.clientX; y0 = t.clientY; }, { passive: true });
+    el.addEventListener("touchend", (ev) => {
+      if (x0 == null) return;
+      const t = ev.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0;
+      x0 = null;
+      if (Math.abs(dx) < 50 || Math.abs(dx) < 1.5 * Math.abs(dy)) return;
+      const n = ORDER.length, i = ORDER.indexOf(which);
+      pickChart(ORDER[(i + (dx < 0 ? 1 : n - 1)) % n]);
+    }, { passive: true });
+  })();
+  window.addEventListener("resize", () => { if (S && tab === "log") renderChart(); });
+
+  function renderChart() {
+    for (const b of $("chart-pick").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.chart === which));
+    const c = CHARTS[which];
+    $("chart-title").textContent = c.title;
+    $("chart-note").textContent = c.note;
+    $("chart").innerHTML = c.draw();
+    $("chart-legend").innerHTML = Object.keys(COL).map((k) => `<span><i style="background:${COL[k]}"></i>${k}</span>`).join("")
+      + `<span><i style="background:#fff;border:2px solid ${COL.accepted}"></i>watch</span>`;
+  }
+
+  function ticks(lo, hi, n) {
+    const raw = (hi - lo) / Math.max(n, 1), mag = Math.pow(10, Math.floor(Math.log10(raw))), q = raw / mag;
+    const step = (q <= 1 ? 1 : q <= 2 ? 2 : q <= 5 ? 5 : 10) * mag, out = [];
+    for (let v = Math.ceil(lo / step - 1e-9) * step; v <= hi + 1e-9 * step; v += step) out.push(Math.abs(v) < step * 1e-9 ? 0 : v);
+    return out;
+  }
+  const tick = (v) => String(Math.round(v * 1000) / 1000).replace("-", "−");
+
+  /* One frame for every chart: drawn at the real width of the card, so the
+     text stays readable on a phone.  Level in mm on x. */
+  function frame(label, ylo, yhi, unit) {
+    const W = Math.max(280, Math.min(720, Math.round($("chart").clientWidth || 700)));
+    const H = 260, l = 44, r = 10, t = 16, b = 28;
+    const top = Math.max(C.brim(S.fit.p), ...S.levels.filter((L) => L.H != null).map((L) => L.H));
     const X = (h) => l + (W - l - r) * Math.min(Math.max(h / top, 0), 1);
-    const Y = (e) => t + (H - t - b) * (1 - (Math.min(Math.max(e, -ylim), ylim) + ylim) / (2 * ylim));
-    const col = { accepted: "#1d7a3e", learning: "#1f5d99", anomaly: "#b3261e", override: "#9a5b00" };
-    let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="reading minus prediction by level">`;
-    for (const e of [-3, 3]) s += `<line x1="${l}" x2="${W - r}" y1="${Y(e)}" y2="${Y(e)}" stroke="#b3261e" stroke-dasharray="4 4" opacity="0.6"/>`;
-    s += `<line x1="${l}" x2="${W - r}" y1="${Y(0)}" y2="${Y(0)}" stroke="#5b6b7a"/>`;
-    for (let e = -Math.floor(ylim); e <= ylim; e += Math.max(1, Math.round(ylim / 4))) s += `<text x="${l - 6}" y="${Y(e) + 4}" text-anchor="end">${e}</text>`;
-    const step = top > 2000 ? 500 : 250;
-    for (let h = 0; h <= top; h += step) s += `<text x="${X(h)}" y="${H - 8}" text-anchor="middle">${h}</text>`;
-    s += `<text x="${l}" y="${t + 8}">mm</text>`;
-    for (const L of pts) {
-      const c = L.check, x = X(L.H), k = col[L.state] || "#5b6b7a";
-      s += `<line x1="${x}" x2="${x}" y1="${Y(-2 * c.sd)}" y2="${Y(2 * c.sd)}" stroke="${k}" opacity="0.35" stroke-width="3"/>`;
-      s += `<circle cx="${x}" cy="${Y(c.e)}" r="${L.watch ? 5 : 4}" fill="${L.watch ? "#fff" : k}" stroke="${k}" stroke-width="2"><title>row ${L.row}: ${f(L.H)} mm, e ${sg(c.e)} mm, z ${sg(c.z)}, ${L.state}</title></circle>`;
+    const Y = (v) => t + (H - t - b) * (1 - (Math.min(Math.max(v, ylo), yhi) - ylo) / (yhi - ylo));
+    let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="${esc(label)}">`;
+    for (const v of ticks(ylo, yhi, 5)) {
+      s += `<line x1="${l}" x2="${W - r}" y1="${Y(v)}" y2="${Y(v)}" stroke="#d5dde5" stroke-width="${v === 0 ? 0 : 1}"/>`;
+      s += `<text x="${l - 6}" y="${Y(v) + 4}" text-anchor="end">${tick(v)}</text>`;
     }
-    return s + "</svg>";
+    for (const h of ticks(0, top, W < 420 ? 4 : 6)) s += `<text x="${X(h)}" y="${H - 8}" text-anchor="middle">${tick(h)}</text>`;
+    s += `<text x="${l + 2}" y="${t - 4}">${esc(unit)}</text><text x="${W - r}" y="${t - 4}" text-anchor="end">level, mm</text>`;
+    const hline = (v, stroke, dash, op) => `<line x1="${l}" x2="${W - r}" y1="${Y(v)}" y2="${Y(v)}" stroke="${stroke}"${dash ? ` stroke-dasharray="${dash}"` : ""} opacity="${op || 1}"/>`;
+    return { s, X, Y, top, hline, empty: `<text x="${(W + l - r) / 2}" y="${H / 2}" text-anchor="middle">No checked interval yet</text>` };
+  }
+  function dot(x, y, d, text) {
+    const k = COL[d.state] || INK;
+    return `<circle cx="${x}" cy="${y}" r="${d.watch ? 5 : 4}" fill="${d.watch ? "#fff" : k}" stroke="${k}" stroke-width="2"><title>${esc(text)}</title></circle>`;
+  }
+  function path(pts) { return pts.map((q, i) => `${i ? "L" : "M"}${q[0].toFixed(1)} ${q[1].toFixed(1)}`).join(""); }
+
+  function chartMiss() {
+    const pts = S.levels.filter((L) => L.check && L.state !== "pending" && L.H != null);
+    const ylim = Math.max(6, ...pts.map((L) => Math.min(Math.abs(L.check.e) + 1, 15)));
+    const F = frame("reading minus prediction by level", -ylim, ylim, "mm");
+    let s = F.s + F.hline(-3, BAD, "4 4", 0.6) + F.hline(3, BAD, "4 4", 0.6) + F.hline(0, INK);
+    for (const L of pts) {
+      const c = L.check, x = F.X(L.H);
+      s += `<line x1="${x}" x2="${x}" y1="${F.Y(-2 * c.sd)}" y2="${F.Y(2 * c.sd)}" stroke="${COL[L.state] || INK}" opacity="0.35" stroke-width="3"/>`;
+      s += dot(x, F.Y(c.e), L, `row ${L.row}: ${f(L.H)} mm, e ${sg(c.e)} mm, z ${sg(c.z)}, ${L.state}`);
+    }
+    return s + (pts.length ? "" : F.empty) + "</svg>";
+  }
+
+  function chartSlope() {
+    const D = S.series(), p = S.fit.p, mMax = C.slope(p.h0 + p.r, p);
+    const F = frame("slope profile: pour over rise against the shell slope", 0, 1.3 * mMax, "L per mm");
+    const line = [];
+    for (let i = 0; i <= 120; i++) { const h = F.top * i / 120; line.push([F.X(h), F.Y(C.slope(h, p))]); }
+    let s = F.s + `<path d="${path(line)}" fill="none" stroke="${MODEL}" stroke-width="2.2"/>`;
+    for (const d of D) s += dot(F.X(d.mid), F.Y(d.s / d.rise), d, `row ${d.row}: ${f(d.s, 0)} L over ${f(d.rise)} mm = ${f(d.s / d.rise, 2)} L/mm, shell ${f(d.pred / d.rise, 2)} L/mm`);
+    return s + (D.length ? "" : F.empty) + "</svg>";
+  }
+
+  function chartDrift() {
+    const D = S.series();
+    const ylim = Math.max(10, ...D.map((d) => 1.15 * Math.max(Math.abs(d.drift), d.limit)));
+    const F = frame("drift: running sum of the residuals by level", -ylim, ylim, "L");
+    let s = F.s;
+    if (D.length) {
+      const up = D.map((d) => [F.X(d.H), F.Y(d.limit)]), dn = D.map((d) => [F.X(d.H), F.Y(-d.limit)]).reverse();
+      s += `<path d="${path(up.concat(dn))}Z" fill="${MODEL}" opacity="0.12"/>`;
+      s += `<path d="${path(D.map((d) => [F.X(d.H), F.Y(d.drift)]))}" fill="none" stroke="${INK}" stroke-width="1.2"/>`;
+    }
+    s += F.hline(0, INK);
+    for (const d of D) s += dot(F.X(d.H), F.Y(d.drift), d, `row ${d.row}: ${f(d.H)} mm, drift ${sg(d.drift)} L (limit ±${f(d.limit)} L), resid ${sg(d.resid)} L`);
+    return s + (D.length ? "" : F.empty) + "</svg>";
+  }
+
+  function chartZ() {
+    const D = S.series();
+    const ylim = Math.max(4, ...D.map((d) => Math.min(Math.abs(d.z) + 1, 12)));
+    const F = frame("z score by level with the check and alarm lines", -ylim, ylim, "z");
+    let s = F.s + F.hline(0, INK);
+    for (const v of [-2, 2]) s += F.hline(v, WARN, "6 4");
+    for (const v of [-3, 3]) s += F.hline(v, BAD, "2 3");
+    for (const d of D) s += dot(F.X(d.H), F.Y(d.z), d, `row ${d.row}: ${f(d.H)} mm, z ${sg(d.z)}, resid ${sg(d.resid)} L = ${sg(d.mm)} mm-equiv`);
+    return s + (D.length ? "" : F.empty) + "</svg>";
   }
 
   function renderShell(st) {

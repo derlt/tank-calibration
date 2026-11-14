@@ -196,6 +196,7 @@
     zAlarm: 3.0, mmAlarm: 3.0,  // action bar of §6
     sharpMm: 3.0,               // prediction counts only if 2σ ≤ this
     repeatTol: null,            // default 2.5·√2·σread, at least 1 mm
+    tapGap: 20,                 // s: a faster second tap is asked "same can?"
     learnN: 3,                  // intervals before a confirmed miss is an anomaly
     scalePrior: 4,              // pseudo-count for the noise scale estimate
   };
@@ -245,6 +246,8 @@
     this.cfg = resolveConfig(config);
     this.levels = [];
     this.fit = null;
+    this.batch = null;          // open can tally: { unit, taps: [time, …] }
+    if (saved && saved.batch) this.batch = { unit: saved.batch.unit, taps: saved.batch.taps.slice() };
     if (saved) this.levels = saved.levels.map((l) => Object.assign({}, l, { dips: l.dips.slice(), times: (l.times || []).slice() }));
     this._refit();
   }
@@ -252,7 +255,7 @@
   Session.prototype.toJSON = function () {
     const c = {};
     for (const k of Object.keys(DEFAULTS)) c[k] = this.cfg[k];
-    return { version: 1, config: c, levels: this.levels };
+    return { version: 1, config: c, levels: this.levels, batch: this.batch };
   };
   Session.fromJSON = function (obj) { return new Session(obj.config, obj); };
 
@@ -335,6 +338,46 @@
     return L;
   };
 
+  // ---- batch: several cans, then one dip (§3.10).  One tap per can, so the
+  // count is a record made can by can, not a number remembered at the dip.
+  Session.prototype.cans = function () { return this.batch ? this.batch.taps.length : 0; };
+
+  /** True when a tap now would follow the last one too fast to be a new can. */
+  Session.prototype.quickTap = function (time) {
+    const n = this.cans();
+    return n > 0 && time != null && time - this.batch.taps[n - 1] < this.cfg.tapGap * 1000;
+  };
+
+  /** One can is empty. */
+  Session.prototype.tap = function (time) {
+    const cur = this.current(), unit = this.cfg.pourUnit;
+    if (!unit) throw new Error("set the pour unit (can size) to count cans");
+    if (!cur) throw new Error("start the session first");
+    if (cur.state === "pending") throw new Error("finish the dips at the current level first");
+    if (!this.batch) this.batch = { unit, taps: [] };
+    this.batch.taps.push(time == null ? null : time);
+    return { count: this.cans(), volume: this.cans() * unit };
+  };
+
+  Session.prototype.untap = function () {
+    if (!this.cans()) return 0;
+    this.batch.taps.pop();
+    if (!this.batch.taps.length) this.batch = null;
+    return this.cans();
+  };
+
+  /** Close the batch: the tally becomes the pour of a new level. */
+  Session.prototype.closeBatch = function (opts) {
+    const n = this.cans();
+    if (!n) throw new Error("no can is counted yet");
+    const o = opts || {}, b = this.batch, full = o.partial ? n - 1 : n;
+    const text = o.partial ? (full ? `${round(full * b.unit, 3)}+?` : "?") : String(round(n * b.unit, 3));
+    const L = this.pour(text, o);
+    L.cans = { tapped: n, unit: b.unit, partial: !!o.partial, taps: b.taps.slice() };
+    this.batch = null;
+    return L;
+  };
+
   /** Change the pour of the pending (or last) level after a recount. */
   Session.prototype.editPour = function (stepText) {
     const L = this.current();
@@ -376,6 +419,7 @@
   Session.prototype.undo = function () {
     const L = this.current();
     if (!L) return null;
+    if (this.cans()) { this.untap(); return L; }
     if (L.dips.length > 0) {
       L.dips.pop();
       if (L.times) L.times.pop();
@@ -383,6 +427,8 @@
       else this._evaluate(L);
     } else {
       this.levels.pop();
+      // A batch that was closed too early opens again with its cans.
+      if (L.cans) this.batch = { unit: L.cans.unit, taps: L.cans.taps.slice() };
     }
     this._refit();
     return this.current();
@@ -553,6 +599,18 @@
         + "A repeat pour of the same size into this band tells an object from a pour error. Pour the next can.",
       cause: res.resid < 0 ? "OBJECT?" : "LOSS?",
     });
+    // Pours live on the unit grid (§3.10, §6.2): a miss of a whole number of
+    // cans that a changed count explains is a count error before anything else.
+    const hint = canHint(res.resid, z, L.step.value, cfg);
+    if (hint) {
+      const k = Math.abs(hint.extra), was = L.step.value / cfg.pourUnit, now = was + hint.extra;
+      verdict.cans = hint;
+      verdict.message += ` The miss is ${fmt(Math.abs(hint.exact), 2)} can${k > 1 || Math.abs(hint.exact) > 1 ? "s" : ""} of ${fmt(cfg.pourUnit, 0)} L: `
+        + `${k} can${k > 1 ? "s" : ""} ${hint.extra > 0 ? "more" : "fewer"} than the count `
+        + `(${fmt(now, 0)}, not ${fmt(was, 0)}) explains it: z ${sgn(z, 1)} becomes ${sgn(hint.zAfter, 1)}.`;
+      verdict.advice = `Count the empty cans now, before the next pour. If there are ${fmt(now, 0)}, edit the pour to ${fmt(now * cfg.pourUnit, 0)} L. `
+        + verdict.advice;
+    }
     // Pair pattern with the previous interval: the previous level may be the misread one.
     const prev = this.levels[L.from];
     if (prev && prev.check && prev.check.resid != null && prev.check.resid * res.resid < 0) {
@@ -569,6 +627,21 @@
     }
     setState("anomaly"); L.verdict = verdict; this._refit(); this._advise(verdict, L); return verdict;
   };
+
+  /**
+   * Can-count hypothesis for a confirmed miss.  resid < 0 means more liquid
+   * went in than recorded (§2), so extra = −resid / unit cans.  A hint needs a
+   * whole number of cans (within a quarter can) that brings z below the check.
+   */
+  function canHint(resid, z, value, cfg) {
+    const unit = cfg.pourUnit;
+    if (!unit || !z) return null;
+    const exact = -resid / unit, extra = Math.round(exact);
+    if (!extra || Math.abs(exact - extra) > 0.25 || value + extra * unit <= 0) return null;
+    const zAfter = (resid + extra * unit) / (resid / z);
+    if (Math.abs(zAfter) >= cfg.zCheck) return null;
+    return { extra, exact, zAfter };
+  }
 
   /** Pour advisor and brim watch (§3.4, §10). */
   Session.prototype._advise = function (verdict, L) {
@@ -619,6 +692,33 @@
     };
   };
 
+  /**
+   * Chart series against the running shell as it is now (§6.6): one entry per
+   * decided interval with a known pour.  resid = s - pred (§2), z = resid / σ,
+   * drift D_k = Σ resid, with its 3σ√n limit (§10 DRIFT).  Pending levels stay
+   * blind; overflow readings and unknown pours carry no residual.
+   */
+  Session.prototype.series = function () {
+    const p = this.fit.p, cfg = this.cfg, top = brim(p), out = [];
+    let drift = 0, s2 = 0;
+    for (const L of this.levels) {
+      if (L.start || L.H == null || L.state === "pending" || L.overflow) continue;
+      if (L.step.kind !== "known" || L.from == null || L.from < 0) continue;
+      const H1 = this.levels[L.from].H, rise = L.H - H1;
+      if (!(rise > 0) || L.H > top) continue;
+      const s = L.step.value, pred = volume(L.H, p) - volume(H1, p), resid = s - pred;
+      const m = Math.max(slope(L.H, p), 1e-3);
+      const v = 2 * m * m * cfg.sigmaRead * cfg.sigmaRead + Math.pow(pourSigma(s, cfg), 2);
+      const sigma = this.scale * Math.sqrt(v);
+      drift += resid; s2 += v;
+      out.push({
+        row: L.row, H: L.H, H1, mid: 0.5 * (H1 + L.H), rise, s, pred, resid, m, mm: resid / m,
+        sigma, z: resid / sigma, drift, limit: 3 * Math.sqrt(s2), state: L.state, watch: !!L.watch,
+      });
+    }
+    return out;
+  };
+
   /** Raw file for calib init / calib fit (§3.9).  One row per level, adopted reading. */
   Session.prototype.toRawCsv = function () {
     const out = ["step_volume,measured_height,note"];
@@ -631,6 +731,11 @@
       if (L.watch) bits.push("watch");
       if (L.suspect) bits.push("suspect dip (pair pattern)");
       if (L.overflow) bits.push("overflow");
+      if (L.cans) {
+        const ts = L.cans.taps.filter((x) => x != null);
+        bits.push(`cans ${L.cans.tapped}x${fmt(L.cans.unit, 0)} L` + (L.cans.partial ? " last can part" : "")
+          + (ts.length ? ` ${clock(ts[0])}-${clock(ts[ts.length - 1])}` : ""));
+      }
       if (L.note) bits.push(L.note);
       const note = bits.join("; ").replace(/[",\r\n]/g, " ");
       out.push(`${L.step.text},${round(L.H, 2)},${note}`);
@@ -693,12 +798,13 @@
     return up || down;
   }
   function round(x, d) { const f = Math.pow(10, d); return Math.round(x * f) / f; }
+  function clock(t) { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; }
   function fmt(x, d) { return x == null || !isFinite(x) ? "—" : Number(x).toFixed(d); }
   function sgn(x, d) { return (x >= 0 ? "+" : "−") + fmt(Math.abs(x), d); }
 
   const api = {
     area, volume, slope, capacity, brim, levelFor, fitShell, predictLevel, parseStep,
-    resolveConfig, Session, DEFAULTS, adopt, NAMES, replayRows, readRawText,
+    resolveConfig, Session, DEFAULTS, adopt, canHint, NAMES, replayRows, readRawText,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.CalibSite = api;
