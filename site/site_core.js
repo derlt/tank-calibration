@@ -486,20 +486,30 @@
     return this._fitIntervals().length < this.cfg.learnN;
   };
 
+  /**
+   * Prediction for a pour s from level H1 with the running shell (§10a.2).
+   * nAnchor is the number of readings at H1; nNew is the number of readings
+   * the new level will get.  The check uses it, and so does the page's
+   * preview of the pour now in the pour panel.
+   */
+  Session.prototype.preview = function (H1, s, nAnchor, nNew) {
+    const fit = this.fit, p = fit.p;
+    const pr = predictLevel(H1, s, fit);
+    const m1 = Math.max(slope(H1, p), 1e-3), m2 = Math.max(slope(pr.H, p), 1e-3);
+    const sr = this.cfg.sigmaRead;
+    const noise2 = sr * sr * (m1 / m2) * (m1 / m2) / Math.max(nAnchor || 1, 1)
+      + sr * sr / Math.max(nNew || 1, 1)
+      + Math.pow(pourSigma(s, this.cfg) / m2, 2);
+    const sdNoise = Math.sqrt(noise2);
+    const sd = this.scale * Math.sqrt(noise2 + pr.sdModel * pr.sdModel);
+    return { H: pr.H, sd, sdNoise, sdModel: pr.sdModel, scale: this.scale, overflow: pr.overflow, m: m2, anchor: H1 };
+  };
+
   /** Prediction for level L (index i) from its anchor, or null. */
   Session.prototype._predict = function (L, nNew) {
     if (L.start || L.step.kind !== "known" || L.from == null || L.from < 0) return null;
     const A = this.levels[L.from];
-    const fit = this.fit;
-    const pr = predictLevel(A.H, L.step.value, fit);
-    const p = fit.p;
-    const m1 = Math.max(slope(A.H, p), 1e-3), m2 = Math.max(slope(pr.H, p), 1e-3);
-    const sr = this.cfg.sigmaRead;
-    const noise2 = sr * sr * (m1 / m2) * (m1 / m2) / Math.max(A.n, 1) + sr * sr / nNew
-      + Math.pow(pourSigma(L.step.value, this.cfg) / m2, 2);
-    const sdNoise = Math.sqrt(noise2);
-    const sd = this.scale * Math.sqrt(noise2 + pr.sdModel * pr.sdModel);
-    return { H: pr.H, sd, sdNoise, sdModel: pr.sdModel, scale: this.scale, overflow: pr.overflow, m: m2, anchor: A.H };
+    return this.preview(A.H, L.step.value, A.n, nNew);
   };
 
   /** Interval residual in the §2 convention with the running fit. */

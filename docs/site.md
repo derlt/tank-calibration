@@ -91,6 +91,21 @@ tape gets 0.2–0.4 mm. Do not use the §9 interval σ (about 1–1.5 mm) here: 
 running fit and the note says so. *Undo last entry* removes the last reading,
 or the last pour when it has no reading.
 
+**The Now card previews the pour.** As you tap cans or enter litres, the Now
+card shows the level that pour must give, for example
+`After this pour (400 L): 486.0 mm ± 8.7 mm (2σ) · +86.0 mm rise · ≈ 1663 L
+· too wide to judge: expect two readings`. Use it to choose the pour size: a
+large pour has a wide band, and a band wider than 3 mm (2σ) means the check
+will ask for a second reading. A part can, an unknown pour and an overflow
+have no prediction. The line is empty while a level waits for its dip. The
+litres field clears after a pour, so a repeated manual pour needs the value
+again, or *Use advice*.
+
+The line shows the expected level **before** the dip, so it weakens the blind
+repeat (§10a.6). The page hides the check's own prediction while a level is
+pending, but it cannot hide a number already read. If the dip must stay blind,
+do not read the line before you dip.
+
 ## A batch of cans
 
 A level often needs more than one can: 1200 L with a 200 L can is six cans,

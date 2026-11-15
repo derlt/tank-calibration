@@ -42,6 +42,12 @@ All notable changes to this project are documented here. The format follows
   Drift with its ±3σ√n band, and z-score alarm (§6.6). A row of buttons or a
   swipe changes the chart. `Session.series()` in `site_core.js` supplies the
   data.
+- The Now card previews the level that the pour now in the pour panel must
+  give, with its ±2σ band, the rise, the litres and whether one reading will
+  do (`Session.preview`). The line follows the can tally and the litres field,
+  and it hides while a level waits for its dip. It shows the expected level
+  before the dip, which weakens the blind repeat (§10a.6): the page hides the
+  check's prediction, not a number already read.
 - The page is also published as a Cloudflare Worker with static assets
   (`wrangler.jsonc`, `make deploy`). The addresses are kept in `.env`.
 
