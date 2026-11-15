@@ -30,6 +30,7 @@ Every section and rule of [CALIBRATION_METHODOLOGY.md](CALIBRATION_METHODOLOGY.m
 | 3.9 Unknown cells | `data.parse_step` (`?`, `N+?`, `x1`) |
 | 3.10 Pour unit grid | `pour_unit`; `quantized.quantized_pour_search` |
 | 3.11 Reverse strapping (drain) | `direction` in the config; `Interval.direction`, `travel`, `h_lo`/`h_hi`, `predicted`; every module takes the sign; `fit.end_heel`; `scaffold.infer_neck_drain` / `infer_neck_entrance`; `fit_constrained(gap_pour=None)` for the neck-entrance equality; site `direction: "drain"`. Mirror test: `tests/test_drain.py` |
+| 3.12 Transfer strapping (two tanks) | site `TransferSession` (`site_core.js`): one can tally shared by a drain session and a fill session, one level per tank per batch, paired residuals that decompose a shared pour error from a transfer loss from a one-tank cause. Tests: `tests/test_site.py::TestSiteTransfer` |
 
 ## §4 Geometry
 
@@ -119,6 +120,7 @@ adopted shell, so the tool cannot drift from the fit.
 | 10a.10 Performance | `site/simulate.js`; `tests/test_site.py` |
 | Offline page | `site/page.html` + core → `calib site-page` → `site/calib_site.html` |
 | Settings tab | `site/page.html`; `Session.setCampaign` refits the running shell after a change of the tank record, the priors or the noise |
+| Transfer, two tanks (§3.12) | `TransferSession` in `site_core.js` + the page's transfer mode: shared tally, per-tank dips and verdicts, the pair view after both dips, per-tank raw files, an A/B switch for the single-tank views |
 
 ## §11 Deliverables
 

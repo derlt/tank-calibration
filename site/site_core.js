@@ -18,6 +18,11 @@
  * −1 (drain):
  *   travel = dir·(H − H_anchor) > 0,   pred = dir·(F(H) − F(H_anchor)),
  *   resid  = s − pred  (the §2 sign, the same in both directions).
+ *
+ * A TRANSFER campaign (§3.12) calibrates two tanks with one water: it wraps
+ * one drain session (tank A, pump out) and one fill session (tank B, pour in)
+ * around a shared can tally, and compares the two residuals of each batch.
+ * See TransferSession below.
  */
 (function (root) {
   "use strict";
@@ -299,6 +304,9 @@
    */
   const GOOD = new Set(["accepted", "learning", "anomaly", "unknown", "override", "start", "neck"]);
   const FIT = new Set(["accepted", "learning"]);
+  // Levels whose residual the pair view may compare (§3.12): decided by the
+  // prediction test, for it or against it.
+  const PAIR = new Set(["accepted", "anomaly"]);
 
   function Session(config, saved) {
     this.cfg = resolveConfig(config);
@@ -395,6 +403,10 @@
     const zs = [];
     const noise = noiseOf(this.cfg);
     for (const L of this.levels) {
+      // The level under test never sets the scale that judges it: its own
+      // first-dip miss would inflate the scale for its second reading, and
+      // a confirmed miss would shrink below the action bar.
+      if (L.state === "pending") continue;
       if (L.check && L.check.scored && L.check.zRaw != null && L.dips.length
         && (!L.check.noise || sameNoise(L.check.noise, noise))) zs.push(Math.abs(L.check.zRaw));
     }
@@ -747,7 +759,7 @@
       predicted: pr.H, sd: pr.sd, sdModel: pr.sdModel, sdNoise: pr.sdNoise, scale: pr.scale,
       e, resid: res.resid, mm: res.mm, z, sharp, learning,
     });
-    L.check = { predicted: pr.H, sd: pr.sd, e, z, zRaw, resid: res.resid, mm: res.mm, sharp, scored: sharp && !learning, noise: noiseOf(cfg) };
+    L.check = { predicted: pr.H, sd: pr.sd, e, z, zRaw, resid: res.resid, mm: res.mm, sharp, learning, scored: sharp && !learning, noise: noiseOf(cfg) };
     const miss = Math.abs(z) >= cfg.zCheck || Math.abs(res.mm) >= cfg.mmCheck;
     const off = `Reading ${fmt(a.H, 1)} mm, predicted ${fmt(pr.H, 1)} ± ${fmt(2 * pr.sd, 1)} mm (2σ): `
       + `${fmt(Math.abs(e), 1)} mm ${e >= 0 ? "above" : "below"}. resid ${sgn(res.resid, 1)} L = ${sgn(res.mm, 1)} mm-equiv, z ${sgn(z, 1)}.`;
@@ -1060,9 +1072,11 @@
       else if (cur.step.kind === "partial") V = volume(this.levels[cur.from].H, p) + dir * cur.step.base;
       const spent = cur.pourTime && o.now ? (o.now - cur.pourTime) / 1000 : 0;
       t = Math.max(0, settle - spent) + dipS;
-    } else if (this.batch) {
-      V += dir * this.batchVolume();
-      open = this.cans();
+    } else if (this.batch || o.open) {
+      // A transfer keeps the open tally on the drain session; the fill
+      // session sees the same litres through o.open.
+      V += dir * (this.batch ? this.batchVolume() : o.open.volume);
+      open = this.batch ? this.cans() : o.open.cans;
     }
     t -= Math.min(Math.max(o.pourElapsed || 0, 0), pourS);
     const start = { volume: V, seconds: t };
@@ -1250,6 +1264,384 @@
     return out.join("\n") + "\n";
   };
 
+  // ---------------------------------------------------------------- transfer (§3.12)
+  /*
+   * A transfer campaign calibrates two tanks with one water: a pump draws
+   * known volumes out of tank A (a drain, §3.11) into calibrated cans, and
+   * the same cans are emptied into tank B (a fill).  One batch of cans is
+   * one step for both tanks; each tank keeps its own levels, dips, running
+   * shell and raw file.  The wrapper owns the shared can tally (it lives on
+   * the drain session) and the paired-residual view of the current batch:
+   *
+   *   resid_A ≈ resid_B      one shared cause: the cans (a miscount, a can
+   *                          not filled to its mark), not a tank;
+   *   resid_B − resid_A > 0  litres lost on the way (a spill at the carry),
+   *                          or a cause on the A side alone (a leak);
+   *   resid_B − resid_A < 0  liquid returned to A, or a cause on the B side
+   *                          alone (an object in B shows only in B).
+   *
+   * The pour noise is common to both residuals and cancels in the
+   * difference: only the two dip noises remain, so the difference is a
+   * sharper test than either residual alone.  The single-tank views (log,
+   * charts, shell, settings) read the active tank; the page switches it.
+   */
+  function TransferSession(configOut, configIn, saved) {
+    this.isTransfer = true;
+    this.out = new Session(Object.assign({}, configOut || {}, { direction: "drain" }), saved && saved.out);
+    this.in = new Session(Object.assign({}, configIn || {}, { direction: "fill" }), saved && saved.in);
+    this.active = saved && saved.active === "in" ? "in" : "out";
+    this.lastDip = saved && saved.lastDip === "in" ? "in" : "out";
+    this.pair = null;
+    this._pair();
+  }
+
+  TransferSession.fromJSON = function (obj) { return new TransferSession(obj.out.config, obj.in.config, obj); };
+  TransferSession.prototype.toJSON = function () {
+    return {
+      version: 1, kind: "transfer", active: this.active, lastDip: this.lastDip,
+      out: this.out.toJSON(), in: this.in.toJSON(),
+    };
+  };
+
+  TransferSession.prototype.tank = function (k) { return this[k === "in" ? "in" : "out"]; };
+  /** The tank whose level is still being dipped: A first, then B. */
+  TransferSession.prototype.pendingTank = function () {
+    for (const k of ["out", "in"]) {
+      const cur = this[k].current();
+      if (cur && cur.state === "pending") return k;
+    }
+    return null;
+  };
+  TransferSession.prototype.pendingLevel = function () {
+    const k = this.pendingTank();
+    return k ? this[k].current() : null;
+  };
+  TransferSession.prototype._guard = function () {
+    const k = this.pendingTank();
+    if (k) throw new Error(`finish the dips at tank ${this[k].cfg.tank} first`);
+  };
+
+  /** Start both tanks: row 1 of two raw files, dipped before the first batch. */
+  TransferSession.prototype.start = function (stepOut, dipOut, stepIn, dipIn, note, time, opts) {
+    if (this.out.levels.length || this.in.levels.length) throw new Error("the session has already started");
+    this.out.start(stepOut, dipOut, note, time, opts);
+    this.in.start(stepIn, dipIn, note, time);
+    this.lastDip = "in";   // B's reading is the later one: undo takes it back first
+    this._pair();
+    return this.out.current();
+  };
+
+  /** One reading at the tank whose level is open. */
+  TransferSession.prototype.dip = function (value, time) {
+    const k = this.pendingTank();
+    if (!k) throw new Error("both tanks are decided: pour the next batch");
+    this.lastDip = k;
+    const v = this[k].dip(value, time);
+    this._pair();
+    return v;
+  };
+
+  /** A new batch opens one level on both tanks with the same step. */
+  TransferSession.prototype.pour = function (stepText, opts) {
+    this._guard();
+    const o = opts || {};
+    const Lo = this.out.pour(stepText, { neck: !!o.neck, note: o.note });
+    const Li = this.in.pour(stepText, { overflow: !!o.overflow, note: o.note });
+    this._pair();
+    return Lo;
+  };
+
+  // The shared can tally lives on the drain session (the pump fills the cans).
+  TransferSession.prototype.cans = function () { return this.out.cans(); };
+  TransferSession.prototype.canList = function () { return this.out.canList(); };
+  TransferSession.prototype.batchVolume = function () { return this.out.batchVolume(); };
+  TransferSession.prototype.canUnits = function () { return this.out.canUnits(); };
+  TransferSession.prototype.quickTap = function (time) { return this.out.quickTap(time); };
+  TransferSession.prototype.tap = function (time, unit) { this._guard(); return this.out.tap(time, unit); };
+  TransferSession.prototype.untap = function () { return this.out.untap(); };
+
+  /** Close the batch: the tally becomes the step of a level on both tanks. */
+  TransferSession.prototype.closeBatch = function (opts) {
+    this._guard();
+    const o = opts || {};
+    const Lo = this.out.closeBatch({ partial: o.partial, neck: o.neck, note: o.note });
+    const Li = this.in.pour(Lo.step.text, { overflow: !!o.overflow, note: o.note });
+    Li.cans = {
+      tapped: Lo.cans.tapped, unit: Lo.cans.unit, partial: Lo.cans.partial,
+      taps: Lo.cans.taps.slice(), units: Lo.cans.units.slice(),
+    };
+    this._pair();
+    return Lo;
+  };
+
+  /**
+   * Undo one entry: a can of the open batch, else the last reading (the
+   * tank dipped last first), else the last batch, removed from both tanks.
+   */
+  TransferSession.prototype.undo = function () {
+    if (this.cans()) { this.out.untap(); return this.current(); }
+    const order = this.lastDip === "in" ? ["in", "out"] : ["out", "in"];
+    for (const k of order) {
+      const s = this[k], L = s.current();
+      if (L && L.dips.length) {
+        L.dips.pop();
+        if (L.times && L.times.length) L.times.pop();
+        if (!L.dips.length) { L.state = "pending"; L.verdict = null; L.H = null; L.n = 0; }
+        else s._evaluate(L);
+        s._refit();
+        this._pair();
+        return this.current();
+      }
+    }
+    // No reading anywhere: remove the last batch from both tanks.
+    if (this.out.levels.length > 1 && this.in.levels.length > 1) {
+      const Lo = this.out.levels.pop(), Li = this.in.levels.pop();
+      if (Lo.cans) {
+        this.out.batch = {
+          unit: Lo.cans.unit || Lo.cans.units[0],
+          cans: Lo.cans.taps.map((t, i) => ({ t, u: Lo.cans.units[i] })),
+        };
+      }
+      this.out._refit();
+      this.in._refit();
+      this._pair();
+    }
+    return this.current();
+  };
+
+  /** Accept the pending level against the check (operator decision). */
+  TransferSession.prototype.override = function (why) {
+    const k = this.pendingTank() || this.active;
+    const v = this[k].override(why);
+    this._pair();   // an override is not a prediction test: the pair leaves with it
+    return v;
+  };
+
+  /** One recount edits the batch on both tanks: the step is one number. */
+  TransferSession.prototype.editPour = function (stepText) {
+    const Lo = this.out.current(), Li = this.in.current();
+    if (!Lo || Lo.start || !Li || Li.start) throw new Error("no pour to edit");
+    const step = parseStep(stepText);
+    for (const side of [[this.out, Lo], [this.in, Li]]) {
+      side[1].step = step;
+      addTag(side[1], "pour edited on site");
+      side[0]._evaluate(side[1]);
+    }
+    this._pair();
+    return Lo.verdict;
+  };
+
+  TransferSession.prototype.editNote = function (row, text) { return this[this.active].editNote(row, text); };
+
+  /**
+   * Campaign settings.  The tank record belongs to the active tank; the
+   * noise and the pour unit are one set for both (§9.1).  The direction is
+   * fixed at the start.
+   */
+  TransferSession.prototype.setCampaign = function (o) {
+    const has = (k) => Object.prototype.hasOwnProperty.call(o || {}, k);
+    if (has("direction")) throw new Error("the direction (fill or drain) is fixed at the start of the campaign");
+    const pick = (keys) => { const x = {}; for (const k of keys) if (has(k)) x[k] = o[k]; return x; };
+    const shared = pick(["pourUnit", "sigmaRead", "pourRel", "pourAbs", "h0pm", "brimPm"]);
+    const geo = pick(["tank", "D", "Dpm", "Lest", "Lpm"]);
+    if (!Object.keys(shared).length && !Object.keys(geo).length) return this.cfg;
+    // A bad field must change nothing on either tank: one Session.setCampaign
+    // checks before it changes, but two saves in a row do not.  Keep each cfg
+    // and put it back if a save fails partway.
+    const back = {};
+    for (const k of ["out", "in"]) back[k] = Object.assign({}, this[k].cfg);
+    try {
+      if (Object.keys(geo).length) this[this.active].setCampaign(geo);
+      if (Object.keys(shared).length) for (const k of ["out", "in"]) this[k].setCampaign(shared);
+    } catch (e) {
+      for (const k of ["out", "in"]) {
+        Object.assign(this[k].cfg, back[k]);
+        this[k].cfg.prior = makePrior(this[k].cfg);
+        this[k]._refit();
+      }
+      throw e;
+    }
+    return this.cfg;
+  };
+
+  /** Timers and alarms are operator settings, shared by both tanks. */
+  TransferSession.prototype.setTimers = function (o) {
+    this.out.setTimers(o);
+    this.in.setTimers(o);
+    return this.out.cfg;
+  };
+
+  /** The active tank supplies the single-tank views. */
+  Object.defineProperties(TransferSession.prototype, {
+    cfg: { get: function () { return this[this.active].cfg; } },
+    levels: { get: function () { return this[this.active].levels; } },
+    fit: { get: function () { return this[this.active].fit; } },
+    scale: { get: function () { return this[this.active].scale; } },
+  });
+  for (const name of ["current", "lastGood", "advice", "preview", "status", "series",
+    "learning", "fillPlan", "measuredPourSeconds", "fillSecondsFor", "cycleSecondsFor",
+    "toRawCsv"]) {
+    TransferSession.prototype[name] = function (name) {
+      return function () { const s = this[this.active]; return s[name].apply(s, arguments); };
+    }(name);
+  }
+
+  /**
+   * The advice for the shared batch: the tighter of the two 30 mm targets
+   * (§3.4), with the bottom watch of the drain tank and the brim watch of
+   * the fill tank (§10 BOTTOM-WARN, BRIM-WARN).
+   */
+  TransferSession.prototype.adviceBatch = function () {
+    const giO = this.out.lastGood(), giI = this.in.lastGood();
+    if (giO < 0 || giI < 0) return null;
+    const aO = this.out.advice(this.out.levels[giO].H);
+    const aI = this.in.advice(this.in.levels[giI].H);
+    const unit = this.out.cfg.pourUnit;
+    let target = Math.min(aO.target, aI.target), units = null;
+    if (unit) { units = Math.max(1, Math.round(target / unit)); target = units * unit; }
+    return {
+      target, units, out: aO, in: aI, halve: aI.halve, bottom: aO.bottom,
+      text: (aI.halve ? `Tank B near the brim (≈ ${fmt(aI.toBrim, 0)} mm): small batches. ` : "")
+        + (aO.bottom ? `Tank A near the bottom (≈ ${fmt(aO.toBottom, 0)} mm): the pump may lose suction; a part can is fine. ` : "")
+        + `Next batch ≈ ${fmt(target, 0)} L` + (units ? ` = ${units} × ${fmt(unit, 0)} L` : "")
+        + ` (≈ ${fmt(target / Math.max(aO.slope, 1e-3), 0)} mm out of A, ≈ ${fmt(target / Math.max(aI.slope, 1e-3), 0)} mm into B).`,
+    };
+  };
+
+  /** One transfer tag per level; a recompute replaces it. */
+  function setTransferTag(L, text) {
+    if (!L.tags) L.tags = [];
+    L.tags = L.tags.filter((t) => !/^transfer:/.test(t));
+    if (text) L.tags.push(text);
+  }
+
+  /**
+   * The paired-residual view of the current batch (§3.12).  Both tanks saw
+   * the same cans, so their interval residuals share the pour error and
+   * cancel it in the difference.  Only prediction-tested levels carry it: a
+   * learning, unknown, override, neck or overflow level has no comparable
+   * residual (its stored check is stale), and while a level is pending
+   * there is no pair.
+   */
+  TransferSession.prototype._pair = function () {
+    const Lo = this.out.current(), Li = this.in.current();
+    if (Lo) { Lo.transfer = null; setTransferTag(Lo, null); }
+    if (Li) { Li.transfer = null; setTransferTag(Li, null); }
+    this.pair = null;
+    if (this.pendingTank() || !Lo || !Li || Lo.start || Li.start) return this.pair;
+    if (!PAIR.has(Lo.state) || !PAIR.has(Li.state)) return this.pair;
+    const co = Lo.check, ci = Li.check;
+    if (!co || !ci || co.learning || ci.learning) return this.pair;
+
+    const cfg = this.out.cfg;
+    const barO = Math.abs(co.z) >= cfg.zAlarm && Math.abs(co.mm) >= cfg.mmAlarm;
+    const barI = Math.abs(ci.z) >= cfg.zAlarm && Math.abs(ci.mm) >= cfg.mmAlarm;
+    const watchO = Math.abs(co.z) >= cfg.zCheck || Math.abs(co.mm) >= 1.5;
+    const watchI = Math.abs(ci.z) >= cfg.zCheck || Math.abs(ci.mm) >= 1.5;
+    if (!barO && !barI && !watchO && !watchI) return this.pair;
+
+    // The noise of the difference.  The pour noise is common to both
+    // residuals and cancels; the dip noise and each shell's own error add.
+    // A wide check (an early or weakly identified shell) widens the test
+    // honestly: a blunt side can confirm nothing.
+    const mO = Math.max(slope(Lo.H, this.out.fit.p), 1e-3);
+    const mI = Math.max(slope(Li.H, this.in.fit.p), 1e-3);
+    const pour2 = Math.pow(pourSigma(Lo.step.value, cfg), 2);
+    const sd = Math.sqrt(Math.max(
+      Math.pow(co.sd * mO, 2) + Math.pow(ci.sd * mI, 2) - 2 * pour2, 1e-9));
+    const ro = co.resid, ri = ci.resid;
+    const diff = ri - ro, z = diff / sd;
+    const off = `Tank A resid ${sgn(ro, 1)} L, tank B ${sgn(ri, 1)} L; difference ${sgn(diff, 1)} L = ${sgn(z, 1)} σ of the two checks.`;
+    const wideO = co.sharp ? "" : ` Tank A's band is wide here (2σ = ${fmt(2 * co.sd * mO, 0)} L); it can confirm nothing.`;
+    const wideI = ci.sharp ? "" : ` Tank B's band is wide here (2σ = ${fmt(2 * ci.sd * mI, 0)} L); it can confirm nothing.`;
+    const MIXED = {
+      status: "MIXED", color: "bad", title: "the tanks disagree",
+      message: `Both tanks are at the action bar with different litres. ${off} Superposed causes (§6.6).`,
+      advice: "Decompose before correcting either tank: recount the cans, and re-dip any level that is still there.",
+      tag: "transfer: tanks disagree",
+    };
+    const DIFF_WATCH = {
+      status: "WATCH", color: "info", title: "the tanks differ (watch)",
+      message: `Tank A ${sgn(ro, 1)} L, tank B ${sgn(ri, 1)} L; neither check clears its own action bar, but the tanks differ by ${sgn(diff, 1)} L = ${sgn(z, 1)} σ. ${off} A wide band can hide a large miss in mm; watch item (§6.5).`,
+      advice: "Pour the next batch. Recount the cans if a miscount could explain it.",
+      tag: null,
+    };
+    let p = null;
+    if (Math.abs(z) < 2) {
+      if (barO || barI) {
+        if (watchO && watchI) {
+          p = {
+            status: "POUR", color: "bad", title: "the same litres",
+            message: `Both tanks missed by the same litres. ${off} One shared cause: the can count or the can fill (§3.10), not a tank.`,
+            advice: "Count the cans of this batch again. If the count was wrong, Recount edits both tanks at once. If it stands, both intervals go to the register: a can not filled to its mark does this.",
+            tag: "transfer: shared pour error",
+          };
+        } else {
+          // One tank at the bar, the other clean but too wide to confirm.
+          const barIsI = barI;
+          const clean = barIsI ? "A" : "B", flagged = barIsI ? "B" : "A";
+          const resid = barIsI ? ri : ro;
+          const cause = barIsI
+            ? (resid > 0 ? "a loss on the way (a spill at the carry)" : "an object in B in this band")
+            : (resid < 0 ? "a leak or a spill at A (§3.11)" : "liquid returned to A (the hose drained back)");
+          p = {
+            status: "UNSURE", color: "warn", title: `only tank ${flagged} shows it`,
+            message: `Tank ${flagged} missed ${fmt(Math.abs(resid), 1)} L and tank ${clean} shows nothing (${sgn(barIsI ? ro : ri, 1)} L), but its band is wide: a shared can error and ${cause} both fit. ${off}`,
+            advice: `Recount the cans of this batch first: one edit fixes both tanks. If the count stands, the litres belong to tank ${flagged}: its interval goes to the register.`,
+            tag: `transfer: ${flagged}-side only`,
+          };
+        }
+      } else {
+        p = {
+          status: "WATCH", color: "info", title: "the same litres (watch)",
+          message: `Both tanks show the same litres, below the action bar. ${off} A shared cause would show in both; a watch item (§6.5).`,
+          advice: "Pour the next batch.",
+          tag: null,
+        };
+      }
+    } else if (z >= 2) {
+      if (barI && !barO) {
+        p = {
+          status: "LOSS", color: "bad", title: "litres lost on the way",
+          message: `Tank A is clean, but tank B missed ${fmt(diff, 1)} L: liquid left A and did not reach B — a spill at the carry, or a can not emptied. ${off}${wideO}`,
+          advice: "Check the carry path and the cans. B's interval goes to the register as LOSS? (§6.2); A's stays in its fit.",
+          tag: "transfer: loss on the way",
+        };
+      } else if (barO && !barI) {
+        p = {
+          status: "ALEAK", color: "bad", title: "only tank A shows it",
+          message: `Tank A missed ${fmt(diff, 1)} L that tank B does not show: liquid left A off the record — the hose, the pump seal, or a spill at the can (§3.11). ${off}${wideI}`,
+          advice: "Check the hose state and the pump. A's interval goes to the register (LEAK?); B's stays in its fit.",
+          tag: "transfer: A-side only",
+        };
+      } else if (barO && barI) p = MIXED;
+      else p = DIFF_WATCH;
+    } else {
+      if (barO && !barI) {
+        p = {
+          status: "ARETURN", color: "bad", title: "only tank A shows it",
+          message: `Tank A's fall came ${fmt(-diff, 1)} L too small and tank B is clean: liquid returned to A (the hose drained back) or less left A than the count says (§3.11). ${off}${wideI}`,
+          advice: "Check the hose state. A's interval goes to the register (RETURN?); B's stays in its fit.",
+          tag: "transfer: A-side only",
+        };
+      } else if (barI && !barO) {
+        p = {
+          status: "BOBJECT", color: "bad", title: "only tank B shows it",
+          message: `Tank B's rise came ${fmt(-diff, 1)} L too cheap and tank A is clean: an object in B in this band, or liquid diverted before B. ${off}${wideO}`,
+          advice: "A's interval is good. B's goes to the register (OBJECT?): inspect B in this band, or repeat a pour into it (§6.2).",
+          tag: "transfer: B-side only",
+        };
+      } else if (barO && barI) p = MIXED;
+      else p = DIFF_WATCH;
+    }
+    p.ro = ro; p.ri = ri; p.diff = diff; p.z = z;
+    this.pair = p;
+    Lo.transfer = p;
+    Li.transfer = p;
+    if (p.tag) { setTransferTag(Lo, p.tag); setTransferTag(Li, p.tag); }
+    return this.pair;
+  };
+
   // ---------------------------------------------------------------- replay
   /**
    * Feed raw rows [{step, H}] through the check, as if each were dipped now.
@@ -1332,8 +1724,8 @@
 
   const api = {
     area, volume, slope, capacity, brim, levelFor, fitShell, predictLevel, parseStep,
-    resolveConfig, Session, DEFAULTS, adopt, canHint, NAMES, replayRows, readRawText,
-    detectDirection, makePrior,
+    resolveConfig, Session, TransferSession, DEFAULTS, adopt, canHint, NAMES, replayRows,
+    readRawText, detectDirection, makePrior,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.CalibSite = api;

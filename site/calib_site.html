@@ -118,12 +118,19 @@
   textarea { width: 100%; min-height: 9rem; font-family: var(--mono); font-size: 0.8rem; border: 1px solid var(--line); border-radius: 8px; padding: 0.5rem; }
   .error { color: var(--bad); font-weight: 600; }
   .big-num { font-family: var(--mono); font-size: 1.5rem; font-weight: 650; }
+  .kv dt.hd { grid-column: 1 / -1; color: var(--ink); font-weight: 700; padding-top: 0.35rem; }
+  header .seg { margin: 0; }
+  header .seg button { min-height: 2.2rem; padding: 0.2rem 0.8rem; font-size: 0.85rem; }
   details summary { cursor: pointer; color: var(--muted); }
 </style>
 </head>
 <body>
 <header>
   <h1 id="hdr-title">calib site — live dip check</h1>
+  <nav class="seg hidden" id="hdr-tank" aria-label="Tank">
+    <button id="hdr-tank-a" data-tank="out" aria-pressed="true">tank A</button>
+    <button id="hdr-tank-b" data-tank="in" aria-pressed="false">tank B</button>
+  </nav>
   <span class="pill" id="hdr-phase">no session</span>
   <span class="pill" id="hdr-count"></span>
 </header>
@@ -144,10 +151,11 @@
     <nav class="seg" id="s-dir" aria-label="Campaign direction">
       <button id="s-dir-fill" data-dir="fill" aria-pressed="true">Fill: pour in</button>
       <button id="s-dir-drain" data-dir="drain" aria-pressed="false">Drain: pump out</button>
+      <button id="s-dir-transfer" data-dir="transfer" aria-pressed="false">Two tanks: pump A → pour B</button>
     </nav>
     <p class="muted" id="s-dir-note" style="margin-top:0"></p>
     <div class="grid">
-      <label>Tank name<input id="s-tank" value="tank"></label>
+      <label><span id="s-tank-label">Tank name</span><input id="s-tank" value="tank"></label>
       <label>Diameter estimate D, mm<input id="s-D" type="number" inputmode="decimal" placeholder="2480"></label>
       <label>D is good to ±, mm<input id="s-Dpm" type="number" inputmode="decimal" value="200"></label>
       <label>Length estimate L, mm<input id="s-L" type="number" inputmode="decimal" placeholder="5280"></label>
@@ -166,9 +174,22 @@
     </div>
     <div class="grid">
       <label><span id="s-step-label">Liquid before the first dip, L (? = unknown heel)</span><input id="s-step" value="?"></label>
-      <label>First reading, mm<input id="s-dip" class="big" type="number" inputmode="decimal" step="0.5"></label>
+      <label><span id="s-dip-label">First reading, mm</span><input id="s-dip" class="big" type="number" inputmode="decimal" step="0.5"></label>
     </div>
     <p class="muted" id="s-first-note">Sound the bottom first and record the heel as this row (§3.3). The first level always needs two readings: no prediction can test it.</p>
+    <div id="s-b-wrap" class="hidden">
+      <h2 style="margin-top:0.9rem">Tank B — pour in</h2>
+      <div class="grid">
+        <label>Tank B name<input id="sB-tank" value="tank-b"></label>
+        <label>Diameter estimate D, mm<input id="sB-D" type="number" inputmode="decimal" placeholder="2480"></label>
+        <label>D is good to ±, mm<input id="sB-Dpm" type="number" inputmode="decimal" value="200"></label>
+        <label>Length estimate L, mm<input id="sB-L" type="number" inputmode="decimal" placeholder="5280"></label>
+        <label>L is good to ±, mm (blank = 3 %)<input id="sB-Lpm" type="number" inputmode="decimal"></label>
+        <label>Liquid in tank B before the first batch, L (? = unknown heel)<input id="sB-step" value="?"></label>
+        <label>Tank B first reading, mm<input id="sB-dip" class="big" type="number" inputmode="decimal" step="0.5"></label>
+      </div>
+      <p class="muted">Sound the bottom of tank B and record the heel as this row (§3.3). Two readings, as always for a first level.</p>
+    </div>
     <div class="row" style="margin-top:0.6rem"><button id="s-go">Start campaign</button></div>
     <p id="s-err" class="error"></p>
   </section>
@@ -246,6 +267,9 @@
       <div class="row" style="margin-top:0.5rem">
         <label class="check"><input type="checkbox" id="p-over"> <span id="p-over-text">liquid reached the neck / overflowed</span></label>
       </div>
+      <div class="row hidden" id="p-neck-wrap" style="margin-top:0.5rem">
+        <label class="check"><input type="checkbox" id="p-neck"> <span id="p-neck-text">tank A: level still in the neck</span></label>
+      </div>
       <label style="margin-top:0.5rem">Note (optional)<input id="p-note"></label>
       <div class="row" style="margin-top:0.6rem"><button id="p-go">Poured</button></div>
       <p id="p-err" class="error"></p>
@@ -300,7 +324,7 @@
   <!-- ===================================================== settings -->
   <section id="settings" class="hidden">
     <div class="card" id="set-campaign">
-      <h2>This campaign</h2>
+      <h2 id="set-campaign-title">This campaign</h2>
       <div class="grid">
         <label>Tank name<input id="set-tank"></label>
         <label>Diameter estimate D, mm<input id="set-D" type="number" inputmode="decimal"></label>
@@ -361,6 +385,7 @@
     <h2>Export</h2>
     <div class="row">
       <button id="f-csv">Download raw CSV</button>
+      <button class="secondary hidden" id="f-csv-b">Download tank B raw CSV</button>
       <button class="secondary" id="f-json">Download session JSON</button>
       <button class="secondary" id="f-show">Show CSV</button>
     </div>
@@ -417,6 +442,7 @@
     <p><b>What it catches.</b> In a simulation of 100 campaigns per slip size, a reading off by 3 mm was caught 92 % of the time, and 4 mm or more every time. An honest reading triggered a second dip 3–6 % of the time.</p>
     <p><b>Drain campaign (reverse strapping).</b> The tank starts full. A pump draws the water out into calibrated cans; each batch is one step, and the level falls. Start at the neck entrance: pump the neck down until the level just reaches the shell crown and dip. That reading is the brim, and the running shell knows the top from the first level. Keep the hose in the same state at every dip. Fill each can to its mark. When the pump loses suction, tick <i>pump lost suction: last can part</i>.</p>
     <p><b>Signs in a drain.</b> resid &lt; 0: the fall came too large (an object exposed, a leak, a spill at the can, or more left than the count). resid &gt; 0: the fall came too small (RETURN?: the hose drained back, wall film, or less left than the count).</p>
+    <p><b>Two tanks at once (transfer).</b> A pump draws water out of a full tank A into calibrated cans, and the same cans are emptied into tank B. One batch is one step for both tanks: A is a drain, B is a fill. Each tank keeps its own check, its own running shell and its own raw file; switch tanks in the header. Dip A, then dip B, after each batch. When both dips are in, the page compares the two residuals of the same batch: the same litres in both tanks means the cans (a count or fill error) — one recount fixes both files; litres that only B misses means a spill on the way; a miss that only one tank shows means that tank or its hose. The pour noise is shared, so the comparison is as sharp as the dips alone.</p>
     <p class="muted">Method: CALIBRATION_METHODOLOGY.md §10a. Residual convention §2: resid = pour − predicted pour. resid &lt; 0: the rise came too cheap (object, or more liquid than recorded). resid &gt; 0: the rise came too small (loss, or less liquid than recorded).</p>
   </section>
 </main>
@@ -442,6 +468,11 @@
  * −1 (drain):
  *   travel = dir·(H − H_anchor) > 0,   pred = dir·(F(H) − F(H_anchor)),
  *   resid  = s − pred  (the §2 sign, the same in both directions).
+ *
+ * A TRANSFER campaign (§3.12) calibrates two tanks with one water: it wraps
+ * one drain session (tank A, pump out) and one fill session (tank B, pour in)
+ * around a shared can tally, and compares the two residuals of each batch.
+ * See TransferSession below.
  */
 (function (root) {
   "use strict";
@@ -723,6 +754,9 @@
    */
   const GOOD = new Set(["accepted", "learning", "anomaly", "unknown", "override", "start", "neck"]);
   const FIT = new Set(["accepted", "learning"]);
+  // Levels whose residual the pair view may compare (§3.12): decided by the
+  // prediction test, for it or against it.
+  const PAIR = new Set(["accepted", "anomaly"]);
 
   function Session(config, saved) {
     this.cfg = resolveConfig(config);
@@ -819,6 +853,10 @@
     const zs = [];
     const noise = noiseOf(this.cfg);
     for (const L of this.levels) {
+      // The level under test never sets the scale that judges it: its own
+      // first-dip miss would inflate the scale for its second reading, and
+      // a confirmed miss would shrink below the action bar.
+      if (L.state === "pending") continue;
       if (L.check && L.check.scored && L.check.zRaw != null && L.dips.length
         && (!L.check.noise || sameNoise(L.check.noise, noise))) zs.push(Math.abs(L.check.zRaw));
     }
@@ -1171,7 +1209,7 @@
       predicted: pr.H, sd: pr.sd, sdModel: pr.sdModel, sdNoise: pr.sdNoise, scale: pr.scale,
       e, resid: res.resid, mm: res.mm, z, sharp, learning,
     });
-    L.check = { predicted: pr.H, sd: pr.sd, e, z, zRaw, resid: res.resid, mm: res.mm, sharp, scored: sharp && !learning, noise: noiseOf(cfg) };
+    L.check = { predicted: pr.H, sd: pr.sd, e, z, zRaw, resid: res.resid, mm: res.mm, sharp, learning, scored: sharp && !learning, noise: noiseOf(cfg) };
     const miss = Math.abs(z) >= cfg.zCheck || Math.abs(res.mm) >= cfg.mmCheck;
     const off = `Reading ${fmt(a.H, 1)} mm, predicted ${fmt(pr.H, 1)} ± ${fmt(2 * pr.sd, 1)} mm (2σ): `
       + `${fmt(Math.abs(e), 1)} mm ${e >= 0 ? "above" : "below"}. resid ${sgn(res.resid, 1)} L = ${sgn(res.mm, 1)} mm-equiv, z ${sgn(z, 1)}.`;
@@ -1484,9 +1522,11 @@
       else if (cur.step.kind === "partial") V = volume(this.levels[cur.from].H, p) + dir * cur.step.base;
       const spent = cur.pourTime && o.now ? (o.now - cur.pourTime) / 1000 : 0;
       t = Math.max(0, settle - spent) + dipS;
-    } else if (this.batch) {
-      V += dir * this.batchVolume();
-      open = this.cans();
+    } else if (this.batch || o.open) {
+      // A transfer keeps the open tally on the drain session; the fill
+      // session sees the same litres through o.open.
+      V += dir * (this.batch ? this.batchVolume() : o.open.volume);
+      open = this.batch ? this.cans() : o.open.cans;
     }
     t -= Math.min(Math.max(o.pourElapsed || 0, 0), pourS);
     const start = { volume: V, seconds: t };
@@ -1674,6 +1714,384 @@
     return out.join("\n") + "\n";
   };
 
+  // ---------------------------------------------------------------- transfer (§3.12)
+  /*
+   * A transfer campaign calibrates two tanks with one water: a pump draws
+   * known volumes out of tank A (a drain, §3.11) into calibrated cans, and
+   * the same cans are emptied into tank B (a fill).  One batch of cans is
+   * one step for both tanks; each tank keeps its own levels, dips, running
+   * shell and raw file.  The wrapper owns the shared can tally (it lives on
+   * the drain session) and the paired-residual view of the current batch:
+   *
+   *   resid_A ≈ resid_B      one shared cause: the cans (a miscount, a can
+   *                          not filled to its mark), not a tank;
+   *   resid_B − resid_A > 0  litres lost on the way (a spill at the carry),
+   *                          or a cause on the A side alone (a leak);
+   *   resid_B − resid_A < 0  liquid returned to A, or a cause on the B side
+   *                          alone (an object in B shows only in B).
+   *
+   * The pour noise is common to both residuals and cancels in the
+   * difference: only the two dip noises remain, so the difference is a
+   * sharper test than either residual alone.  The single-tank views (log,
+   * charts, shell, settings) read the active tank; the page switches it.
+   */
+  function TransferSession(configOut, configIn, saved) {
+    this.isTransfer = true;
+    this.out = new Session(Object.assign({}, configOut || {}, { direction: "drain" }), saved && saved.out);
+    this.in = new Session(Object.assign({}, configIn || {}, { direction: "fill" }), saved && saved.in);
+    this.active = saved && saved.active === "in" ? "in" : "out";
+    this.lastDip = saved && saved.lastDip === "in" ? "in" : "out";
+    this.pair = null;
+    this._pair();
+  }
+
+  TransferSession.fromJSON = function (obj) { return new TransferSession(obj.out.config, obj.in.config, obj); };
+  TransferSession.prototype.toJSON = function () {
+    return {
+      version: 1, kind: "transfer", active: this.active, lastDip: this.lastDip,
+      out: this.out.toJSON(), in: this.in.toJSON(),
+    };
+  };
+
+  TransferSession.prototype.tank = function (k) { return this[k === "in" ? "in" : "out"]; };
+  /** The tank whose level is still being dipped: A first, then B. */
+  TransferSession.prototype.pendingTank = function () {
+    for (const k of ["out", "in"]) {
+      const cur = this[k].current();
+      if (cur && cur.state === "pending") return k;
+    }
+    return null;
+  };
+  TransferSession.prototype.pendingLevel = function () {
+    const k = this.pendingTank();
+    return k ? this[k].current() : null;
+  };
+  TransferSession.prototype._guard = function () {
+    const k = this.pendingTank();
+    if (k) throw new Error(`finish the dips at tank ${this[k].cfg.tank} first`);
+  };
+
+  /** Start both tanks: row 1 of two raw files, dipped before the first batch. */
+  TransferSession.prototype.start = function (stepOut, dipOut, stepIn, dipIn, note, time, opts) {
+    if (this.out.levels.length || this.in.levels.length) throw new Error("the session has already started");
+    this.out.start(stepOut, dipOut, note, time, opts);
+    this.in.start(stepIn, dipIn, note, time);
+    this.lastDip = "in";   // B's reading is the later one: undo takes it back first
+    this._pair();
+    return this.out.current();
+  };
+
+  /** One reading at the tank whose level is open. */
+  TransferSession.prototype.dip = function (value, time) {
+    const k = this.pendingTank();
+    if (!k) throw new Error("both tanks are decided: pour the next batch");
+    this.lastDip = k;
+    const v = this[k].dip(value, time);
+    this._pair();
+    return v;
+  };
+
+  /** A new batch opens one level on both tanks with the same step. */
+  TransferSession.prototype.pour = function (stepText, opts) {
+    this._guard();
+    const o = opts || {};
+    const Lo = this.out.pour(stepText, { neck: !!o.neck, note: o.note });
+    const Li = this.in.pour(stepText, { overflow: !!o.overflow, note: o.note });
+    this._pair();
+    return Lo;
+  };
+
+  // The shared can tally lives on the drain session (the pump fills the cans).
+  TransferSession.prototype.cans = function () { return this.out.cans(); };
+  TransferSession.prototype.canList = function () { return this.out.canList(); };
+  TransferSession.prototype.batchVolume = function () { return this.out.batchVolume(); };
+  TransferSession.prototype.canUnits = function () { return this.out.canUnits(); };
+  TransferSession.prototype.quickTap = function (time) { return this.out.quickTap(time); };
+  TransferSession.prototype.tap = function (time, unit) { this._guard(); return this.out.tap(time, unit); };
+  TransferSession.prototype.untap = function () { return this.out.untap(); };
+
+  /** Close the batch: the tally becomes the step of a level on both tanks. */
+  TransferSession.prototype.closeBatch = function (opts) {
+    this._guard();
+    const o = opts || {};
+    const Lo = this.out.closeBatch({ partial: o.partial, neck: o.neck, note: o.note });
+    const Li = this.in.pour(Lo.step.text, { overflow: !!o.overflow, note: o.note });
+    Li.cans = {
+      tapped: Lo.cans.tapped, unit: Lo.cans.unit, partial: Lo.cans.partial,
+      taps: Lo.cans.taps.slice(), units: Lo.cans.units.slice(),
+    };
+    this._pair();
+    return Lo;
+  };
+
+  /**
+   * Undo one entry: a can of the open batch, else the last reading (the
+   * tank dipped last first), else the last batch, removed from both tanks.
+   */
+  TransferSession.prototype.undo = function () {
+    if (this.cans()) { this.out.untap(); return this.current(); }
+    const order = this.lastDip === "in" ? ["in", "out"] : ["out", "in"];
+    for (const k of order) {
+      const s = this[k], L = s.current();
+      if (L && L.dips.length) {
+        L.dips.pop();
+        if (L.times && L.times.length) L.times.pop();
+        if (!L.dips.length) { L.state = "pending"; L.verdict = null; L.H = null; L.n = 0; }
+        else s._evaluate(L);
+        s._refit();
+        this._pair();
+        return this.current();
+      }
+    }
+    // No reading anywhere: remove the last batch from both tanks.
+    if (this.out.levels.length > 1 && this.in.levels.length > 1) {
+      const Lo = this.out.levels.pop(), Li = this.in.levels.pop();
+      if (Lo.cans) {
+        this.out.batch = {
+          unit: Lo.cans.unit || Lo.cans.units[0],
+          cans: Lo.cans.taps.map((t, i) => ({ t, u: Lo.cans.units[i] })),
+        };
+      }
+      this.out._refit();
+      this.in._refit();
+      this._pair();
+    }
+    return this.current();
+  };
+
+  /** Accept the pending level against the check (operator decision). */
+  TransferSession.prototype.override = function (why) {
+    const k = this.pendingTank() || this.active;
+    const v = this[k].override(why);
+    this._pair();   // an override is not a prediction test: the pair leaves with it
+    return v;
+  };
+
+  /** One recount edits the batch on both tanks: the step is one number. */
+  TransferSession.prototype.editPour = function (stepText) {
+    const Lo = this.out.current(), Li = this.in.current();
+    if (!Lo || Lo.start || !Li || Li.start) throw new Error("no pour to edit");
+    const step = parseStep(stepText);
+    for (const side of [[this.out, Lo], [this.in, Li]]) {
+      side[1].step = step;
+      addTag(side[1], "pour edited on site");
+      side[0]._evaluate(side[1]);
+    }
+    this._pair();
+    return Lo.verdict;
+  };
+
+  TransferSession.prototype.editNote = function (row, text) { return this[this.active].editNote(row, text); };
+
+  /**
+   * Campaign settings.  The tank record belongs to the active tank; the
+   * noise and the pour unit are one set for both (§9.1).  The direction is
+   * fixed at the start.
+   */
+  TransferSession.prototype.setCampaign = function (o) {
+    const has = (k) => Object.prototype.hasOwnProperty.call(o || {}, k);
+    if (has("direction")) throw new Error("the direction (fill or drain) is fixed at the start of the campaign");
+    const pick = (keys) => { const x = {}; for (const k of keys) if (has(k)) x[k] = o[k]; return x; };
+    const shared = pick(["pourUnit", "sigmaRead", "pourRel", "pourAbs", "h0pm", "brimPm"]);
+    const geo = pick(["tank", "D", "Dpm", "Lest", "Lpm"]);
+    if (!Object.keys(shared).length && !Object.keys(geo).length) return this.cfg;
+    // A bad field must change nothing on either tank: one Session.setCampaign
+    // checks before it changes, but two saves in a row do not.  Keep each cfg
+    // and put it back if a save fails partway.
+    const back = {};
+    for (const k of ["out", "in"]) back[k] = Object.assign({}, this[k].cfg);
+    try {
+      if (Object.keys(geo).length) this[this.active].setCampaign(geo);
+      if (Object.keys(shared).length) for (const k of ["out", "in"]) this[k].setCampaign(shared);
+    } catch (e) {
+      for (const k of ["out", "in"]) {
+        Object.assign(this[k].cfg, back[k]);
+        this[k].cfg.prior = makePrior(this[k].cfg);
+        this[k]._refit();
+      }
+      throw e;
+    }
+    return this.cfg;
+  };
+
+  /** Timers and alarms are operator settings, shared by both tanks. */
+  TransferSession.prototype.setTimers = function (o) {
+    this.out.setTimers(o);
+    this.in.setTimers(o);
+    return this.out.cfg;
+  };
+
+  /** The active tank supplies the single-tank views. */
+  Object.defineProperties(TransferSession.prototype, {
+    cfg: { get: function () { return this[this.active].cfg; } },
+    levels: { get: function () { return this[this.active].levels; } },
+    fit: { get: function () { return this[this.active].fit; } },
+    scale: { get: function () { return this[this.active].scale; } },
+  });
+  for (const name of ["current", "lastGood", "advice", "preview", "status", "series",
+    "learning", "fillPlan", "measuredPourSeconds", "fillSecondsFor", "cycleSecondsFor",
+    "toRawCsv"]) {
+    TransferSession.prototype[name] = function (name) {
+      return function () { const s = this[this.active]; return s[name].apply(s, arguments); };
+    }(name);
+  }
+
+  /**
+   * The advice for the shared batch: the tighter of the two 30 mm targets
+   * (§3.4), with the bottom watch of the drain tank and the brim watch of
+   * the fill tank (§10 BOTTOM-WARN, BRIM-WARN).
+   */
+  TransferSession.prototype.adviceBatch = function () {
+    const giO = this.out.lastGood(), giI = this.in.lastGood();
+    if (giO < 0 || giI < 0) return null;
+    const aO = this.out.advice(this.out.levels[giO].H);
+    const aI = this.in.advice(this.in.levels[giI].H);
+    const unit = this.out.cfg.pourUnit;
+    let target = Math.min(aO.target, aI.target), units = null;
+    if (unit) { units = Math.max(1, Math.round(target / unit)); target = units * unit; }
+    return {
+      target, units, out: aO, in: aI, halve: aI.halve, bottom: aO.bottom,
+      text: (aI.halve ? `Tank B near the brim (≈ ${fmt(aI.toBrim, 0)} mm): small batches. ` : "")
+        + (aO.bottom ? `Tank A near the bottom (≈ ${fmt(aO.toBottom, 0)} mm): the pump may lose suction; a part can is fine. ` : "")
+        + `Next batch ≈ ${fmt(target, 0)} L` + (units ? ` = ${units} × ${fmt(unit, 0)} L` : "")
+        + ` (≈ ${fmt(target / Math.max(aO.slope, 1e-3), 0)} mm out of A, ≈ ${fmt(target / Math.max(aI.slope, 1e-3), 0)} mm into B).`,
+    };
+  };
+
+  /** One transfer tag per level; a recompute replaces it. */
+  function setTransferTag(L, text) {
+    if (!L.tags) L.tags = [];
+    L.tags = L.tags.filter((t) => !/^transfer:/.test(t));
+    if (text) L.tags.push(text);
+  }
+
+  /**
+   * The paired-residual view of the current batch (§3.12).  Both tanks saw
+   * the same cans, so their interval residuals share the pour error and
+   * cancel it in the difference.  Only prediction-tested levels carry it: a
+   * learning, unknown, override, neck or overflow level has no comparable
+   * residual (its stored check is stale), and while a level is pending
+   * there is no pair.
+   */
+  TransferSession.prototype._pair = function () {
+    const Lo = this.out.current(), Li = this.in.current();
+    if (Lo) { Lo.transfer = null; setTransferTag(Lo, null); }
+    if (Li) { Li.transfer = null; setTransferTag(Li, null); }
+    this.pair = null;
+    if (this.pendingTank() || !Lo || !Li || Lo.start || Li.start) return this.pair;
+    if (!PAIR.has(Lo.state) || !PAIR.has(Li.state)) return this.pair;
+    const co = Lo.check, ci = Li.check;
+    if (!co || !ci || co.learning || ci.learning) return this.pair;
+
+    const cfg = this.out.cfg;
+    const barO = Math.abs(co.z) >= cfg.zAlarm && Math.abs(co.mm) >= cfg.mmAlarm;
+    const barI = Math.abs(ci.z) >= cfg.zAlarm && Math.abs(ci.mm) >= cfg.mmAlarm;
+    const watchO = Math.abs(co.z) >= cfg.zCheck || Math.abs(co.mm) >= 1.5;
+    const watchI = Math.abs(ci.z) >= cfg.zCheck || Math.abs(ci.mm) >= 1.5;
+    if (!barO && !barI && !watchO && !watchI) return this.pair;
+
+    // The noise of the difference.  The pour noise is common to both
+    // residuals and cancels; the dip noise and each shell's own error add.
+    // A wide check (an early or weakly identified shell) widens the test
+    // honestly: a blunt side can confirm nothing.
+    const mO = Math.max(slope(Lo.H, this.out.fit.p), 1e-3);
+    const mI = Math.max(slope(Li.H, this.in.fit.p), 1e-3);
+    const pour2 = Math.pow(pourSigma(Lo.step.value, cfg), 2);
+    const sd = Math.sqrt(Math.max(
+      Math.pow(co.sd * mO, 2) + Math.pow(ci.sd * mI, 2) - 2 * pour2, 1e-9));
+    const ro = co.resid, ri = ci.resid;
+    const diff = ri - ro, z = diff / sd;
+    const off = `Tank A resid ${sgn(ro, 1)} L, tank B ${sgn(ri, 1)} L; difference ${sgn(diff, 1)} L = ${sgn(z, 1)} σ of the two checks.`;
+    const wideO = co.sharp ? "" : ` Tank A's band is wide here (2σ = ${fmt(2 * co.sd * mO, 0)} L); it can confirm nothing.`;
+    const wideI = ci.sharp ? "" : ` Tank B's band is wide here (2σ = ${fmt(2 * ci.sd * mI, 0)} L); it can confirm nothing.`;
+    const MIXED = {
+      status: "MIXED", color: "bad", title: "the tanks disagree",
+      message: `Both tanks are at the action bar with different litres. ${off} Superposed causes (§6.6).`,
+      advice: "Decompose before correcting either tank: recount the cans, and re-dip any level that is still there.",
+      tag: "transfer: tanks disagree",
+    };
+    const DIFF_WATCH = {
+      status: "WATCH", color: "info", title: "the tanks differ (watch)",
+      message: `Tank A ${sgn(ro, 1)} L, tank B ${sgn(ri, 1)} L; neither check clears its own action bar, but the tanks differ by ${sgn(diff, 1)} L = ${sgn(z, 1)} σ. ${off} A wide band can hide a large miss in mm; watch item (§6.5).`,
+      advice: "Pour the next batch. Recount the cans if a miscount could explain it.",
+      tag: null,
+    };
+    let p = null;
+    if (Math.abs(z) < 2) {
+      if (barO || barI) {
+        if (watchO && watchI) {
+          p = {
+            status: "POUR", color: "bad", title: "the same litres",
+            message: `Both tanks missed by the same litres. ${off} One shared cause: the can count or the can fill (§3.10), not a tank.`,
+            advice: "Count the cans of this batch again. If the count was wrong, Recount edits both tanks at once. If it stands, both intervals go to the register: a can not filled to its mark does this.",
+            tag: "transfer: shared pour error",
+          };
+        } else {
+          // One tank at the bar, the other clean but too wide to confirm.
+          const barIsI = barI;
+          const clean = barIsI ? "A" : "B", flagged = barIsI ? "B" : "A";
+          const resid = barIsI ? ri : ro;
+          const cause = barIsI
+            ? (resid > 0 ? "a loss on the way (a spill at the carry)" : "an object in B in this band")
+            : (resid < 0 ? "a leak or a spill at A (§3.11)" : "liquid returned to A (the hose drained back)");
+          p = {
+            status: "UNSURE", color: "warn", title: `only tank ${flagged} shows it`,
+            message: `Tank ${flagged} missed ${fmt(Math.abs(resid), 1)} L and tank ${clean} shows nothing (${sgn(barIsI ? ro : ri, 1)} L), but its band is wide: a shared can error and ${cause} both fit. ${off}`,
+            advice: `Recount the cans of this batch first: one edit fixes both tanks. If the count stands, the litres belong to tank ${flagged}: its interval goes to the register.`,
+            tag: `transfer: ${flagged}-side only`,
+          };
+        }
+      } else {
+        p = {
+          status: "WATCH", color: "info", title: "the same litres (watch)",
+          message: `Both tanks show the same litres, below the action bar. ${off} A shared cause would show in both; a watch item (§6.5).`,
+          advice: "Pour the next batch.",
+          tag: null,
+        };
+      }
+    } else if (z >= 2) {
+      if (barI && !barO) {
+        p = {
+          status: "LOSS", color: "bad", title: "litres lost on the way",
+          message: `Tank A is clean, but tank B missed ${fmt(diff, 1)} L: liquid left A and did not reach B — a spill at the carry, or a can not emptied. ${off}${wideO}`,
+          advice: "Check the carry path and the cans. B's interval goes to the register as LOSS? (§6.2); A's stays in its fit.",
+          tag: "transfer: loss on the way",
+        };
+      } else if (barO && !barI) {
+        p = {
+          status: "ALEAK", color: "bad", title: "only tank A shows it",
+          message: `Tank A missed ${fmt(diff, 1)} L that tank B does not show: liquid left A off the record — the hose, the pump seal, or a spill at the can (§3.11). ${off}${wideI}`,
+          advice: "Check the hose state and the pump. A's interval goes to the register (LEAK?); B's stays in its fit.",
+          tag: "transfer: A-side only",
+        };
+      } else if (barO && barI) p = MIXED;
+      else p = DIFF_WATCH;
+    } else {
+      if (barO && !barI) {
+        p = {
+          status: "ARETURN", color: "bad", title: "only tank A shows it",
+          message: `Tank A's fall came ${fmt(-diff, 1)} L too small and tank B is clean: liquid returned to A (the hose drained back) or less left A than the count says (§3.11). ${off}${wideI}`,
+          advice: "Check the hose state. A's interval goes to the register (RETURN?); B's stays in its fit.",
+          tag: "transfer: A-side only",
+        };
+      } else if (barI && !barO) {
+        p = {
+          status: "BOBJECT", color: "bad", title: "only tank B shows it",
+          message: `Tank B's rise came ${fmt(-diff, 1)} L too cheap and tank A is clean: an object in B in this band, or liquid diverted before B. ${off}${wideO}`,
+          advice: "A's interval is good. B's goes to the register (OBJECT?): inspect B in this band, or repeat a pour into it (§6.2).",
+          tag: "transfer: B-side only",
+        };
+      } else if (barO && barI) p = MIXED;
+      else p = DIFF_WATCH;
+    }
+    p.ro = ro; p.ri = ri; p.diff = diff; p.z = z;
+    this.pair = p;
+    Lo.transfer = p;
+    Li.transfer = p;
+    if (p.tag) { setTransferTag(Lo, p.tag); setTransferTag(Li, p.tag); }
+    return this.pair;
+  };
+
   // ---------------------------------------------------------------- replay
   /**
    * Feed raw rows [{step, H}] through the check, as if each were dipped now.
@@ -1756,8 +2174,8 @@
 
   const api = {
     area, volume, slope, capacity, brim, levelFor, fitShell, predictLevel, parseStep,
-    resolveConfig, Session, DEFAULTS, adopt, canHint, NAMES, replayRows, readRawText,
-    detectDirection, makePrior,
+    resolveConfig, Session, TransferSession, DEFAULTS, adopt, canHint, NAMES, replayRows,
+    readRawText, detectDirection, makePrior,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.CalibSite = api;
@@ -1779,10 +2197,13 @@
 
   // ------------------------------------------------------------ storage
   function save() { if (S) localStorage.setItem(KEY, JSON.stringify(S.toJSON())); }
+  function fromJSON(obj) {
+    return obj && obj.kind === "transfer" ? C.TransferSession.fromJSON(obj) : C.Session.fromJSON(obj);
+  }
   function load() {
     const t = localStorage.getItem(KEY);
     if (!t) return null;
-    try { return C.Session.fromJSON(JSON.parse(t)); } catch (e) { console.error(e); return null; }
+    try { return fromJSON(JSON.parse(t)); } catch (e) { console.error(e); return null; }
   }
   function archive() { try { return JSON.parse(localStorage.getItem(ARCH) || "[]"); } catch (e) { return []; } }
 
@@ -1802,7 +2223,14 @@
       render();
     };
   }
-  function pending() { const L = S && S.current(); return L && L.state === "pending" ? L : null; }
+  /** A transfer campaign: two tanks around one can tally (§3.12). */
+  function isTransfer() { return !!S && S.isTransfer === true; }
+  function pending() {
+    if (!S) return null;
+    if (isTransfer()) return S.pendingLevel();
+    const L = S.current();
+    return L && L.state === "pending" ? L : null;
+  }
   /** A drain campaign (reverse strapping): the level falls, the cans fill from the tank. */
   function isDrain() { return !!S && S.cfg.dir < 0; }
 
@@ -1812,6 +2240,11 @@
     if (!b) return;
     tab = b.dataset.tab; editRow = null; render();
   });
+  $("hdr-tank").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-tank]");
+    if (!b || !isTransfer()) return;
+    S.active = b.dataset.tank; save(); render();
+  });
 
   // ------------------------------------------------------------ setup
   // The direction and the start level are chosen once, at Start campaign.
@@ -1819,13 +2252,14 @@
   function pickDir(d) {
     if (d === setupDir) return;
     setupDir = d;
-    // A drain starts with an unknown volume in the tank.
-    if (d === "drain") $("s-step").value = "?";
+    // A drain or a transfer starts with an unknown volume in tank A.
+    if (d !== "fill") $("s-step").value = "?";
     render();
   }
   function pickAt(a) { setupAt = a; render(); }
   $("s-dir-fill").addEventListener("click", () => pickDir("fill"));
   $("s-dir-drain").addEventListener("click", () => pickDir("drain"));
+  $("s-dir-transfer").addEventListener("click", () => pickDir("transfer"));
   $("s-at-entrance").addEventListener("click", () => pickAt("entrance"));
   $("s-at-neck").addEventListener("click", () => pickAt("neck"));
   $("s-at-shell").addEventListener("click", () => pickAt("shell"));
@@ -1836,21 +2270,52 @@
   };
   function renderSetup() {
     const drain = setupDir === "drain";
-    $("s-dir-fill").setAttribute("aria-pressed", String(!drain));
+    const transfer = setupDir === "transfer";
+    $("s-dir-fill").setAttribute("aria-pressed", String(!drain && !transfer));
     $("s-dir-drain").setAttribute("aria-pressed", String(drain));
-    $("s-dir-note").textContent = drain
-      ? "Drain: the tank is full. A pump draws the water out into calibrated cans, and the level falls to the bottom. The direction is fixed for the whole campaign."
-      : "Fill: pour known volumes in, and the level rises to the brim. The direction is fixed for the whole campaign.";
-    $("s-at-wrap").classList.toggle("hidden", !drain);
+    $("s-dir-transfer").setAttribute("aria-pressed", String(transfer));
+    $("s-dir-note").textContent = transfer
+      ? "Two tanks, one water: a pump draws known volumes out of the full tank A into calibrated cans, and the same cans are emptied into tank B. A is a drain, B is a fill; one batch of cans is one step for both. Two raw files come out, one per tank."
+      : drain
+        ? "Drain: the tank is full. A pump draws the water out into calibrated cans, and the level falls to the bottom. The direction is fixed for the whole campaign."
+        : "Fill: pour known volumes in, and the level rises to the brim. The direction is fixed for the whole campaign.";
+    $("s-at-wrap").classList.toggle("hidden", !drain && !transfer);
     for (const a of ["entrance", "neck", "shell"]) $("s-at-" + a).setAttribute("aria-pressed", String(a === setupAt));
-    $("s-at-note").textContent = AT_NOTE[setupAt];
-    $("s-step-label").textContent = drain ? "Liquid in the tank at the first dip, L (? = unknown)" : "Liquid before the first dip, L (? = unknown heel)";
-    $("s-first-note").textContent = drain
-      ? "Prime the pump and fill the hose before this reading: water that fills the hose later leaves the tank off the record. The first level always needs two readings: no prediction can test it."
-      : "Sound the bottom first and record the heel as this row (§3.3). The first level always needs two readings: no prediction can test it.";
+    $("s-at-note").textContent = (transfer ? "Tank A — " : "") + AT_NOTE[setupAt];
+    $("s-tank-label").textContent = transfer ? "Tank A name (pump out)" : "Tank name";
+    $("s-dip-label").textContent = transfer ? "Tank A first reading, mm" : "First reading, mm";
+    $("s-b-wrap").classList.toggle("hidden", !transfer);
+    $("s-step-label").textContent = transfer ? "Liquid in tank A at the first dip, L (? = unknown)"
+      : drain ? "Liquid in the tank at the first dip, L (? = unknown)" : "Liquid before the first dip, L (? = unknown heel)";
+    $("s-first-note").textContent = transfer
+      ? "Prime the pump and fill A's hose before tank A's reading (§3.11). Then read tank B: sound its bottom and record the heel as this row (§3.3). Both first levels need two readings."
+      : drain
+        ? "Prime the pump and fill the hose before this reading: water that fills the hose later leaves the tank off the record. The first level always needs two readings: no prediction can test it."
+        : "Sound the bottom first and record the heel as this row (§3.3). The first level always needs two readings: no prediction can test it.";
   }
   $("s-go").addEventListener("click", guard("s-err", () => {
     const n = readNoise();
+    resetTallySize();   // a new campaign takes its own default can size
+    if (setupDir === "transfer") {
+      const dipA = num("s-dip"), dipB = num("sB-dip");
+      if (!(num("s-D") > 0)) throw new Error("Enter the diameter estimate D of tank A.");
+      if (!(num("s-L") > 0)) throw new Error("Enter the length estimate L of tank A.");
+      if (!(num("sB-D") > 0)) throw new Error("Enter the diameter estimate D of tank B.");
+      if (!(num("sB-L") > 0)) throw new Error("Enter the length estimate L of tank B.");
+      if (dipA == null) throw new Error("Enter tank A's first reading.");
+      if (dipB == null) throw new Error("Enter tank B's first reading.");
+      const shared = { pourUnit: num("s-unit"), sigmaRead: n.sigmaRead, pourRel: n.pourRel, pourAbs: n.pourAbs, h0pm: n.h0pm, brimPm: n.brimPm };
+      const s = new C.TransferSession(
+        Object.assign({ tank: $("s-tank").value.trim() || "tank", D: num("s-D"), Dpm: num("s-Dpm") || 200, Lest: num("s-L"), Lpm: num("s-Lpm") }, shared),
+        Object.assign({ tank: $("sB-tank").value.trim() || "tank-b", D: num("sB-D"), Dpm: num("sB-Dpm") || 200, Lest: num("sB-L"), Lpm: num("sB-Lpm") }, shared));
+      s.start($("s-step").value.trim() || "?", dipA, $("sB-step").value.trim() || "?", dipB, "", Date.now(), { at: setupAt });
+      s.out.levels[0].pourTime = null;
+      s.in.levels[0].pourTime = null;
+      S = s; save(); tab = "live";
+      P.noise = n;
+      localStorage.setItem(PREFS, JSON.stringify(P));
+      return;
+    }
     const cfg = {
       tank: $("s-tank").value.trim() || "tank",
       D: num("s-D"), Dpm: num("s-Dpm") || 200, Lest: num("s-L"), Lpm: num("s-Lpm"),
@@ -1862,7 +2327,6 @@
     if (!(cfg.Lest > 0)) throw new Error("Enter the length estimate L.");
     const dip = num("s-dip");
     if (dip == null) throw new Error("Enter the first reading.");
-    resetTallySize();   // a new campaign takes its own default can size
     const s = new C.Session(cfg);
     s.start($("s-step").value.trim() || "?", dip, "", Date.now(), setupDir === "drain" ? { at: setupAt } : undefined);
     s.levels[0].pourTime = null;
@@ -1877,7 +2341,10 @@
   function refreshPour() { if (tab === "live" && S) render(); }
   $("p-advice").addEventListener("click", () => {
     const L = S && S.current();
-    if (L && L.verdict && L.verdict.next) $("p-vol").value = String(Math.round(L.verdict.next.target));
+    if (isTransfer()) {
+      const a = S.adviceBatch();
+      if (a) $("p-vol").value = String(Math.round(a.target));
+    } else if (L && L.verdict && L.verdict.next) $("p-vol").value = String(Math.round(L.verdict.next.target));
     else if (S) $("p-vol").value = String(Math.round(S.advice(S.levels[S.lastGood()].H).target));
     refreshPour();
   });
@@ -1887,6 +2354,7 @@
   $("p-unknown").addEventListener("change", () => { if ($("p-unknown").checked) $("p-extra").checked = false; refreshPour(); });
   $("p-extra").addEventListener("change", () => { if ($("p-extra").checked) $("p-unknown").checked = false; refreshPour(); });
   $("p-over").addEventListener("change", refreshPour);
+  $("p-neck").addEventListener("change", refreshPour);
   $("t-plus").addEventListener("click", guard("p-err", () => {
     const now = Date.now(), u = activeUnit();
     if (!(u > 0)) throw new Error("Enter the can size in litres.");
@@ -1912,9 +2380,10 @@
       const L = S.closeBatch(Object.assign({ partial: $("t-part").checked, note: $("p-note").value.trim() }, overNeck()));
       const ts = L.cans.taps.filter((x) => x != null);
       L.pourTime = ts.length ? ts[ts.length - 1] : Date.now();
+      if (isTransfer()) S.in.current().pourTime = L.pourTime;
       if (T.pour) { delete T.pour; saveTimer(); }
       stopAlarm(); unlockAudio();
-      $("p-note").value = ""; $("p-vol").value = ""; $("t-part").checked = false; $("p-over").checked = false;
+      $("p-note").value = ""; $("p-vol").value = ""; $("t-part").checked = false; $("p-over").checked = false; $("p-neck").checked = false;
       save();
       setTimeout(() => $("d-val").focus(), 50);
       return;
@@ -1924,22 +2393,27 @@
     else {
       const v = num("p-vol");
       if (!(v > 0)) {
-        const w = isDrain() ? "drain" : "pour";
+        const w = isTransfer() ? "batch" : isDrain() ? "drain" : "pour";
         throw new Error(unit() ? `Tap one can at least, or enter the ${w} in litres.` : `Enter the ${w} in litres, or tick 'whole ${w} unknown'.`);
       }
       text = $("p-extra").checked ? `${v}+?` : String(v);
     }
     const L = S.pour(text, Object.assign({ note: $("p-note").value.trim() }, overNeck()));
     L.pourTime = Date.now();
+    if (isTransfer()) S.in.current().pourTime = L.pourTime;
     if (T.pour) { delete T.pour; saveTimer(); }
     stopAlarm(); unlockAudio();
-    $("p-note").value = ""; $("p-vol").value = ""; $("p-unknown").checked = false; $("p-extra").checked = false; $("p-over").checked = false;
+    $("p-note").value = ""; $("p-vol").value = ""; $("p-unknown").checked = false; $("p-extra").checked = false; $("p-over").checked = false; $("p-neck").checked = false;
     save();
     setTimeout(() => $("d-val").focus(), 50);
   }));
 
-  /** The one tick under the pour: overflow in a fill, still in the neck in a drain. */
+  /**
+   * The one tick under the pour: overflow in a fill, still in the neck in a
+   * drain.  A transfer has both tanks, so it has both ticks.
+   */
   function overNeck() {
+    if (isTransfer()) return { neck: $("p-neck").checked, overflow: $("p-over").checked };
     const on = $("p-over").checked;
     return isDrain() ? { neck: on } : { overflow: on };
   }
@@ -1957,13 +2431,16 @@
 
   // ------------------------------------------------------------ level actions
   $("a-redip").addEventListener("click", () => {
-    const L = S.current(); if (!L) return;
+    const L = isTransfer() ? S[S.active].current() : S.current();
+    if (!L) return;
     L.state = "pending"; L.verdict = Object.assign({}, L.verdict || {}, { status: "REDIP", hidden: true, color: "warn", title: "Extra reading", message: "The earlier readings are hidden.", advice: "Dip again." });
+    if (isTransfer()) S._pair();   // the pair judged a decided level: it leaves while this one is open again
     save(); render(); $("d-val").focus();
   });
   $("a-edit").addEventListener("click", guard("d-err", () => {
-    const L = S.current();
-    const t = prompt(`${isDrain() ? "Drain" : "Pour"} after the recount, L (? = unknown, 200+? = 200 plus unknown):`, L.step.text);
+    const L = isTransfer() ? S.out.current() : S.current();
+    const what = isTransfer() ? "Batch" : isDrain() ? "Drain" : "Pour";
+    const t = prompt(`${what} after the recount, L (? = unknown, 200+? = 200 plus unknown):`, L.step.text);
     if (t == null) return;
     S.editPour(t.trim()); save();
   }));
@@ -1973,20 +2450,35 @@
     S.override(why.trim()); save();
   }));
   $("a-undo").addEventListener("click", guard("d-err", () => {
-    if (!confirm(S.cans() ? "Remove the last can from the count?" : "Remove the last entry (the last reading, or the last pour if it has no reading)?")) return;
+    if (!confirm(isTransfer()
+      ? "Remove the last reading (the tank dipped last), or the last batch when it has no readings?"
+      : S.cans() ? "Remove the last can from the count?" : "Remove the last entry (the last reading, or the last pour if it has no reading)?")) return;
+    if (isTransfer()) {
+      const a = S.out.current(), b = S.in.current();
+      if (S.out.levels.length === 1 && S.in.levels.length === 1
+        && (!a || !a.dips.length) && (!b || !b.dips.length)) { S = null; localStorage.removeItem(KEY); return; }
+      S.undo(); save();
+      return;
+    }
     if (S.levels.length === 1 && S.levels[0].dips.length <= 1) { S = null; localStorage.removeItem(KEY); return; }
     S.undo(); save();
   }));
 
   // ------------------------------------------------------------ files
-  $("f-csv").addEventListener("click", () => download(`${S.cfg.tank}_raw.csv`, S.toRawCsv(), "text/csv"));
-  $("f-json").addEventListener("click", () => download(`${S.cfg.tank}_site.json`, JSON.stringify(S.toJSON(), null, 2), "application/json"));
+  $("f-csv").addEventListener("click", () => {
+    // In a transfer the A button always exports tank A: the facade reads the
+    // active tank, and a file with the wrong tank's rows is a wrong calibration.
+    const T = isTransfer() ? S.out : S;
+    download(`${T.cfg.tank}_raw.csv`, T.toRawCsv(), "text/csv");
+  });
+  $("f-csv-b").addEventListener("click", () => download(`${S.in.cfg.tank}_raw.csv`, S.in.toRawCsv(), "text/csv"));
+  $("f-json").addEventListener("click", () => download(`${isTransfer() ? S.out.cfg.tank + "-" + S.in.cfg.tank : S.cfg.tank}_site.json`, JSON.stringify(S.toJSON(), null, 2), "application/json"));
   $("f-show").addEventListener("click", () => { const t = $("f-text"); t.value = S.toRawCsv(); t.classList.toggle("hidden"); t.select(); });
   $("f-import").addEventListener("change", (ev) => {
     const file = ev.target.files[0]; if (!file) return;
     file.text().then((t) => {
       try {
-        const s = C.Session.fromJSON(JSON.parse(t));
+        const s = fromJSON(JSON.parse(t));
         if (S && !confirm("Replace the open session? It goes to the archive.")) return;
         if (S) pushArchive();
         resetTallySize();
@@ -1996,7 +2488,11 @@
   });
   function pushArchive() {
     const a = archive();
-    a.unshift({ when: new Date().toISOString(), tank: S.cfg.tank, session: S.toJSON() });
+    a.unshift({
+      when: new Date().toISOString(),
+      tank: isTransfer() ? `${S.out.cfg.tank}→${S.in.cfg.tank}` : S.cfg.tank,
+      session: S.toJSON(),
+    });
     localStorage.setItem(ARCH, JSON.stringify(a.slice(0, 20)));
   }
   $("f-new").addEventListener("click", () => {
@@ -2012,11 +2508,17 @@
       if (S && !confirm("Replace the open session? It goes to the archive.")) return;
       if (S) pushArchive();
       resetTallySize();
-      S = C.Session.fromJSON(item.session); save(); tab = "live"; render();
+      S = fromJSON(item.session); save(); tab = "live"; render();
     } else {
       download(`${item.tank}_site.json`, JSON.stringify(item.session, null, 2), "application/json");
     }
   });
+
+  /** How many levels an archived session holds, single or transfer. */
+  function archiveLevels(session) {
+    if (session.levels) return session.levels.length;
+    return session.out && session.out.levels ? session.out.levels.length : 0;
+  }
 
   // ------------------------------------------------------------ replay
   $("r-go").addEventListener("click", guard("r-err", () => {
@@ -2051,25 +2553,38 @@
   function render() {
     for (const b of $("tabs").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.tab === tab));
     const has = !!S;
+    $("p-neck-wrap").classList.toggle("hidden", !isTransfer());
+    $("f-csv-b").classList.toggle("hidden", !isTransfer());
+    $("f-csv").textContent = isTransfer() ? `Download ${S.out.cfg.tank}_raw.csv (tank A)` : "Download raw CSV";
+    $("f-show").textContent = isTransfer() ? `Show ${S.cfg.tank} CSV` : "Show CSV";
     $("setup").classList.toggle("hidden", has || tab !== "live");
     for (const id of ["live", "log", "shell", "settings", "files", "replay", "help"]) {
       const need = id === "replay" || id === "help" || id === "files" || id === "settings" ? true : has;
       $(id).classList.toggle("hidden", tab !== id || !need);
     }
-    for (const id of ["f-csv", "f-json", "f-show", "f-new"]) $(id).disabled = !has;
+    for (const id of ["f-csv", "f-csv-b", "f-json", "f-show", "f-new"]) $(id).disabled = !has;
     renderArchive();
     renderSetup();
     renderSetupNoise();
     renderSettings();
-    if (!has) { $("hdr-phase").textContent = "no session"; $("hdr-count").textContent = ""; $("hdr-title").textContent = "calib site — live dip check"; return; }
+    if (!has) { $("hdr-phase").textContent = "no session"; $("hdr-count").textContent = ""; $("hdr-title").textContent = "calib site — live dip check"; $("hdr-tank").classList.add("hidden"); return; }
     const st = S.status();
-    $("hdr-title").textContent = `${S.cfg.tank} — live dip check`;
-    $("hdr-phase").textContent = (st.learning ? `learning (${st.intervals}/${S.cfg.learnN})` : "checking") + (isDrain() ? " · drain" : "");
+    $("hdr-title").textContent = isTransfer() ? `${S.out.cfg.tank} → ${S.in.cfg.tank} — transfer` : `${S.cfg.tank} — live dip check`;
+    $("hdr-phase").textContent = (st.learning ? `learning (${st.intervals}/${S.cfg.learnN})` : "checking")
+      + (isDrain() ? " · drain" : "") + (isTransfer() ? " · transfer" : "");
     $("hdr-count").textContent = `${S.levels.length} levels · ${st.redips} extra dips`;
+    $("hdr-tank").classList.toggle("hidden", !isTransfer());
+    if (isTransfer()) {
+      $("hdr-tank-a").textContent = S.out.cfg.tank;
+      $("hdr-tank-b").textContent = S.in.cfg.tank;
+      $("hdr-tank-a").setAttribute("aria-pressed", String(S.active === "out"));
+      $("hdr-tank-b").setAttribute("aria-pressed", String(S.active === "in"));
+    }
     renderLive(st); renderLog(); renderShell(st);
   }
 
   function renderLive(st) {
+    if (isTransfer()) { renderLiveTransfer(); return; }
     const L = S.current();
     const pend = pending();
     const gi = S.lastGood();
@@ -2131,15 +2646,99 @@
     $("a-undo").disabled = !L;
   }
 
+  /** One tank's block in the transfer Now card. */
+  function tankKv(G, adv, st, role) {
+    if (!G || !adv) return "";
+    const p = st.fit.p;
+    const rows = [
+      ["level", `${f(G.H)} mm (row ${G.row}, ${G.n > 1 ? "2 readings" : "1 reading"})${G.neck ? " · in the neck" : ""}`],
+      ["liquid (running shell)", `${f(C.volume(G.H, p), 0)} L of ${f(st.capacity, 0)} L`],
+    ];
+    rows.push(role === "pump out"
+      ? ["bottom", `≈ ${f(adv.toBottom, 0)} mm to go · ≈ ${f(adv.left, 0)} L left`]
+      : ["brim", `≈ ${f(adv.brim, 0)} ± ${f(2 * adv.brimSd, 0)} mm · ${f(adv.toBrim, 0)} mm to go`]);
+    rows.push(["slope", `${f(adv.slope, 2)} L/mm`]);
+    return rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+  }
+
+  /** One verdict box; the transfer verdict card stacks one per tank plus the pair. */
+  function verdictBox(L, v, name) {
+    if (!v) return "";
+    const pend = L && L.state === "pending";
+    if (pend && (v.hidden || v.status === "REDIP")) {
+      return `<div class="verdict v-${v.color || "info"}" style="margin-bottom:0.6rem"><h3>${esc(name)}: ${esc(v.title)}</h3><p>${esc(v.message)}</p><p class="advice">${esc(v.advice)}</p>`
+        + `<p class="muted">${L.dips.length} reading(s) recorded. The page shows them after the next reading.</p></div>`;
+    }
+    let extra = "";
+    if (v.unknown) extra += `<p class="mono">x = ${f(v.unknown.x)} ± ${f(2 * v.unknown.sigma)} L</p>`;
+    if (L && L.dips.length > 1 && !pend) extra += `<p class="muted">Readings: ${L.dips.map((d) => f(d)).join(" / ")} mm → adopted ${f(L.H)} mm</p>`;
+    return `<div class="verdict v-${v.color || "info"}" style="margin-bottom:0.6rem"><h3>${esc(name)}: ${esc(v.title)}</h3><p>${esc(v.message)}</p>${extra}<p class="advice">${esc(v.advice)}</p>`
+      + (v.next && !pend ? `<p>${esc(v.next.text)}</p>` : "") + `</div>`;
+  }
+
+  /** The live tab of a transfer: both tanks, one can tally, one dip at a time. */
+  function renderLiveTransfer() {
+    const stO = S.out.status(), stI = S.in.status();
+    const giO = S.out.lastGood(), giI = S.in.lastGood();
+    const GO = giO >= 0 ? S.out.levels[giO] : null;
+    const GI = giI >= 0 ? S.in.levels[giI] : null;
+    const adv = S.adviceBatch();
+    const pend = pending();
+    const nameO = S.out.cfg.tank, nameI = S.in.cfg.tank;
+
+    $("now-kv").innerHTML = `<dt class="hd">${esc(nameO)} — pump out</dt><dd></dd>` + tankKv(GO, adv && adv.out, stO, "pump out")
+      + `<dt class="hd">${esc(nameI)} — pour in</dt><dd></dd>` + tankKv(GI, adv && adv.in, stI, "pour in");
+    $("now-advice").textContent = adv && !pend ? adv.text : "";
+    const drifts = [];
+    if (stO.intervals > 2) drifts.push(`${nameO} ${sg(stO.drift)} L (alarm beyond ±${f(stO.driftLimit, 0)} L)`);
+    if (stI.intervals > 2) drifts.push(`${nameI} ${sg(stI.drift)} L (alarm beyond ±${f(stI.driftLimit, 0)} L)`);
+    $("now-drift").textContent = drifts.join(" · ") + ((stO.driftAlarm || stI.driftAlarm) ? " — DRIFT: stop and audit (tilt? can size? leak?)" : "");
+    $("now-drift").className = stO.driftAlarm || stI.driftAlarm ? "error" : "muted";
+
+    $("pour-card").classList.toggle("hidden", !!pend);
+    $("dip-card").classList.toggle("hidden", !pend);
+    renderTally(adv);
+    renderNowPrediction(adv);
+    if (pend) {
+      const k = S.pendingTank();
+      const nm = k === "out" ? nameO : nameI;
+      const n = pend.dips.length;
+      $("dip-title").textContent = n === 0 ? `2 · Dip ${nm}` : `2 · Dip ${nm} again (reading ${n + 1})`;
+      $("dip-label").textContent = n === 0 ? `${nm}: reading after the ${pend.step.text} L batch, mm`
+        : `${nm}: next reading, mm — earlier readings hidden`;
+    }
+    tickSettle(Date.now());
+    tickEta(Date.now());
+
+    const box = $("verdict");
+    const LO = S.out.current(), LI = S.in.current();
+    const vO = LO && LO.verdict, vI = LI && LI.verdict;
+    if (!vO && !vI && !S.pair) box.classList.add("hidden");
+    else {
+      box.classList.remove("hidden");
+      box.className = "";
+      let pair = "";
+      if (S.pair) {
+        pair = `<div class="verdict v-${S.pair.color}" style="margin-bottom:0.6rem"><h3>Both tanks — ${esc(S.pair.title)}</h3><p>${esc(S.pair.message)}</p><p class="advice">${esc(S.pair.advice)}</p></div>`;
+      }
+      box.innerHTML = verdictBox(LO, vO, nameO) + verdictBox(LI, vI, nameI) + pair;
+    }
+    const LA = S[S.active].current();
+    $("a-redip").disabled = !LA || LA.state === "pending";
+    $("a-edit").disabled = !LO || LO.start;
+    $("a-override").disabled = !(pend && pend.dips.length >= 2);
+    $("a-undo").disabled = !S;
+  }
+
   /** The pour now in the pour panel: a known volume, or why it has none. */
   function pourInput() {
     const n = S.cans();
     if (n) {
-      if ($("t-part").checked) return { unknown: isDrain() ? "the pump lost suction: the last can is a part can" : "the last can is a part can" };
+      if ($("t-part").checked) return { unknown: isTransfer() ? "the pump lost suction: the last can is a part can" : isDrain() ? "the pump lost suction: the last can is a part can" : "the last can is a part can" };
       const s = S.batchVolume();
       return s > 0 ? { s } : null;
     }
-    const w = isDrain() ? "drain" : "pour";
+    const w = isTransfer() ? "batch" : isDrain() ? "drain" : "pour";
     if ($("p-unknown").checked) return { unknown: `the ${w} is unknown` };
     const v = num("p-vol");
     if (!(v > 0)) return null;
@@ -2157,6 +2756,7 @@
    */
   function renderNowPrediction(adv) {
     const box = $("now-pred");
+    if (isTransfer()) { renderTransferPrediction(box, adv); return; }
     const gi = S.lastGood();
     const q = !pending() && gi >= 0 ? pourInput() : null;
     if (!q) { box.textContent = ""; box.className = "pred"; return; }
@@ -2208,6 +2808,32 @@
     box.className = "pred";
   }
 
+  /** The transfer line: the same batch must land in both tanks. */
+  function renderTransferPrediction(box, adv) {
+    const giO = S.out.lastGood(), giI = S.in.lastGood();
+    const q = !pending() && giO >= 0 && giI >= 0 && adv ? pourInput() : null;
+    if (!q) { box.textContent = ""; box.className = "pred"; return; }
+    if (q.unknown) {
+      box.textContent = `After this batch: no prediction (${q.unknown}).`;
+      box.className = "pred muted";
+      return;
+    }
+    const GO = S.out.levels[giO], GI = S.in.levels[giI];
+    const prO = S.out.preview(GO.H, q.s, GO.n);
+    const prI = S.in.preview(GI.H, q.s, GI.n);
+    const neckA = $("p-neck").checked;
+    const overB = $("p-over").checked || prI.overflow;
+    const aTxt = neckA ? "A: still in the neck, no prediction"
+      : prO.empty ? `A runs dry (${f(q.s, 0)} L > ≈ ${f(adv.out.left, 0)} L left): the pump loses suction — tick the part can`
+        : `A ${f(prO.H)} ± ${f(2 * prO.sd)} mm (−${f(GO.H - prO.H, 1)} mm fall)`;
+    const bTxt = overB ? `B overflows (${f(q.s, 0)} L > gap ≈ ${f(adv.in.gap, 0)} L): the final batch — tick "tank B reached the neck"`
+      : `B ${f(prI.H)} ± ${f(2 * prI.sd)} mm (+${f(prI.H - GI.H, 1)} mm rise)`;
+    const sharp = 2 * Math.max(prO.sd, prI.sd) <= S.cfg.sharpMm;
+    box.textContent = `After this batch (${f(q.s, 0)} L): ${aTxt} · ${bTxt}`
+      + (sharp ? " · sharp: one reading per tank may do" : " · too wide to judge: expect two readings per tank");
+    box.className = "pred" + (!neckA && !overB && (prO.empty || prI.overflow) ? " error" : "");
+  }
+
   function activeUnit() {
     const v = num("t-unit");
     return v > 0 ? v : unit();
@@ -2243,14 +2869,24 @@
     $("t-units").innerHTML = sizes.map((u) => `<button data-unit="${u}" aria-pressed="${u === act}">${f(u, 0)} L</button>`).join("");
 
     const drain = isDrain();
+    const transfer = isTransfer();
     $("t-plus").disabled = !(act > 0);
-    $("t-plus").textContent = act > 0 ? `+1 can ${drain ? "full" : "poured"} (${f(act, 0)} L)` : "Enter the can size, L";
+    $("t-plus").textContent = act > 0 ? `+1 can ${transfer || drain ? "full" : "poured"} (${f(act, 0)} L)` : "Enter the can size, L";
     wordPourCard(drain);
 
     const cans = adv && act ? Math.max(1, Math.round(adv.target / act)) : 0;
     $("t-bar").style.width = `${cans ? Math.min(100, 100 * n / cans) : 0}%`;
     let note = "", warn = false;
-    if (adv && drain) {
+    if (transfer && adv && adv.out && adv.in) {
+      const aO = adv.out, aI = adv.in;
+      if (vol > aO.left) { note = `${f(vol, 0)} L is more than tank A's liquid (≈ ${f(aO.left, 0)} L): the pump will lose suction. Tick the part can.`; warn = true; }
+      else if (vol > aI.gap) { note = `${f(vol, 0)} L is more than tank B's shell gap (≈ ${f(aI.gap, 0)} L): B overflows. This is the final batch — tick "tank B reached the neck".`; warn = true; }
+      else {
+        if (aO.bottom) { note += "Tank A near the bottom: the pump may lose suction; a part can is fine (N+?). "; warn = true; }
+        if (aI.halve) { note += "Tank B near the brim: small batches. "; warn = true; }
+        note += `Advice ≈ ${f(adv.target, 0)} L` + (cans ? ` = ${cans} × ${f(act, 0)} L` : "") + " (≈ 30 mm in each tank).";
+      }
+    } else if (adv && drain) {
       note = `Advice ≈ ${f(adv.target, 0)} L` + (cans ? ` = ${cans} × ${f(act, 0)} L` : "") + " (≈ 30 mm fall).";
       if (vol > adv.left) { note = `${f(vol, 0)} L is more than the liquid left (≈ ${f(adv.left, 0)} L): the pump will lose suction. Tick the part can.`; warn = true; }
       else if (adv.bottom) { note = "Near the bottom: the pump may lose suction; a part can is fine (N+?). " + note; warn = true; }
@@ -2275,14 +2911,27 @@
     $("t-chips").innerHTML = chips;
     $("t-undo").disabled = n === 0;
     $("t-part").disabled = n === 0;
-    $("p-go").textContent = drain
-      ? (n ? `Drained: ${n} can${n > 1 ? "s" : ""}, ${f(vol, 0)} L → dip` : "Drained")
-      : (n ? `Batch done: ${n} can${n > 1 ? "s" : ""}, ${f(vol, 0)} L → dip` : "Poured");
+    $("p-go").textContent = transfer
+      ? (n ? `Batch done: ${n} can${n > 1 ? "s" : ""}, ${f(vol, 0)} L → pour into B, then dip both` : "Pumped")
+      : drain
+        ? (n ? `Drained: ${n} can${n > 1 ? "s" : ""}, ${f(vol, 0)} L → dip` : "Drained")
+        : (n ? `Batch done: ${n} can${n > 1 ? "s" : ""}, ${f(vol, 0)} L → dip` : "Poured");
     tickPour(Date.now());
   }
 
   /** The pour card in the words of the campaign direction. */
   function wordPourCard(drain) {
+    if (isTransfer()) {
+      $("pour-title").textContent = "1 · Pump out";
+      $("t-part-text").textContent = "pump lost suction: last can part";
+      $("p-manual-text").textContent = "Enter litres instead (meter, measured part can, unknown batch)";
+      $("p-vol-label").textContent = "Batch, L";
+      $("p-unknown-text").textContent = "whole batch unknown (?)";
+      $("p-over-text").textContent = "tank B: reached the neck / overflowed";
+      $("p-neck-text").textContent = "tank A: level still in the neck";
+      $("t-help").innerHTML = "Start the fill timer when you start the pump. The pump fills the can <b>from tank A</b>. The alarm rings before the can is full: close the valve at the calibrated mark. Tap <b>+1 can full</b> when the can is full. Then empty the cans into <b>tank B</b>. One batch of cans is one step for both tanks: A falls, B rises. Keep A's hose in the same state at every dip. When the pump loses suction, tick <i>pump lost suction: last can part</i>. One dip per tank follows the batch: A first, then B.";
+      return;
+    }
     $("pour-title").textContent = drain ? "1 · Drain" : "1 · Pour";
     $("t-part-text").textContent = drain ? "pump lost suction: last can part" : "last can not fully poured";
     $("p-manual-text").textContent = drain ? "Enter litres instead (meter, measured part can, unknown drain)" : "Enter litres instead (meter, odd can, unknown pour)";
@@ -2337,10 +2986,20 @@
       $("set-brim").value = n.brimPm == null ? "" : String(n.brimPm);
     }
     if (has) {
-      const L0 = S.levels[0];
-      $("set-dir").textContent = isDrain()
-        ? `Direction: drain (pump out), fixed at the start. First level: ${L0 && L0.entrance ? "at the neck entrance (brim B = " + f(S.cfg.brimStart) + " mm)" : L0 && L0.neck ? "in the neck" : "in the shell"}.`
-        : "Direction: fill (pour in), fixed at the start.";
+      $("set-campaign-title").textContent = isTransfer() ? `This tank — ${S.cfg.tank} (switch in the header)` : "This campaign";
+      if (isTransfer()) {
+        const L0 = S.out.levels[0];
+        $("set-dir").textContent = `Direction: transfer — tank A pumps out, tank B pours in. Fixed at the start.`
+          + ` Tank A starts ${L0 && L0.entrance ? "at the neck entrance (brim B = " + f(S.out.cfg.brimStart) + " mm)" : L0 && L0.neck ? "in the neck" : "in the shell"}.`
+          + " This card edits the tank named above; the noise, the cans and the timers are shared.";
+      } else {
+        const L0 = S.levels[0];
+        $("set-dir").textContent = isDrain()
+          ? `Direction: drain (pump out), fixed at the start. First level: ${L0 && L0.entrance ? "at the neck entrance (brim B = " + f(S.cfg.brimStart) + " mm)" : L0 && L0.neck ? "in the neck" : "in the shell"}.`
+          : "Direction: fill (pour in), fixed at the start.";
+      }
+    } else {
+      $("set-campaign-title").textContent = "This campaign";
     }
     $("set-noise-note").textContent = has
       ? "These are the numbers the check uses, one set everywhere (§9.1). A change refits the running shell and restarts the noise scale; earlier rows keep the z from their dip."
@@ -2546,9 +3205,12 @@
     const run = !!pt;
     for (const id of ["pt-less", "pt-more", "pt-stop"]) $(id).classList.toggle("hidden", !run);
     $("pt-start").classList.toggle("hidden", run);
-    const gi = S.lastGood(), p = S.fit.p;
-    // A drain takes the batch out of the tank; a fill puts it in.
-    const tankFrac = gi >= 0 ? Math.min(1, Math.max(0, (C.volume(S.levels[gi].H, p) + S.cfg.dir * S.batchVolume()) / C.capacity(p))) : 0;
+    // A drain takes the batch out of the tank; a fill puts it in.  A transfer
+    // draws the can from tank A, so the drawing follows A.
+    const TA = isTransfer() ? S.out : S;
+    const dir = isTransfer() ? -1 : S.cfg.dir;
+    const gi = TA.lastGood();
+    const tankFrac = gi >= 0 ? Math.min(1, Math.max(0, (C.volume(TA.levels[gi].H, TA.fit.p) + dir * S.batchVolume()) / C.capacity(TA.fit.p))) : 0;
     $("pt-tank").setAttribute("y", String(82 - 42 * tankFrac));
     $("pt-tank").setAttribute("height", String(42 * tankFrac));
     let frac = 0;
@@ -2650,7 +3312,7 @@
       $("dip-settle").className = "muted";
       return;
     }
-    $("dip-settle").textContent = `Settled: ${fmtClock(el)} since the pour. Dip now.`;
+    $("dip-settle").textContent = `Settled: ${fmtClock(el)} since the ${isTransfer() ? "batch" : "pour"}. Dip now.`;
     $("dip-settle").className = "";
     const key = `${pend.row}@${t0}`;
     if (settle > 0 && T.settled !== key) { T.settled = key; saveTimer(); alarm("Settled: dip now"); }
@@ -2660,6 +3322,7 @@
   function tickEta(now) {
     lastEta = now;
     const box = $("now-eta");
+    if (isTransfer()) { tickEtaTransfer(now, box); return; }
     if (!S || S.lastGood() < 0) { box.innerHTML = ""; return; }
     const list = S.canList(), last = list.length ? list[list.length - 1].u : null;
     const u = activeUnit() || last, d = cycleFor(u);
@@ -2674,6 +3337,29 @@
     box.innerHTML = line("To half", plan.half, plan.capacity / 2)
       + (plan.end !== undefined ? line("To bottom", plan.end, plan.endVolume) : line("To brim", plan.brim, plan.capacity))
       + `<div class="muted">${fmtClock(d.seconds)} per can${d.source === "measured" ? " (measured cycle: fill, carry, drain)" : " (fill time only: a floor)"}, settle ${fmtClock(plan.settleSeconds)}, dip ${fmtClock(plan.dipSeconds)} per level. From the running shell and the pour advice, without extra dips.</div>`;
+  }
+
+  /** A transfer shares the batches: A counts down to its bottom, B up to its brim. */
+  function tickEtaTransfer(now, box) {
+    if (S.out.lastGood() < 0 || S.in.lastGood() < 0) { box.innerHTML = ""; return; }
+    const list = S.canList(), last = list.length ? list[list.length - 1].u : null;
+    const u = activeUnit() || last, d = cycleFor(u);
+    if (!(u > 0)) { box.innerHTML = ""; return; }
+    if (!d) {
+      box.innerHTML = `<div class="muted">Set the fill time for ${f(u, 0)} L cans (Timers and alarm, below) to see the time to the bottom of A and to the brim of B.</div>`;
+      return;
+    }
+    const pe = T.pour && T.pour.size === u ? (now - T.pour.start) / 1000 : 0;
+    const open = { volume: S.batchVolume(), cans: S.cans() };
+    const planO = S.out.fillPlan({ size: u, cycleSeconds: d.seconds, now, pourElapsed: pe, open });
+    const planI = S.in.fillPlan({ size: u, cycleSeconds: d.seconds, now, pourElapsed: pe, open });
+    if (!planO || !planI) { box.innerHTML = ""; return; }
+    const line = (name, m, V) => !m ? `<div><b>${name}</b>: —</div>`
+      : m.done ? `<div><b>${name}</b> (${f(V, 0)} L): reached</div>`
+        : `<div><b>${name}</b> (${f(V, 0)} L): ≈ ${fmtSpan(m.seconds)} · done ≈ <b>${hhmm(now + 1000 * m.seconds)}</b> · ${m.levels} level${m.levels > 1 ? "s" : ""} · ${m.cans} × ${f(u, 0)} L</div>`;
+    box.innerHTML = line(`A (${S.out.cfg.tank}) to bottom`, planO.end, planO.endVolume)
+      + line(`B (${S.in.cfg.tank}) to brim`, planI.brim, planI.capacity)
+      + `<div class="muted">Both tanks take the same batches; the cycle now also carries the cans to B and the second dip. Settle ${fmtClock(planO.settleSeconds)}, dip ${fmtClock(planO.dipSeconds)} per tank, two dips per level. From the running shells and the pour advice, without extra dips.</div>`;
   }
 
   // ---- settings
@@ -2958,7 +3644,9 @@
   function renderShell(st) {
     if (tab !== "shell") return;
     const p = st.fit.p, sd = st.fit.sd, pr = S.cfg.prior;
-    $("shell-kv").innerHTML = [
+    const rows = isTransfer()
+      ? [["tank", `${S.cfg.tank} (${isDrain() ? "pump out" : "pour in"}) — switch in the header`]] : [];
+    $("shell-kv").innerHTML = rows.concat([
       ["r", `${f(p.r)} ± ${f(2 * sd.r)} mm (prior ${f(pr.r, 0)} ± ${f(2 * pr.sr, 0)})`],
       ["L", `${f(p.L)} ± ${f(2 * sd.L)} mm (prior ${f(pr.L, 0)} ± ${f(2 * pr.sL, 0)})`],
       ["h0", `${f(p.h0)} ± ${f(2 * sd.h0)} mm (prior 0 ± ${f(2 * pr.sh0, 0)})`],
@@ -2969,13 +3657,13 @@
       ["reading σ", `${f(S.cfg.sigmaRead, 2)} mm · repeat limit ${f(S.cfg.repeatTol, 1)} mm`],
       ["pour noise", `${f(100 * S.cfg.pourRel, 2)} % + ${f(S.cfg.pourAbs, 1)} L`],
       ["states", esc(JSON.stringify(st.counts))],
-    ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("") + "<dt>±</dt><dd>2σ</dd>";
+    ]).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("") + "<dt>±</dt><dd>2σ</dd>";
   }
 
   function renderArchive() {
     const a = archive();
     $("f-archive").innerHTML = a.length ? "<h2 style='margin-top:0.9rem'>Archive</h2>" + a.map((it, i) =>
-      `<div class="row" style="margin:0.3rem 0"><span class="muted">${esc(it.when.slice(0, 16).replace("T", " "))} · ${esc(it.tank)} · ${it.session.levels.length} levels</span>`
+      `<div class="row" style="margin:0.3rem 0"><span class="muted">${esc(it.when.slice(0, 16).replace("T", " "))} · ${esc(it.tank)} · ${archiveLevels(it.session)} levels</span>`
       + `<button class="secondary small" data-i="${i}" data-act="open">Open</button><button class="secondary small" data-i="${i}" data-act="get">Download</button></div>`).join("") : "";
   }
 

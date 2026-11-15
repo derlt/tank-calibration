@@ -614,6 +614,354 @@ class TestSitePage(unittest.TestCase):
         self.assertIn("drained L", got["table"])
 
 
+# A synthetic transfer campaign (§3.12): two known shells, one shared batch.
+# Tank A (drain) starts full at the neck entrance; tank B (fill) starts with
+# 2000 L.  batches: [{s, aOut?, aIn?}] — s is the recorded batch, aOut the
+# litres that really left A, aIn the litres that really reached B (each
+# defaults to the previous one, so {s: 600} is an honest batch).
+TRANSFER_JS = r"""
+const PA = {r: 900, L: 3000, h0: 0};   // tank A truth: capacity 7634 L
+const PB = {r: 1240, L: 5200, h0: 0};  // tank B truth: capacity 25273 L
+const CAPA = core.capacity(PA);
+function runTransfer(batches) {
+  const X = new core.TransferSession(
+    {D: 1800, Dpm: 200, Lest: 3000, tank: 'alpha', pourUnit: 200},
+    {D: 2480, Dpm: 200, Lest: 5200, tank: 'beta', pourUnit: 200});
+  let VA = CAPA, VB = 2000, t = 0;
+  X.start('?', core.brim(PA), '?', core.levelFor(VB, PB), '', null, {at: 'entrance'});
+  X.dip(core.brim(PA)); X.dip(core.levelFor(VB, PB));
+  const dipTank = (k, H) => {
+    X.dip(H);
+    let n = 1;
+    while (X.pendingTank() === k && n < 4) { X.dip(H); n++; }
+  };
+  for (const b of batches) {
+    const aOut = b.aOut == null ? b.s : b.aOut, aIn = b.aIn == null ? aOut : b.aIn;
+    VA -= aOut; VB += aIn;
+    for (let k = 0; k < b.s / 200; k++) X.tap(++t, 200);
+    X.closeBatch({note: b.note || ''});
+    dipTank('out', core.levelFor(VA, PA));
+    dipTank('in', core.levelFor(VB, PB));
+    if (X.pendingTank()) throw new Error('still pending after a batch');
+  }
+  return X;
+}
+"""
+
+
+@unittest.skipUnless(NODE, "node is not installed")
+class TestSiteTransfer(unittest.TestCase):
+    def test_transfer_session_flow(self):
+        got = _node(
+            TRANSFER_JS
+            + """
+const clean = Array.from({length: 5}, () => ({s: 600}));
+const X = runTransfer(clean);
+const out = {};
+out.dirs = [X.out.cfg.direction, X.in.cfg.direction, X.out.cfg.dir, X.in.cfg.dir];
+out.start = [X.out.levels[0].state, X.in.levels[0].state, X.out.cfg.brimStart, X.in.cfg.brimStart];
+out.rows = [X.out.levels.length, X.in.levels.length];
+out.csvA = X.out.toRawCsv();
+out.csvB = X.in.toRawCsv();
+out.pairClean = X.pair;
+// A dip with both tanks decided waits for the next batch.
+out.decided = null;
+try { X.dip(1000); } catch (e) { out.decided = e.message; }
+// A tap while a level waits for its dip is refused.
+X.tap(1, 200); X.tap(2, 200); X.tap(3, 200);
+X.closeBatch({});
+out.openTap = null;
+X.dip(core.levelFor(CAPA - 3600 - 600, PA));
+try { X.tap(4, 200); } catch (e) { out.openTap = e.message; }
+// Undo takes back the reading, then the whole batch from both tanks.
+X.undo();
+out.afterUndo = [X.out.current().state, X.in.current().state, X.out.current().dips.length];
+X.undo();
+out.batchGone = [X.out.levels.length, X.in.levels.length];
+out.reopened = [X.cans(), X.batchVolume()];
+// One recount edits the batch on both tanks.
+const Lo = X.closeBatch({});
+X.editPour('800');
+out.edited = [X.out.current().step.text, X.in.current().step.text,
+  X.out.current().tags.indexOf('pour edited on site') >= 0,
+  X.in.current().tags.indexOf('pour edited on site') >= 0];
+// The tank record follows the active tank; the noise is one set for both.
+X.setCampaign({D: 1900});
+out.geo = [X.out.cfg.D, X.in.cfg.D];
+X.active = 'in';
+X.setCampaign({D: 2100});
+out.geoB = [X.out.cfg.D, X.in.cfg.D];
+X.setCampaign({sigmaRead: 0.5});
+out.noise = [X.out.cfg.sigmaRead, X.in.cfg.sigmaRead];
+out.dirErr = null;
+try { X.setCampaign({direction: 'fill'}); } catch (e) { out.dirErr = e.message; }
+// The JSON round trip keeps both raw files, the edit included.
+const Y = core.TransferSession.fromJSON(JSON.parse(JSON.stringify(X.toJSON())));
+out.roundTrip = [Y.out.toRawCsv() === X.out.toRawCsv(), Y.in.toRawCsv() === X.in.toRawCsv(), Y.active];
+out.advice = X.adviceBatch().text;
+// A failed settings save changes nothing on either tank.
+out.atomicErr = null;
+try { X.setCampaign({D: -1, sigmaRead: 0.7}); } catch (e) { out.atomicErr = e.message; }
+out.atomic = [X.out.cfg.sigmaRead, X.in.cfg.sigmaRead, X.out.cfg.D, X.in.cfg.D];
+// The first undo takes back B's reading: B was dipped last.
+const Z = new core.TransferSession(
+  {D: 1800, Dpm: 200, Lest: 3000, tank: 'alpha', pourUnit: 200},
+  {D: 2480, Dpm: 200, Lest: 5200, tank: 'beta', pourUnit: 200});
+Z.start('?', 1800, '?', 400, '', null, {at: 'entrance'});
+Z.dip(1800); Z.dip(400);
+Z.undo();
+out.undoStart = [Z.out.current().dips.length, Z.in.current().dips.length, Z.pendingTank()];
+console.log(JSON.stringify(out));
+"""
+        )
+        self.assertEqual(got["dirs"], ["drain", "fill", -1, 1])
+        self.assertEqual(got["start"], ["start", "start", 1800.0, None])
+        self.assertEqual(got["rows"], [6, 6], "one level per tank per batch")
+        self.assertIn("drain campaign", got["csvA"])
+        self.assertIn("at neck entrance", got["csvA"])
+        self.assertNotIn("drain campaign", got["csvB"])
+        self.assertIsNone(got["pairClean"], "an honest batch has no pair verdict")
+        self.assertIn("pour the next batch", got["decided"])
+        self.assertIsNotNone(got["openTap"], "no tap while a level waits for its dip")
+        self.assertEqual(got["afterUndo"], ["pending", "pending", 0], "undo takes back the reading")
+        self.assertEqual(got["batchGone"], [6, 6], "undo removes the batch from both tanks")
+        self.assertEqual(got["reopened"], [3, 600], "the batch reopens with its cans")
+        self.assertEqual(got["edited"], ["800", "800", True, True])
+        self.assertEqual(got["geo"], [1900, 2480], "the tank record follows the active tank")
+        self.assertEqual(got["geoB"], [1900, 2100])
+        self.assertEqual(got["noise"], [0.5, 0.5], "the noise is one set for both")
+        self.assertIn("fixed at the start", got["dirErr"])
+        self.assertEqual(got["roundTrip"], [True, True, "in"], "the round trip keeps both raw files")
+        self.assertIn("Next batch", got["advice"])
+        self.assertIn("must be more than 0", got["atomicErr"])
+        self.assertEqual(got["atomic"], [0.5, 0.5, 1900.0, 2100.0],
+                         "a failed settings save changes nothing on either tank")
+        self.assertEqual(got["undoStart"], [2, 1, "in"], "the first undo takes back B's reading")
+
+    def test_transfer_pair_decomposes_the_causes(self):
+        got = _node(
+            TRANSFER_JS
+            + r"""
+const clean = Array.from({length: 5}, () => ({s: 600}));
+const out = {};
+out.clean = runTransfer(clean).pair;
+// One can pumped but not tapped: both tanks see the same wrong litres.
+const C = runTransfer([...clean, {s: 600, aOut: 800, aIn: 800}]);
+out.cans = {status: C.pair.status, ro: C.pair.ro, ri: C.pair.ri, diff: C.pair.diff,
+  states: [C.out.current().state, C.in.current().state],
+  tagA: C.out.current().tags, csv: C.in.toRawCsv()};
+// A spill on the carry: A gave what the record says, B received less.
+const S = runTransfer([...clean, {s: 600, aIn: 500}]);
+out.spill = {status: S.pair.status, diff: S.pair.diff,
+  states: [S.out.current().state, S.in.current().state]};
+// An object in B: B's rise comes too cheap, A is clean.
+const O = runTransfer([...clean, {s: 600, aIn: 700}]);
+out.object = {status: O.pair.status, diff: O.pair.diff};
+// A leak at A's hose: more left A than the record says, B received the record.
+const L = runTransfer([...clean, {s: 600, aOut: 800, aIn: 600}]);
+out.leak = {status: L.pair.status, diff: L.pair.diff,
+  states: [L.out.current().state, L.in.current().state]};
+console.log(JSON.stringify(out));
+"""
+        )
+        self.assertIsNone(got["clean"])
+        self.assertEqual(got["cans"]["status"], "POUR")
+        for k in ("ro", "ri"):
+            self.assertAlmostEqual(got["cans"][k], -200.0, delta=1.0, msg=k)
+        self.assertLess(abs(got["cans"]["diff"]), 2.0, "a shared pour error shows the same litres")
+        self.assertEqual(got["cans"]["states"], ["anomaly", "anomaly"])
+        self.assertIn("transfer: shared pour error", got["cans"]["tagA"])
+        self.assertIn("transfer: shared pour error", got["cans"]["csv"], "the raw file keeps the pair finding")
+        self.assertEqual(got["spill"]["status"], "LOSS")
+        self.assertAlmostEqual(got["spill"]["diff"], 100.0, delta=1.0)
+        self.assertEqual(got["spill"]["states"], ["accepted", "anomaly"], "A's interval is good")
+        self.assertEqual(got["object"]["status"], "BOBJECT")
+        self.assertAlmostEqual(got["object"]["diff"], -100.0, delta=1.0)
+        self.assertEqual(got["leak"]["status"], "ALEAK")
+        self.assertAlmostEqual(got["leak"]["diff"], 200.0, delta=1.0)
+        self.assertEqual(got["leak"]["states"], ["anomaly", "accepted"], "B's interval is good")
+
+    def test_transfer_pair_leaves_with_the_level(self):
+        got = _node(
+            TRANSFER_JS
+            + r"""
+const clean = Array.from({length: 5}, () => ({s: 600}));
+const out = {};
+// A shared pour error, then a recount to an unknown volume: the pair and
+// its tags leave with the residual they judged.
+const C = runTransfer([...clean, {s: 600, aOut: 800, aIn: 800}]);
+out.before = {status: C.pair.status, states: [C.out.current().state, C.in.current().state]};
+C.editPour('?');
+out.recount = {pair: C.pair, states: [C.out.current().state, C.in.current().state],
+  csvA: C.out.toRawCsv(), csvB: C.in.toRawCsv()};
+// An override is an operator decision, not a prediction test: the pair
+// leaves with it too.
+const S = runTransfer([...clean, {s: 600, aIn: 500}]);
+out.spill = S.pair.status;
+S.active = 'in';
+S.override('accepted after inspection');
+out.override = {pair: S.pair, state: S.in.current().state, csvB: S.in.toRawCsv()};
+console.log(JSON.stringify(out));
+"""
+        )
+        self.assertEqual(got["before"]["status"], "POUR")
+        self.assertEqual(got["before"]["states"], ["anomaly", "anomaly"])
+        self.assertIsNone(got["recount"]["pair"], "an unknown pour has no comparable residual")
+        self.assertEqual(got["recount"]["states"], ["unknown", "unknown"])
+        self.assertNotIn("transfer:", got["recount"]["csvA"], "the finding leaves both raw files")
+        self.assertNotIn("transfer:", got["recount"]["csvB"], "the finding leaves both raw files")
+        self.assertEqual(got["spill"], "LOSS")
+        self.assertIsNone(got["override"]["pair"], "an override is not a prediction test")
+        self.assertEqual(got["override"]["state"], "override")
+        self.assertNotIn("transfer:", got["override"]["csvB"])
+
+    def test_transfer_pair_unsure_with_a_wide_clean_side(self):
+        got = _node(
+            r"""
+const PA = {r: 900, L: 3000, h0: 0}, PB = {r: 1240, L: 5200, h0: 0};
+const CAPA = core.capacity(PA);
+// Tank B's record is weak (wide priors) and the last batch rises far above
+// the levels B has seen, so B's check is wide: an honest B can confirm
+// nothing.  Tank A is sharp and at its action bar: 200 L left it off the
+// record.  One cause fits both readings, so the pair says UNSURE.
+const X = new core.TransferSession(
+  {D: 1800, Dpm: 200, Lest: 3000, Lpm: 90, tank: 'alpha', pourUnit: 200},
+  {D: 2480, Dpm: 2500, Lest: 5200, Lpm: 4000, tank: 'beta', pourUnit: 200});
+let VA = CAPA, VB = 2000, t = 0;
+X.start('?', core.brim(PA), '?', core.levelFor(VB, PB), '', null, {at: 'entrance'});
+X.dip(core.brim(PA)); X.dip(core.levelFor(VB, PB));
+const dipTank = (k, H) => {
+  X.dip(H);
+  let n = 1;
+  while (X.pendingTank() === k && n < 4) { X.dip(H); n++; }
+};
+for (let i = 0; i < 3; i++) {
+  VA -= 600; VB += 600;
+  for (let k = 0; k < 3; k++) X.tap(++t, 200);
+  X.closeBatch({});
+  dipTank('out', core.levelFor(VA, PA));
+  dipTank('in', core.levelFor(VB, PB));
+}
+VA -= 4200; VB += 4000;   // 200 L left A off the record; B got what the count says
+for (let k = 0; k < 20; k++) X.tap(++t, 200);
+X.closeBatch({});
+dipTank('out', core.levelFor(VA, PA));
+dipTank('in', core.levelFor(VB, PB));
+const out = {};
+const Lo = X.out.current(), Li = X.in.current();
+out.sides = [Lo.state, Li.state, Li.check.sharp, +Li.check.mm.toFixed(2)];
+out.pair = {status: X.pair.status, title: X.pair.title, tagA: Lo.tags,
+  z: +X.pair.z.toFixed(2), diff: +X.pair.diff.toFixed(1)};
+out.csv = X.in.toRawCsv();
+console.log(JSON.stringify(out));
+"""
+        )
+        self.assertEqual(got["sides"], ["anomaly", "accepted", False, 0.0],
+                         "A at the bar, B honest behind a wide band")
+        self.assertEqual(got["pair"]["status"], "UNSURE")
+        self.assertEqual(got["pair"]["title"], "only tank A shows it")
+        self.assertIn("transfer: A-side only", got["pair"]["tagA"])
+        self.assertLess(abs(got["pair"]["z"]), 2.0, "the difference is inside the two checks' noise")
+        self.assertAlmostEqual(got["pair"]["diff"], 200.0, delta=2.0)
+        self.assertIn("transfer: A-side only", got["csv"], "the finding goes into both raw files")
+
+    def test_page_transfer(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "el('s-dir-transfer').click();\n"
+            "out.setup = {b: !el('s-b-wrap')._classes.has('hidden'),"
+            " at: !el('s-at-wrap')._classes.has('hidden'),"
+            " note: el('s-dir-note').textContent, a: el('s-tank-label').textContent,"
+            " dip: el('s-dip-label').textContent, first: el('s-first-note').textContent};\n"
+            "el('s-tank').value = 'alpha'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('sB-tank').value = 'beta'; el('sB-D').value = '2480'; el('sB-L').value = '5200';\n"
+            "el('s-dip').value = '1800'; el('sB-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click();\n"
+            "out.hdr = {title: el('hdr-title').textContent, phase: el('hdr-phase').textContent,"
+            " seg: !el('hdr-tank')._classes.has('hidden'), a: el('hdr-tank-a').textContent,"
+            " b: el('hdr-tank-b').textContent};\n"
+            "out.dipA = el('dip-title').textContent + ' | ' + el('dip-label').textContent;\n"
+            "el('d-val').value = '1800'; el('d-go').click();\n"
+            "el('d-val').value = '1800'; el('d-go').click();\n"
+            "out.dipB = el('dip-title').textContent + ' | ' + el('dip-label').textContent;\n"
+            "el('d-val').value = '400'; el('d-go').click();\n"
+            "el('d-val').value = '400'; el('d-go').click();\n"
+            "out.card = {title: el('pour-title').textContent, plus: el('t-plus').textContent,"
+            " neck: !el('p-neck-wrap')._classes.has('hidden'), over: el('p-over-text').textContent,"
+            " neckText: el('p-neck-text').textContent, advice: el('now-advice').textContent};\n"
+            "el('t-plus').click(); el('t-plus').click(); el('t-plus').click();\n"
+            "out.go = el('p-go').textContent;\n"
+            "el('p-go').click();\n"
+            "out.dip1 = el('dip-label').textContent;\n"
+            "el('d-val').value = '1700'; el('d-go').click();\n"
+            "el('d-val').value = '1700'; el('d-go').click();\n"
+            "out.dip2 = el('dip-label').textContent;\n"
+            "el('d-val').value = '500'; el('d-go').click();\n"
+            "el('d-val').value = '500'; el('d-go').click();\n"
+            "out.verdict = el('verdict').innerHTML;\n"
+            "const cfg = JSON.parse(store.get('calib-site:active'));\n"
+            "out.saved = {kind: cfg.kind, levels: [cfg.out.levels.length, cfg.in.levels.length],"
+            " pour: [cfg.out.levels[1].pourTime != null, cfg.in.levels[1].pourTime != null]};\n"
+            "// Files: one raw file per tank.\n"
+            "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'files' } }) } });\n"
+            "out.files = {a: el('f-csv').textContent, b: !el('f-csv-b')._classes.has('hidden')};\n"
+            "// The header switch turns the log, the shell and the settings to tank B.\n"
+            "el('hdr-tank')._listeners.click[0]({ target: { closest: () => ({ dataset: { tank: 'in' } }) } });\n"
+            "// The A button still exports tank A's file with B active.\n"
+            "el('f-csv').click(); el('f-csv-b').click();\n"
+            "out.export = {a: p.downloads[p.downloads.length - 2].download,"
+            " b: p.downloads[p.downloads.length - 1].download,"
+            " label: el('f-csv').textContent, show: el('f-show').textContent};\n"
+            "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'log' } }) } });\n"
+            "out.log = el('log-table').innerHTML;\n"
+            "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'shell' } }) } });\n"
+            "out.shell = el('shell-kv').innerHTML;\n"
+            "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'settings' } }) } });\n"
+            "out.settings = {title: el('set-campaign-title').textContent, dir: el('set-dir').textContent};\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertTrue(got["setup"]["b"], "tank B's fields show")
+        self.assertTrue(got["setup"]["at"], "tank A is a drain: the start-level choice shows")
+        self.assertIn("Two tanks, one water", got["setup"]["note"])
+        self.assertIn("Tank A name", got["setup"]["a"])
+        self.assertEqual(got["setup"]["dip"], "Tank A first reading, mm")
+        self.assertIn("Prime the pump", got["setup"]["first"])
+        self.assertEqual(got["hdr"]["title"], "alpha → beta — transfer")
+        self.assertIn("transfer", got["hdr"]["phase"])
+        self.assertTrue(got["hdr"]["seg"])
+        self.assertEqual(got["hdr"]["a"], "alpha")
+        self.assertEqual(got["hdr"]["b"], "beta")
+        self.assertIn("alpha", got["dipA"])
+        self.assertIn("beta", got["dipB"], "the dip goes to B once A is decided")
+        self.assertEqual(got["card"]["title"], "1 · Pump out")
+        self.assertEqual(got["card"]["plus"], "+1 can full (200 L)")
+        self.assertTrue(got["card"]["neck"], "the neck tick shows for tank A")
+        self.assertEqual(got["card"]["over"], "tank B: reached the neck / overflowed")
+        self.assertEqual(got["card"]["neckText"], "tank A: level still in the neck")
+        self.assertIn("Next batch", got["card"]["advice"])
+        self.assertIn("pour into B, then dip both", got["go"])
+        self.assertIn("alpha", got["dip1"])
+        self.assertIn("beta", got["dip2"])
+        self.assertIn("alpha:", got["verdict"])
+        self.assertIn("beta:", got["verdict"])
+        self.assertEqual(got["saved"], {"kind": "transfer", "levels": [2, 2], "pour": [True, True]})
+        self.assertEqual(got["files"]["a"], "Download alpha_raw.csv (tank A)")
+        self.assertTrue(got["files"]["b"])
+        self.assertEqual(got["export"], {"a": "alpha_raw.csv", "b": "beta_raw.csv",
+                                         "label": "Download alpha_raw.csv (tank A)",
+                                         "show": "Show beta CSV"},
+                         "with tank B active, the A button still exports tank A")
+        self.assertIn("pour L", got["log"], "tank B's log reads as a fill")
+        self.assertIn("beta", got["shell"])
+        self.assertIn("beta", got["settings"]["title"])
+        self.assertIn("transfer", got["settings"]["dir"])
+
+
 @unittest.skipUnless(NODE, "node is not installed")
 class TestSiteCore(unittest.TestCase):
     def test_geometry_matches_python(self):

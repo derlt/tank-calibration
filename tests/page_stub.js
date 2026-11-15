@@ -55,9 +55,10 @@ function boot(pagePath, corePath, store) {
   el("tabs").querySelectorAll = (sel) => (sel === "button" ? tabs : []);
 
   const mem = store || new Map();
+  const downloads = [];   // every <a> the page makes: { download: filename, href }
   const context = {
     window: { CalibSite: core, addEventListener: () => {} },
-    document: { getElementById: el, createElement: () => makeElement("a"), body: { appendChild: () => {} } },
+    document: { getElementById: el, createElement: () => { const a = makeElement("a"); downloads.push(a); return a; }, body: { appendChild: () => {} } },
     localStorage: {
       getItem: (k) => (mem.has(k) ? mem.get(k) : null),
       setItem: (k, v) => mem.set(k, v),
@@ -87,7 +88,7 @@ function boot(pagePath, corePath, store) {
   context.window.document = context.document;
   vm.createContext(context);
   vm.runInContext(pageScript, context);
-  return { el, tabs, store: mem };
+  return { el, tabs, store: mem, downloads };
 }
 
 module.exports = { boot };

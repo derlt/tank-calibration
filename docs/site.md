@@ -52,7 +52,7 @@ requests. To keep the one file on a phone, use `site/calib_site.html`.
 | Reading repeatability σ | **Settings → Noise and limits**. From a repeat study (below). Default 0.4 mm. |
 | Pour noise | **Settings → Noise and limits**. From the can calibration (§3.1). Default 0.5 % + 3 L. |
 | Datum | **Settings → Noise and limits**. 0 ± 80 mm unless you sounded the bottom. |
-| Fill or drain | *Fill: pour in* (default) or *Drain: pump out*. See *Drain campaign* below. |
+| Fill or drain | *Fill: pour in* (default), *Drain: pump out*, or *Two tanks: pump A → pour B* (below). |
 | First level | The heel volume (or `?`) and the first reading. A drain also asks where the first level stands. |
 
 Every ± means "the truth is almost surely inside" (2σ).
@@ -366,17 +366,62 @@ reading per run is slipped by δ.
 
 | Campaign | Slip | Caught | Kept > 1.5 mm off | Extra dips at honest levels | False ALARM | mean \|Δr\| | mean \|ΔL\| |
 |---|---|---|---|---|---|---|---|
-| Fill | 3 mm | 89 % | 12 % | 4.6 % | 0.17 % | 1.9 mm | 12.2 mm |
-| Fill | 4 mm | 99 % | 2 % | 3.3 % | 0.07 % | 1.8 mm | 11.8 mm |
-| Drain | 3 mm | 93 % | 8 % | 2.1 % | 0.08 % | 1.2 mm | 8.0 mm |
-| Drain | 4 mm | 99 % | 1 % | 2.4 % | 0.03 % | 1.2 mm | 8.7 mm |
-| Drain, shell start | 3 mm | 88 % | 12 % | 2.7 % | 0.51 % | 1.3 mm | 9.1 mm |
-| Drain, shell start | 4 mm | 99 % | 2 % | 3.0 % | 0.40 % | 1.2 mm | 8.4 mm |
+| Fill | 3 mm | 92 % | 8 % | 3.8 % | 0.10 % | 2.0 mm | 13.3 mm |
+| Fill | 4 mm | 99 % | 1 % | 4.2 % | 0.04 % | 2.0 mm | 12.8 mm |
+| Drain | 3 mm | 91 % | 9 % | 2.4 % | 0.16 % | 1.2 mm | 8.6 mm |
+| Drain | 4 mm | 99 % | 1 % | 2.5 % | 0.03 % | 1.2 mm | 8.6 mm |
+| Drain, shell start | 3 mm | 88 % | 13 % | 2.8 % | 0.51 % | 1.3 mm | 9.1 mm |
+| Drain, shell start | 4 mm | 99 % | 2 % | 3.1 % | 0.38 % | 1.2 mm | 8.5 mm |
 
 σr 0.4 mm, pours 0.5 % + 3 L, D ± 200 mm, seed 1. The brim prior of the
-neck-entrance start catches more 3 mm slips (93 % against 88 %) and gives
-fewer false alarms (0.08 % against 0.51 %): the early checks know the top.
+neck-entrance start catches more 3 mm slips (91 % against 88 %) and gives
+fewer false alarms (0.16 % against 0.51 %): the early checks know the top.
 The final running shell is about the same with either start.
+
+## Two tanks at once (transfer)
+
+Choose **Two tanks: pump A → pour B** to calibrate two tanks with one water.
+A pump draws known volumes out of the full **tank A** into calibrated cans,
+and the same cans are emptied into **tank B**. Tank A is a drain (see above);
+tank B is a fill. One batch of cans is one step for both tanks: A falls, B
+rises. The method is §3.12 of the methodology.
+
+The setup asks for both tanks: A's record (it is a drain, so the start-level
+choice applies to A) and B's record with its heel. Both first levels are
+dipped before the first batch, two readings each. Then each batch is: pump
+cans from A → *Batch done* → empty the cans into B → dip A → dip B.
+
+Each tank keeps its own check, its own running shell and its own raw file.
+The header has an **A / B switch**: it turns the Log & charts tab, the Shell
+tab and the campaign card to the other tank. The Live tab always shows both.
+*Files* exports one raw CSV per tank.
+
+**The pair view.** When both dips of a batch are in, the page compares the
+two residuals of the same batch — but only on levels the prediction test
+decided: a recount to `?`, an override, or a neck or overflow reading leaves
+no comparable residual, and the finding leaves with it. The cans are shared,
+so a pour error shows the same litres in both tanks, and the pour noise
+cancels in the difference:
+
+| The two residuals say | Cause | Do |
+|---|---|---|
+| the same litres, both at the action bar | the cans: a miscount, or a can not filled to its mark | Count the cans again. *Recount: edit pour* edits both tanks at once. |
+| litres that only B misses, A clean | liquid lost on the way: a spill at the carry, a can not emptied | Check the path and the cans. B's interval goes to the register (LOSS?); A's is good. |
+| only A shows it | A's side: the hose, the pump seal, a spill at the can (LEAK? / RETURN?) | Check the hose state. A's interval goes to the register; B's is good. |
+| only B shows it, rise too cheap | an object in B in this band (OBJECT?) | Inspect B, or repeat a pour into it (§6.2). A's interval is good. |
+| both at the bar, different litres | superposed causes | Decompose before correcting either tank (§6.2). |
+
+A wide check on one side can confirm nothing: the page says so instead of
+guessing, and a recount of the cans always comes first, because one edit
+fixes both files. The finding goes into the note of both raw files, for
+example `transfer: shared pour error`.
+
+The batch advice takes the tighter of the two 30 mm targets, and warns for
+both limits at once: A's bottom (the pump may lose suction — tick *pump lost
+suction: last can part*) and B's brim (tick *tank B: reached the neck* on the
+final batch). The campaign ends when A is empty or B is full, whichever
+comes first. The noise, the cans and the timers are one set for both tanks
+(§9.1).
 
 ## After the campaign
 

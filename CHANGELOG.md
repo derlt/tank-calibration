@@ -8,6 +8,25 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Transfer strapping (two tanks, one water, §3.12): the on-site page can
+  calibrate two tanks at once. A pump draws known volumes out of the full
+  tank A into calibrated cans, and the same cans are emptied into tank B: A
+  is a drain, B is a fill, and one batch of cans is one step for both. Each
+  tank keeps its own check, its own running shell and its own raw file; the
+  page dips A then B after each batch and exports one CSV per tank. When
+  both dips are in, the **pair view** compares the two residuals of the same
+  batch: the same litres in both means the cans (one recount edits both
+  tanks), litres only B misses means a spill on the way, a miss only one
+  tank shows means that tank or its hose. The pour noise is common to both
+  residuals and cancels in the difference, so the comparison is sharper than
+  either check alone; a wide check on one side is reported as confirming
+  nothing. The finding goes into the note of both raw files. The batch
+  advice takes the tighter of the two 30 mm targets, with A's bottom watch
+  and B's brim watch; the noise, the cans and the timers are one set for
+  both tanks; the header's A/B switch turns the log, shell and campaign
+  cards to the other tank. `TransferSession` in `site/site_core.js`;
+  methodology §3.12; operator guide in `docs/site.md`;
+  `tests/test_site.py::TestSiteTransfer`.
 - Reverse strapping (drain campaigns, §3.11): a tank that is already full is
   calibrated from the top down, with a pump that draws known volumes out in
   cans. `"direction": "drain"` in the campaign JSON; `calib init` infers it
@@ -82,6 +101,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- The live check's noise scale no longer counts the level under test. Its
+  own first-dip miss inflated the scale that then judged its second reading:
+  with few scored levels the median sat on the anomaly itself, and a
+  confirmed miss shrank below the action bar (in a noiseless synthetic
+  campaign, z = −26 became −2.4 and an ALARM turned into a WATCH). The
+  scale is now set by decided levels only, as "earlier one-step misses"
+  always said. The detection-rate table in `docs/site.md` was re-run with
+  the fix: small shifts only (a 3 mm slip in a fill 89 → 92 % caught, in a
+  drain 93 → 91 %, false alarms down in both).
 - Workbook charts use bare `RRGGBB` in `a:srgbClr`. The matplotlib constants
   carry a leading `#`, which OOXML rejects; Excel then repaired the file by
   removing the drawing part ("Removed Part: /xl/drawings/drawing1.xml").
