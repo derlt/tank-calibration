@@ -1341,6 +1341,48 @@
     return v;
   };
 
+  /** The tanks whose level still waits for a reading, A first. */
+  TransferSession.prototype.pendingTanks = function () {
+    const out = [];
+    for (const k of ["out", "in"]) {
+      const cur = this[k].current();
+      if (cur && cur.state === "pending") out.push(k);
+    }
+    return out;
+  };
+
+  /**
+   * One reading per tank, entered together (§3.12): the two dips of a batch
+   * can be typed in one go.  A tank left blank keeps waiting; a value for a
+   * decided tank is refused before either reading is recorded, so a stale
+   * field cannot re-open a level by accident.
+   */
+  TransferSession.prototype.dipBoth = function (a, b, time) {
+    const vals = { out: a, in: b }, got = {};
+    for (const k of ["out", "in"]) {
+      const v = vals[k];
+      if (v == null || (typeof v === "string" && v.trim() === "")) continue;
+      const cur = this[k].current();
+      if (!cur || cur.state !== "pending") {
+        throw new Error(`tank ${this[k].cfg.tank} is decided: take another reading to re-open it`);
+      }
+      // Both readings are checked before either is recorded: a typo in one
+      // field must not leave the other tank's reading behind.
+      const n = typeof v === "number" ? v : parseFloat(String(v).replace(",", "."));
+      if (!isFinite(n)) throw new Error(`cannot read dip ${JSON.stringify(v)}`);
+      got[k] = v;
+    }
+    if (!Object.keys(got).length) throw new Error("enter at least one reading");
+    const res = {};
+    for (const k of ["out", "in"]) {
+      if (!Object.prototype.hasOwnProperty.call(got, k)) continue;
+      res[k] = this[k].dip(got[k], time);
+      this.lastDip = k;
+    }
+    this._pair();
+    return res;
+  };
+
   /** A new batch opens one level on both tanks with the same step. */
   TransferSession.prototype.pour = function (stepText, opts) {
     this._guard();

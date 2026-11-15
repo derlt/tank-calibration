@@ -556,6 +556,8 @@ class TestSitePage(unittest.TestCase):
             "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
             "el('s-dip').value = '1800'; el('s-unit').value = '200';\n"
             "el('s-go').click(); el('d-val').value = '1800'; el('d-go').click();\n"
+            "out.roles = [el('dip-role')._classes.has('hidden'), el('dip-role-b')._classes.has('hidden'),"
+            " el('d-val')._classes.has('dip-out'), el('d-val-b')._classes.has('dip-in')];\n"
             "const cfg = JSON.parse(store.get('calib-site:active')).config;\n"
             "out.cfg = {direction: cfg.direction, brimStart: cfg.brimStart, brimPm: cfg.brimPm};\n"
             "out.csv1 = JSON.parse(store.get('calib-site:active')).levels[0].tags;\n"
@@ -589,6 +591,8 @@ class TestSitePage(unittest.TestCase):
         self.assertIn("Prime the pump", got["firstNote"])
         self.assertEqual(got["cfg"], {"direction": "drain", "brimStart": 1800, "brimPm": 6})
         self.assertEqual(got["csv1"], ["at neck entrance"])
+        self.assertEqual(got["roles"], [True, True, False, False],
+                         "a single tank shows no role badge and no coloured edge")
         self.assertEqual(got["plus"], "+1 can full (200 L)")
         self.assertEqual(got["go"], "Drained")
         self.assertEqual(got["title"], "1 · Drain")
@@ -738,6 +742,57 @@ console.log(JSON.stringify(out));
                          "a failed settings save changes nothing on either tank")
         self.assertEqual(got["undoStart"], [2, 1, "in"], "the first undo takes back B's reading")
 
+    def test_transfer_dip_both(self):
+        got = _node(
+            r"""
+const X = new core.TransferSession(
+  {D: 1800, Dpm: 200, Lest: 3000, tank: 'alpha', pourUnit: 200},
+  {D: 2480, Dpm: 200, Lest: 5200, tank: 'beta', pourUnit: 200});
+X.start('?', 1800, '?', 400, '', null, {at: 'entrance'});
+const out = {};
+const dips = (S) => [S.out.current().dips.length, S.in.current().dips.length];
+out.start = dips(X).concat([X.pendingTanks()]);
+// One field only: the other tank keeps waiting.
+X.dipBoth(1800, null);
+out.one = dips(X).concat([X.pendingTanks()]);
+X.dipBoth(null, 400);
+out.oneB = dips(X).concat([X.pendingTanks()]);
+out.states = [X.out.current().state, X.in.current().state];
+// Both fields at once on a fresh session: A first, then B.
+const Y = new core.TransferSession(
+  {D: 1800, Dpm: 200, Lest: 3000, tank: 'alpha', pourUnit: 200},
+  {D: 2480, Dpm: 200, Lest: 5200, tank: 'beta', pourUnit: 200});
+Y.start('?', 1800, '?', 400, '', null, {at: 'entrance'});
+Y.dipBoth(1800, 400);
+out.both = dips(Y).concat([Y.pendingTanks()]);
+// A value for a decided tank is refused before anything is recorded.
+out.err = null;
+try { X.dipBoth(1700, 300); } catch (e) { out.err = e.message; }
+out.after = dips(X);
+out.blank = null;
+try { X.dipBoth(null, ''); } catch (e) { out.blank = e.message; }
+// A typo in one field records neither reading.
+const Z = new core.TransferSession(
+  {D: 1800, Dpm: 200, Lest: 3000, tank: 'alpha', pourUnit: 200},
+  {D: 2480, Dpm: 200, Lest: 5200, tank: 'beta', pourUnit: 200});
+Z.start('?', 1800, '?', 400, '', null, {at: 'entrance'});
+out.bad = null;
+try { Z.dipBoth(1800, 'abc'); } catch (e) { out.bad = e.message; }
+out.badAfter = dips(Z);
+console.log(JSON.stringify(out));
+"""
+        )
+        self.assertEqual(got["start"], [1, 1, ["out", "in"]], "start takes one reading per tank")
+        self.assertEqual(got["one"], [2, 1, ["in"]], "only A was filled: B keeps waiting")
+        self.assertEqual(got["oneB"], [2, 2, []], "B's reading alone finishes the batch")
+        self.assertEqual(got["states"], ["start", "start"])
+        self.assertEqual(got["both"], [2, 2, []], "both readings in one call")
+        self.assertIn("alpha is decided", got["err"])
+        self.assertEqual(got["after"], [2, 2], "a refused entry records nothing")
+        self.assertIn("at least one reading", got["blank"])
+        self.assertIn("cannot read dip", got["bad"])
+        self.assertEqual(got["badAfter"], [1, 1], "a bad field records neither reading")
+
     def test_transfer_pair_decomposes_the_causes(self):
         got = _node(
             TRANSFER_JS
@@ -885,24 +940,30 @@ console.log(JSON.stringify(out));
             "out.hdr = {title: el('hdr-title').textContent, phase: el('hdr-phase').textContent,"
             " seg: !el('hdr-tank')._classes.has('hidden'), a: el('hdr-tank-a').textContent,"
             " b: el('hdr-tank-b').textContent};\n"
-            "out.dipA = el('dip-title').textContent + ' | ' + el('dip-label').textContent;\n"
-            "el('d-val').value = '1800'; el('d-go').click();\n"
-            "el('d-val').value = '1800'; el('d-go').click();\n"
-            "out.dipB = el('dip-title').textContent + ' | ' + el('dip-label').textContent;\n"
-            "el('d-val').value = '400'; el('d-go').click();\n"
-            "el('d-val').value = '400'; el('d-go').click();\n"
+            "out.dipA = {a: el('dip-label').textContent, b: el('dip-label-b').textContent,"
+            " row: !el('dip-row-b')._classes.has('hidden'), go: el('d-go').textContent,"
+            " role: el('dip-role').textContent, roleB: el('dip-role-b').textContent,"
+            " roleHidden: el('dip-role')._classes.has('hidden'),"
+            " roleBHidden: el('dip-role-b')._classes.has('hidden'),"
+            " edgeOut: el('d-val')._classes.has('dip-out'),"
+            " edgeIn: el('d-val-b')._classes.has('dip-in')};\n"
+            "const dips = () => { const c = JSON.parse(store.get('calib-site:active'));"
+            " return [c.out.levels[0].dips.length, c.in.levels[0].dips.length]; };\n"
+            "// Both second readings in one go: two fields, one button.\n"
+            "el('d-val').value = '1800'; el('d-val-b').value = '400'; el('d-go').click();\n"
+            "out.both1 = dips();\n"
             "out.card = {title: el('pour-title').textContent, plus: el('t-plus').textContent,"
             " neck: !el('p-neck-wrap')._classes.has('hidden'), over: el('p-over-text').textContent,"
             " neckText: el('p-neck-text').textContent, advice: el('now-advice').textContent};\n"
             "el('t-plus').click(); el('t-plus').click(); el('t-plus').click();\n"
             "out.go = el('p-go').textContent;\n"
             "el('p-go').click();\n"
-            "out.dip1 = el('dip-label').textContent;\n"
-            "el('d-val').value = '1700'; el('d-go').click();\n"
-            "el('d-val').value = '1700'; el('d-go').click();\n"
-            "out.dip2 = el('dip-label').textContent;\n"
-            "el('d-val').value = '500'; el('d-go').click();\n"
-            "el('d-val').value = '500'; el('d-go').click();\n"
+            "out.dip1 = {a: el('dip-label').textContent, b: el('dip-label-b').textContent,"
+            " go: el('d-go').textContent};\n"
+            "el('d-val').value = '1700'; el('d-val-b').value = '500'; el('d-go').click();\n"
+            "if (!el('d-val').disabled) el('d-val').value = '1700';\n"
+            "if (!el('d-val-b').disabled) el('d-val-b').value = '500';\n"
+            "if (!el('d-val').disabled || !el('d-val-b').disabled) el('d-go').click();\n"
             "out.verdict = el('verdict').innerHTML;\n"
             "const cfg = JSON.parse(store.get('calib-site:active'));\n"
             "out.saved = {kind: cfg.kind, levels: [cfg.out.levels.length, cfg.in.levels.length],"
@@ -918,7 +979,14 @@ console.log(JSON.stringify(out));
             " b: p.downloads[p.downloads.length - 1].download,"
             " label: el('f-csv').textContent, show: el('f-show').textContent};\n"
             "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'log' } }) } });\n"
-            "out.log = el('log-table').innerHTML;\n"
+            "out.log = {title: el('log-title').textContent, chart: el('chart-title').textContent,"
+            " seg: !el('log-tank')._classes.has('hidden'), a: el('log-tank-a').textContent,"
+            " b: el('log-tank-b').textContent, table: el('log-table').innerHTML};\n"
+            "// The switch in the tab turns its table and chart to tank A, and the header follows.\n"
+            "el('log-tank')._listeners.click[0]({ target: { closest: () => ({ dataset: { tank: 'out' } }) } });\n"
+            "out.logA = {title: el('log-title').textContent, chart: el('chart-title').textContent,"
+            " table: el('log-table').innerHTML, hdr: el('hdr-tank-a')['aria-pressed'],"
+            " tab: el('log-tank-a')['aria-pressed']};\n"
             "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'shell' } }) } });\n"
             "out.shell = el('shell-kv').innerHTML;\n"
             "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'settings' } }) } });\n"
@@ -936,8 +1004,19 @@ console.log(JSON.stringify(out));
         self.assertTrue(got["hdr"]["seg"])
         self.assertEqual(got["hdr"]["a"], "alpha")
         self.assertEqual(got["hdr"]["b"], "beta")
-        self.assertIn("alpha", got["dipA"])
-        self.assertIn("beta", got["dipB"], "the dip goes to B once A is decided")
+        self.assertIn("alpha: next reading", got["dipA"]["a"])
+        self.assertIn("beta: next reading", got["dipA"]["b"], "both tanks ask for a reading at once")
+        self.assertTrue(got["dipA"]["row"], "the second field shows")
+        self.assertEqual(got["dipA"]["go"], "Check both")
+        self.assertIn("pump out", got["dipA"]["role"], "tank A's field is marked pump out")
+        self.assertIn("pour in", got["dipA"]["roleB"], "tank B's field is marked pour in")
+        self.assertTrue(got["dipA"]["role"].startswith("↑"), "the pump-out arrow points up, out of the tank")
+        self.assertTrue(got["dipA"]["roleB"].startswith("↓"), "the pour-in arrow points down, into the tank")
+        self.assertFalse(got["dipA"]["roleHidden"])
+        self.assertFalse(got["dipA"]["roleBHidden"])
+        self.assertTrue(got["dipA"]["edgeOut"], "tank A's field has its own edge colour")
+        self.assertTrue(got["dipA"]["edgeIn"], "tank B's field has its own edge colour")
+        self.assertEqual(got["both1"], [2, 2], "one reading per tank in one click")
         self.assertEqual(got["card"]["title"], "1 · Pump out")
         self.assertEqual(got["card"]["plus"], "+1 can full (200 L)")
         self.assertTrue(got["card"]["neck"], "the neck tick shows for tank A")
@@ -945,8 +1024,9 @@ console.log(JSON.stringify(out));
         self.assertEqual(got["card"]["neckText"], "tank A: level still in the neck")
         self.assertIn("Next batch", got["card"]["advice"])
         self.assertIn("pour into B, then dip both", got["go"])
-        self.assertIn("alpha", got["dip1"])
-        self.assertIn("beta", got["dip2"])
+        self.assertIn("alpha", got["dip1"]["a"])
+        self.assertIn("beta", got["dip1"]["b"])
+        self.assertEqual(got["dip1"]["go"], "Check both")
         self.assertIn("alpha:", got["verdict"])
         self.assertIn("beta:", got["verdict"])
         self.assertEqual(got["saved"], {"kind": "transfer", "levels": [2, 2], "pour": [True, True]})
@@ -956,9 +1036,18 @@ console.log(JSON.stringify(out));
                                          "label": "Download alpha_raw.csv (tank A)",
                                          "show": "Show beta CSV"},
                          "with tank B active, the A button still exports tank A")
-        self.assertIn("pour L", got["log"], "tank B's log reads as a fill")
-        self.assertIn("beta", got["shell"])
-        self.assertIn("beta", got["settings"]["title"])
+        self.assertEqual(got["log"]["title"], "Levels — beta")
+        self.assertIn("beta —", got["log"]["chart"], "the chart is tank B's own")
+        self.assertIn("pour L", got["log"]["table"], "tank B's log reads as a fill")
+        self.assertTrue(got["log"]["seg"], "the log tab has its own tank switch")
+        self.assertEqual((got["log"]["a"], got["log"]["b"]), ("alpha", "beta"))
+        self.assertEqual(got["logA"]["title"], "Levels — alpha")
+        self.assertIn("alpha —", got["logA"]["chart"])
+        self.assertIn("drained L", got["logA"]["table"], "tank A's table is its own drain")
+        self.assertEqual(got["logA"]["hdr"], "true", "the header switch follows the tab switch")
+        self.assertEqual(got["logA"]["tab"], "true")
+        self.assertIn("alpha", got["shell"], "the log switch carries to the shell tab")
+        self.assertIn("alpha", got["settings"]["title"])
         self.assertIn("transfer", got["settings"]["dir"])
 
 

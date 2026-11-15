@@ -112,6 +112,12 @@
   .eta div { margin: 0.15rem 0; }
   .pred { margin: 0.45rem 0 0; font-size: 0.93rem; font-weight: 650; }
   .pred.muted { font-weight: 400; }
+  .dip-head { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+  .role { display: inline-flex; align-items: center; gap: 0.2rem; border-radius: 999px; padding: 0.05rem 0.45rem; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.02em; border: 1px solid; }
+  .role.out { color: var(--warn); background: var(--warn-bg); border-color: var(--warn); }
+  .role.in { color: var(--info); background: var(--info-bg); border-color: var(--info); }
+  input.dip-out { border-left: 5px solid var(--warn); }
+  input.dip-in { border-left: 5px solid var(--info); }
   @media (prefers-reduced-motion: reduce) { button.pulse { animation: none; } }
   .legend { display: flex; flex-wrap: wrap; gap: 0.2rem 0.9rem; font-size: 0.8rem; color: var(--muted); margin: 0.2rem 0 0.4rem; }
   .legend i { display: inline-block; width: 0.65rem; height: 0.65rem; border-radius: 50%; margin-right: 0.3rem; vertical-align: -0.05rem; }
@@ -280,9 +286,18 @@
       <p id="dip-settle" class="muted" style="margin-top:0"></p>
       <div class="tally-bar hidden" id="dip-bar-wrap"><i id="dip-bar"></i></div>
       <div class="row">
-        <label style="min-width:9rem"><span id="dip-label">Reading, mm</span><input id="d-val" class="big" type="number" inputmode="decimal" step="0.5"></label>
-        <button id="d-go">Check</button>
+        <label style="min-width:9rem">
+          <span class="dip-head"><span class="role out hidden" id="dip-role"></span><span id="dip-label">Reading, mm</span></span>
+          <input id="d-val" class="big" type="number" inputmode="decimal" step="0.5">
+        </label>
       </div>
+      <div class="row hidden" id="dip-row-b" style="margin-top:0.4rem">
+        <label style="min-width:9rem">
+          <span class="dip-head"><span class="role in hidden" id="dip-role-b"></span><span id="dip-label-b">Tank B reading, mm</span></span>
+          <input id="d-val-b" class="big" type="number" inputmode="decimal" step="0.5">
+        </label>
+      </div>
+      <div class="row" style="margin-top:0.5rem"><button id="d-go">Check</button></div>
       <p id="d-err" class="error"></p>
     </div>
 
@@ -298,6 +313,10 @@
 
   <!-- ===================================================== log -->
   <section id="log" class="card hidden">
+    <nav class="seg hidden" id="log-tank" aria-label="Tank for the log and charts">
+      <button id="log-tank-a" data-tank="out" aria-pressed="true">tank A</button>
+      <button id="log-tank-b" data-tank="in" aria-pressed="false">tank B</button>
+    </nav>
     <nav class="seg" id="chart-pick" aria-label="Chart">
       <button data-chart="miss" aria-pressed="true">Miss</button>
       <button data-chart="slope" aria-pressed="false">Slope</button>
@@ -309,7 +328,7 @@
     <div class="legend" id="chart-legend"></div>
     <p class="muted" id="chart-note"></p>
     <p class="muted">Tap a button, or swipe the chart left or right, to change the chart.</p>
-    <h2 style="margin-top:0.8rem">Levels</h2>
+    <h2 style="margin-top:0.8rem" id="log-title">Levels</h2>
     <div class="table"><table id="log-table"></table></div>
     <p id="log-err" class="error"></p>
   </section>
@@ -442,7 +461,7 @@
     <p><b>What it catches.</b> In a simulation of 100 campaigns per slip size, a reading off by 3 mm was caught 92 % of the time, and 4 mm or more every time. An honest reading triggered a second dip 3–6 % of the time.</p>
     <p><b>Drain campaign (reverse strapping).</b> The tank starts full. A pump draws the water out into calibrated cans; each batch is one step, and the level falls. Start at the neck entrance: pump the neck down until the level just reaches the shell crown and dip. That reading is the brim, and the running shell knows the top from the first level. Keep the hose in the same state at every dip. Fill each can to its mark. When the pump loses suction, tick <i>pump lost suction: last can part</i>.</p>
     <p><b>Signs in a drain.</b> resid &lt; 0: the fall came too large (an object exposed, a leak, a spill at the can, or more left than the count). resid &gt; 0: the fall came too small (RETURN?: the hose drained back, wall film, or less left than the count).</p>
-    <p><b>Two tanks at once (transfer).</b> A pump draws water out of a full tank A into calibrated cans, and the same cans are emptied into tank B. One batch is one step for both tanks: A is a drain, B is a fill. Each tank keeps its own check, its own running shell and its own raw file; switch tanks in the header. Dip A, then dip B, after each batch. When both dips are in, the page compares the two residuals of the same batch: the same litres in both tanks means the cans (a count or fill error) — one recount fixes both files; litres that only B misses means a spill on the way; a miss that only one tank shows means that tank or its hose. The pour noise is shared, so the comparison is as sharp as the dips alone.</p>
+    <p><b>Two tanks at once (transfer).</b> A pump draws water out of a full tank A into calibrated cans, and the same cans are emptied into tank B. One batch is one step for both tanks: A is a drain, B is a fill. Each tank keeps its own check, its own running shell and its own raw file; switch tanks in the header or in Log &amp; charts. Dip A, then dip B, after each batch — the dip card has one field per tank, so both readings can go in at once. When both dips are in, the page compares the two residuals of the same batch: the same litres in both tanks means the cans (a count or fill error) — one recount fixes both files; litres that only B misses means a spill on the way; a miss that only one tank shows means that tank or its hose. The pour noise is shared, so the comparison is as sharp as the dips alone.</p>
     <p class="muted">Method: CALIBRATION_METHODOLOGY.md §10a. Residual convention §2: resid = pour − predicted pour. resid &lt; 0: the rise came too cheap (object, or more liquid than recorded). resid &gt; 0: the rise came too small (loss, or less liquid than recorded).</p>
   </section>
 </main>
@@ -512,7 +531,14 @@
   $("hdr-tank").addEventListener("click", (ev) => {
     const b = ev.target.closest("button[data-tank]");
     if (!b || !isTransfer()) return;
-    S.active = b.dataset.tank; save(); render();
+    S.active = b.dataset.tank; editRow = null; save(); render();
+  });
+  // The same switch inside Log & charts: the table and the chart are that
+  // tank's own, so the operator never has to leave the tab to change them.
+  $("log-tank").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-tank]");
+    if (!b || !isTransfer()) return;
+    S.active = b.dataset.tank; editRow = null; save(); render();
   });
 
   // ------------------------------------------------------------ setup
@@ -580,6 +606,7 @@
       s.start($("s-step").value.trim() || "?", dipA, $("sB-step").value.trim() || "?", dipB, "", Date.now(), { at: setupAt });
       s.out.levels[0].pourTime = null;
       s.in.levels[0].pourTime = null;
+      $("d-val").value = ""; $("d-val-b").value = "";
       S = s; save(); tab = "live";
       P.noise = n;
       localStorage.setItem(PREFS, JSON.stringify(P));
@@ -689,6 +716,18 @@
 
   // ------------------------------------------------------------ dip
   function doDip() {
+    if (isTransfer()) {
+      // Two fields, one button: a blank field keeps its tank waiting.
+      const a = num("d-val"), b = num("d-val-b");
+      if (a == null && b == null) throw new Error("Enter at least one reading.");
+      const r = S.dipBoth(a, b, Date.now());
+      if (r.out) $("d-val").value = "";
+      if (r.in) $("d-val-b").value = "";
+      save();
+      const next = S.out.current().state === "pending" ? "d-val" : S.in.current().state === "pending" ? "d-val-b" : null;
+      if (next) setTimeout(() => $(next).focus(), 50);
+      return;
+    }
     const v = num("d-val");
     if (v == null) throw new Error("Enter the reading in mm.");
     S.dip(v, Date.now());
@@ -696,7 +735,9 @@
     save();
   }
   $("d-go").addEventListener("click", guard("d-err", doDip));
-  $("d-val").addEventListener("keydown", (e) => { if (e.key === "Enter") guard("d-err", doDip)(); });
+  for (const id of ["d-val", "d-val-b"]) {
+    $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") guard("d-err", doDip)(); });
+  }
 
   // ------------------------------------------------------------ level actions
   $("a-redip").addEventListener("click", () => {
@@ -824,6 +865,7 @@
     const has = !!S;
     $("p-neck-wrap").classList.toggle("hidden", !isTransfer());
     $("f-csv-b").classList.toggle("hidden", !isTransfer());
+    $("log-tank").classList.toggle("hidden", !isTransfer());
     $("f-csv").textContent = isTransfer() ? `Download ${S.out.cfg.tank}_raw.csv (tank A)` : "Download raw CSV";
     $("f-show").textContent = isTransfer() ? `Show ${S.cfg.tank} CSV` : "Show CSV";
     $("setup").classList.toggle("hidden", has || tab !== "live");
@@ -848,12 +890,26 @@
       $("hdr-tank-b").textContent = S.in.cfg.tank;
       $("hdr-tank-a").setAttribute("aria-pressed", String(S.active === "out"));
       $("hdr-tank-b").setAttribute("aria-pressed", String(S.active === "in"));
+      $("log-tank-a").textContent = S.out.cfg.tank;
+      $("log-tank-b").textContent = S.in.cfg.tank;
+      $("log-tank-a").setAttribute("aria-pressed", String(S.active === "out"));
+      $("log-tank-b").setAttribute("aria-pressed", String(S.active === "in"));
     }
     renderLive(st); renderLog(); renderShell(st);
   }
 
   function renderLive(st) {
     if (isTransfer()) { renderLiveTransfer(); return; }
+    $("dip-row-b").classList.add("hidden");
+    $("d-val").disabled = false;
+    $("d-go").textContent = "Check";
+    // A single tank has no role to tell apart: no badge, no coloured edge.
+    $("dip-role").classList.add("hidden");
+    $("dip-role-b").classList.add("hidden");
+    $("d-val").classList.remove("dip-out");
+    $("d-val").classList.remove("dip-in");
+    $("d-val-b").classList.remove("dip-out");
+    $("d-val-b").classList.remove("dip-in");
     const L = S.current();
     const pend = pending();
     const gi = S.lastGood();
@@ -968,14 +1024,34 @@
     $("dip-card").classList.toggle("hidden", !pend);
     renderTally(adv);
     renderNowPrediction(adv);
-    if (pend) {
-      const k = S.pendingTank();
-      const nm = k === "out" ? nameO : nameI;
-      const n = pend.dips.length;
-      $("dip-title").textContent = n === 0 ? `2 · Dip ${nm}` : `2 · Dip ${nm} again (reading ${n + 1})`;
-      $("dip-label").textContent = n === 0 ? `${nm}: reading after the ${pend.step.text} L batch, mm`
-        : `${nm}: next reading, mm — earlier readings hidden`;
-    }
+    // Two fields, one per tank: each says what it waits for, and a decided
+    // tank's field is closed until "Take another reading" re-opens it.
+    const curO = S.out.current(), curI = S.in.current();
+    const pendO = !!curO && curO.state === "pending", pendI = !!curI && curI.state === "pending";
+    $("dip-row-b").classList.remove("hidden");
+    // One badge and one coloured edge per role: A pumps out, B pours in.
+    // The arrow follows the water: out of the underground tank is up, into
+    // it is down.
+    $("dip-role").textContent = "↑ pump out";
+    $("dip-role-b").textContent = "↓ pour in";
+    $("dip-role").classList.remove("hidden");
+    $("dip-role-b").classList.remove("hidden");
+    $("d-val").classList.add("dip-out");
+    $("d-val-b").classList.add("dip-in");
+    $("d-val").disabled = !pendO;
+    $("d-val-b").disabled = !pendI;
+    const dipLabel = (name, L, open) => {
+      if (!open) return `${name}: decided at ${f(L.H)} mm — take another reading to re-open`;
+      if (L.start) return L.dips.length === 0 ? `${name}: first reading, mm`
+        : `${name}: next reading, mm — earlier readings hidden`;
+      return L.dips.length === 0 ? `${name}: reading after the ${L.step.text} L batch, mm`
+        : `${name}: next reading, mm — earlier readings hidden`;
+    };
+    $("dip-label").textContent = dipLabel(nameO, curO, pendO);
+    $("dip-label-b").textContent = dipLabel(nameI, curI, pendI);
+    $("dip-title").textContent = pendO && pendI ? "2 · Dip both tanks"
+      : pendO ? `2 · Dip ${nameO}` : `2 · Dip ${nameI}`;
+    $("d-go").textContent = pendO && pendI ? "Check both" : "Check";
     tickSettle(Date.now());
     tickEta(Date.now());
 
@@ -1583,7 +1659,9 @@
     }
     $("dip-settle").textContent = `Settled: ${fmtClock(el)} since the ${isTransfer() ? "batch" : "pour"}. Dip now.`;
     $("dip-settle").className = "";
-    const key = `${pend.row}@${t0}`;
+    // One batch, one alarm: both tanks share the pour time, so the second
+    // tank's first reading must not ring again.
+    const key = isTransfer() ? `batch@${t0}` : `${pend.row}@${t0}`;
     if (settle > 0 && T.settled !== key) { T.settled = key; saveTimer(); alarm("Settled: dip now"); }
   }
 
@@ -1705,6 +1783,7 @@
 
   function renderLog() {
     if (tab !== "log") return;
+    $("log-title").textContent = isTransfer() ? `Levels — ${S.cfg.tank}` : "Levels";
     let h = `<tr><th>row</th><th>${isDrain() ? "drained L" : "pour L"}</th><th>readings</th>`
       + "<th>adopted</th><th>pred</th><th>±2σ</th><th>e mm</th><th>resid L</th><th>z</th><th class=l>state</th><th class=l>note</th></tr>";
     for (const L of S.levels) {
@@ -1822,7 +1901,7 @@
   function renderChart() {
     for (const b of $("chart-pick").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.chart === which));
     const c = CHARTS[which];
-    $("chart-title").textContent = c.title;
+    $("chart-title").textContent = isTransfer() ? `${S.cfg.tank} — ${c.title}` : c.title;
     $("chart-note").textContent = (isDrain() && c.noteDrain) || c.note;
     $("chart").innerHTML = c.draw();
     $("chart-legend").innerHTML = Object.keys(COL).map((k) => `<span><i style="background:${COL[k]}"></i>${k}</span>`).join("")

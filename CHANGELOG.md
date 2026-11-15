@@ -13,7 +13,8 @@ All notable changes to this project are documented here. The format follows
   tank A into calibrated cans, and the same cans are emptied into tank B: A
   is a drain, B is a fill, and one batch of cans is one step for both. Each
   tank keeps its own check, its own running shell and its own raw file; the
-  page dips A then B after each batch and exports one CSV per tank. When
+  page dips A then B after each batch (both readings can go in at once) and
+  exports one CSV per tank. When
   both dips are in, the **pair view** compares the two residuals of the same
   batch: the same litres in both means the cans (one recount edits both
   tanks), litres only B misses means a spill on the way, a miss only one
@@ -27,6 +28,15 @@ All notable changes to this project are documented here. The format follows
   cards to the other tank. `TransferSession` in `site/site_core.js`;
   methodology §3.12; operator guide in `docs/site.md`;
   `tests/test_site.py::TestSiteTransfer`.
+- Transfer dips enter both tanks at once: the dip card has one field per
+  tank, so the two readings of a batch are typed in one go and checked with
+  one button (`TransferSession.dipBoth`). Each field carries a visual clue —
+  a ↑ pump out badge on A's field and a ↓ pour in badge on B's, with the
+  input edge in the same colour; the arrow follows the water. A blank field
+  leaves that tank waiting; a decided tank's field is closed until *Take
+  another reading*.
+  The Log & charts tab carries its own A/B switch, and its table and chart
+  headings name the tank they show, so the two tanks stay separate.
 - Reverse strapping (drain campaigns, §3.11): a tank that is already full is
   calibrated from the top down, with a pump that draws known volumes out in
   cans. `"direction": "drain"` in the campaign JSON; `calib init` infers it

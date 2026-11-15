@@ -389,12 +389,20 @@ rises. The method is §3.12 of the methodology.
 The setup asks for both tanks: A's record (it is a drain, so the start-level
 choice applies to A) and B's record with its heel. Both first levels are
 dipped before the first batch, two readings each. Then each batch is: pump
-cans from A → *Batch done* → empty the cans into B → dip A → dip B.
+cans from A → *Batch done* → empty the cans into B → dip A → dip B. The dip
+card has **one field per tank**: type both readings and press *Check both*,
+or fill only the tank you have read. A blank field leaves that tank waiting.
+A decided tank's field is closed; *Take another reading* re-opens it. Each
+field carries its role: a **↑ pump out** badge on A's field and a **↓ pour
+in** badge on B's, with the input edge in the same colour. The arrow follows
+the water: out of the underground tank is up, into it is down.
 
 Each tank keeps its own check, its own running shell and its own raw file.
-The header has an **A / B switch**: it turns the Log & charts tab, the Shell
-tab and the campaign card to the other tank. The Live tab always shows both.
-*Files* exports one raw CSV per tank.
+The **A / B switch** turns the Log & charts tab, the Shell tab and the
+campaign card to the other tank; the Log & charts tab carries the same
+switch, and its table and chart are always the named tank's own (A's table
+reads *drained L*, B's *pour L*). The Live tab always shows both. *Files*
+exports one raw CSV per tank.
 
 **The pair view.** When both dips of a batch are in, the page compares the
 two residuals of the same batch — but only on levels the prediction test
