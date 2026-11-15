@@ -22,16 +22,18 @@ def back_predict(
     h_cur: float,
     base: float = 0.0,
     bands: list[dict] | None = None,
+    direction: int = 1,
 ) -> float:
-    """x = F(H_i) - F(H_{i-1}) - known_base (§8.1).
+    """x = d * (F(H_i) - F(H_{i-1})) - known_base (§8.1).
 
-    When the interval crosses a declared object band, the newly submerged
-    displacement is not liquid and is removed (§6.3).
+    ``d`` is +1 for a fill and -1 for a drain, so x is positive litres in
+    both.  When the interval crosses a declared object band, the
+    displacement in it is not liquid and is removed (§6.3).
     """
     dv = float(shell.volume(h_cur) - shell.volume(h_prev))
     if bands:
         dv -= float(blocked_below(bands, h_cur)) - float(blocked_below(bands, h_prev))
-    return dv - float(base)
+    return direction * dv - float(base)
 
 
 def sigma_x(
@@ -57,12 +59,13 @@ def estimate_unknowns(
     out = []
     brim = shell.brim()
     for iv in intervals:
-        if iv.known or iv.h_cur > brim:
+        if iv.known or iv.h_hi > brim:
             # Above the brim the reading is vent-column height, not shell
-            # level; §5.3a handles that row as an overflow, not an unknown.
+            # level; §5.3a handles that row as an overflow (or a neck
+            # drain), not an unknown.
             continue
-        x = back_predict(shell, iv.h_prev, iv.h_cur, iv.base, bands)
-        m = float(shell.slope(iv.h_cur))
+        x = back_predict(shell, iv.h_prev, iv.h_cur, iv.base, bands, iv.direction)
+        m = float(shell.slope(iv.h_hi))
         sx = sigma_x(m, sigma_h, rel, iv.base, abs_)
         out.append(
             {
@@ -77,6 +80,7 @@ def estimate_unknowns(
                 "lo": x - 2.0 * sx,
                 "hi": x + 2.0 * sx,
                 "kind": "partial" if iv.base else "unknown",
+                "direction": iv.direction,
             }
         )
     return out
@@ -148,7 +152,9 @@ def sensitivity_battery(
                     )
                     for iv in unknowns:
                         values[iv.idx].append(
-                            back_predict(f.shell, iv.h_prev, iv.h_cur, iv.base, bands)
+                            back_predict(
+                                f.shell, iv.h_prev, iv.h_cur, iv.base, bands, iv.direction
+                            )
                         )
 
     per_unknown = []
@@ -157,7 +163,7 @@ def sensitivity_battery(
         if not vals:
             continue
         arr = np.array(vals)
-        m = float(Shell(nominal["r"], nominal["L"], 0.0).slope(iv.h_cur))
+        m = float(Shell(nominal["r"], nominal["L"], 0.0).slope(iv.h_hi))
         noise_term = math.sqrt(2.0) * m * sigma_h
         per_unknown.append(
             {

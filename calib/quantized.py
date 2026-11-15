@@ -77,9 +77,9 @@ def quantized_pour_search(
                         h_cur += d_prev
                     elif iv.idx == suspect.idx + 1:
                         h_prev += d_cur
-                    pred = float(shell.volume(h_cur) - shell.volume(h_prev))
+                    pred = iv.direction * float(shell.volume(h_cur) - shell.volume(h_prev))
                     resid = float(s) - pred
-                    m = float(shell.slope(h_cur))
+                    m = float(shell.slope(max(h_cur, h_prev)))
                     sig = interval_sigma(m, float(s), sigma_h, rel, abs_)
                     chi2 += (resid / sig) ** 2 if sig > 0 else 0.0
                     resids.append(resid)

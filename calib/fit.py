@@ -2,7 +2,10 @@
 
 The default fit minimises the interval residuals
 
-    resid_i = s_i - (F(H_i) - F(H_{i-1}))
+    resid_i = s_i - d_i * (F(H_i) - F(H_{i-1}))
+
+with ``d = +1`` for a fill and ``d = -1`` for a drain (§3.11): the step is
+positive litres in both directions, so the sign convention of §2 holds.
 
 over the trusted set.  Differences cancel a wrong first pour and an unknown
 start volume (§5.1).  A wrong dip at a shared level still shows up in two
@@ -18,6 +21,7 @@ import numpy as np
 from scipy import optimize, stats
 
 from .data import Interval
+from .diagnostics import blocked_below
 from .geometry import Shell
 
 DEFAULT_BOUNDS = {
@@ -74,10 +78,17 @@ class FitResult:
 # ---------------------------------------------------------------------------
 
 def _arrays(intervals: list[Interval]):
+    """Levels in time order, steps, and the direction of each interval."""
     hp = np.array([iv.h_prev for iv in intervals], dtype=float)
     hc = np.array([iv.h_cur for iv in intervals], dtype=float)
     s = np.array([iv.s if iv.s is not None else np.nan for iv in intervals], dtype=float)
-    return hp, hc, s
+    d = np.array([iv.direction for iv in intervals], dtype=float)
+    return hp, hc, s, d
+
+
+def _pred(shell: Shell, hp, hc, d):
+    """Shell volume moved by each step, positive in both directions."""
+    return d * (shell.volume(hc) - shell.volume(hp))
 
 
 def _bounds(nominal: dict, bounds: dict | None):
@@ -105,13 +116,13 @@ def _free_names(tilt: bool, h0_mode: str, fixed: dict | None):
 
 
 def _make_fun(intervals, free, fixed, tilt):
-    hp, hc, s = _arrays(intervals)
+    hp, hc, s, d = _arrays(intervals)
 
     def fun(x):
         p = dict(fixed)
         p.update({name: float(v) for name, v in zip(free, x)})
         shell = Shell(p["r"], p["L"], p["h0"], p.get("eps", 0.0))
-        pred = shell.volume(hc) - shell.volume(hp)
+        pred = _pred(shell, hp, hc, d)
         return s - pred
 
     return fun
@@ -267,7 +278,7 @@ def fit_constrained(
     nominal: dict,
     *,
     start: FitResult,
-    gap_pour: float,
+    gap_pour: float | None,
     brim_reading: float | None = None,
     neck: bool = False,
     bounds: dict | None = None,
@@ -279,10 +290,14 @@ def fit_constrained(
     The constraint is enforced inside the fit, never after it (§5.3a).  A
     binding constraint is reported; an unconstrained fit that violates it is
     a bug, not a result.  ``h0_mode="locked"`` holds the datum at ``h0_value``.
+
+    ``gap_pour=None`` drops the inequality and keeps ``G >= 0`` and the neck
+    equality: a drain that starts at the neck entrance reads the brim but
+    has no neck drain (§3.11).
     """
     data = [iv for iv in intervals if iv.trusted]
-    hp, hc, s = _arrays(data)
-    h_star = float(np.max(hc))
+    hp, hc, s, d = _arrays(data)
+    h_star = float(max(np.max(hc), np.max(hp)))
     b = _bounds(nominal, bounds)
     r_nom, l_nom = nominal["r"], nominal["L"]
     locked = h0_mode == "locked"
@@ -297,7 +312,7 @@ def fit_constrained(
     def sse(u):
         r, L, h0 = unpack(u)
         shell = Shell(r, L, h0)
-        pred = shell.volume(hc) - shell.volume(hp)
+        pred = _pred(shell, hp, hc, d)
         resid = s - pred
         return float(resid @ resid)
 
@@ -307,17 +322,16 @@ def fit_constrained(
         return shell.capacity() - float(shell.volume(h_star))
 
     def gap(u):
-        return gap0(u) - gap_pour
+        return gap0(u) - (gap_pour if gap_pour is not None else math.inf)
 
     def neck_fun(u):
         r, _, h0 = unpack(u)
         return 2.0 * r + h0 - float(brim_reading)
 
     # G <= P (the pour can fill the gap) and G >= 0 (the shell is not overfilled).
-    cons = [
-        {"type": "ineq", "fun": lambda u: -gap(u)},
-        {"type": "ineq", "fun": lambda u: gap0(u)},
-    ]
+    cons = [{"type": "ineq", "fun": lambda u: gap0(u)}]
+    if gap_pour is not None:
+        cons.append({"type": "ineq", "fun": lambda u: -gap(u)})
     if neck and brim_reading is not None:
         cons.append({"type": "eq", "fun": neck_fun})
 
@@ -344,7 +358,7 @@ def fit_constrained(
         lam = 1e4
 
         def penalised(u):
-            g = max(0.0, gap(u))
+            g = max(0.0, gap(u)) if gap_pour is not None else 0.0
             under = max(0.0, -gap0(u))
             out = sse(u) + lam * g * g + lam * under * under
             if neck and brim_reading is not None:
@@ -358,7 +372,7 @@ def fit_constrained(
 
     r, L, h0 = unpack(res.x)
     shell = Shell(r, L, h0)
-    pred = shell.volume(hc) - shell.volume(hp)
+    pred = _pred(shell, hp, hc, d)
     resid = s - pred
     sse_val = float(resid @ resid)
 
@@ -376,8 +390,8 @@ def fit_constrained(
             plus = Shell(*unpack(p0 + dp))
             minus = Shell(*unpack(p0 - dp))
             jac[:, k] = (
-                (s - (plus.volume(hc) - plus.volume(hp)))
-                - (s - (minus.volume(hc) - minus.volume(hp)))
+                (s - _pred(plus, hp, hc, d))
+                - (s - _pred(minus, hp, hc, d))
             ) / (2.0 * step[k])
         cov_u = np.linalg.inv(jac.T @ jac) * sse_val / max(len(s) - len(free), 1)
         cov = np.diag(scale) @ cov_u @ np.diag(scale)
@@ -385,7 +399,9 @@ def fit_constrained(
         cov = None
     g = shell.capacity() - float(shell.volume(h_star))
     neck_resid = (2.0 * r + h0 - float(brim_reading)) if (neck and brim_reading is not None) else None
-    binding = g >= gap_pour - 1e-6 * max(1.0, gap_pour)
+    binding = (
+        gap_pour is not None and g >= gap_pour - 1e-6 * max(1.0, gap_pour)
+    )
 
     return FitResult(
         shell=shell,
@@ -469,8 +485,8 @@ def fit_joint(
         for i, group in enumerate(groups):
             L = x[1 + i]
             shell = Shell(r, L, h0)
-            hp, hc, s = _arrays(group)
-            out.append(s - (shell.volume(hc) - shell.volume(hp)))
+            hp, hc, s, d = _arrays(group)
+            out.append(s - _pred(shell, hp, hc, d))
         return np.concatenate(out)
 
     x0 = [r_ref]
@@ -637,8 +653,12 @@ def tilt_test(
     }
 
 
-def empty_start_check(rows, shell: Shell, heel_row: bool) -> dict:
+def empty_start_check(rows, shell: Shell, heel_row: bool, *, drain: bool = False) -> dict:
     """Report the first row's residual (§5.3b).  Never leave it silent.
+
+    A drain campaign starts full.  Its first row holds the volume at the
+    first level: known when the prefill was metered (``s_1 - F(H_1)``, the
+    same identity), else ``?``.  Its end heel is reported by ``end_heel``.
 
     With a heel row, the check is the first pour from the heel:
     ``s_1 - (F(H_1) - F(H_heel))``.  Without one, it is the first fill from
@@ -669,7 +689,8 @@ def empty_start_check(rows, shell: Shell, heel_row: bool) -> dict:
     row0 = rows[0]
     f0 = float(shell.volume(row0.height))
     if not row0.step.known:
-        return {"row": 1, "height": row0.height, "resid": None, "kind": "unknown first pour"}
+        kind = "unknown start volume" if drain else "unknown first pour"
+        return {"row": 1, "height": row0.height, "resid": None, "kind": kind}
     resid = float(row0.step.value) - f0
     return {
         "row": 1,
@@ -677,7 +698,27 @@ def empty_start_check(rows, shell: Shell, heel_row: bool) -> dict:
         "poured": float(row0.step.value),
         "F": f0,
         "resid": resid,
-        "kind": "empty start",
+        "kind": "metered start volume" if drain else "empty start",
+    }
+
+
+def end_heel(rows, shell: Shell, bands: list[dict] | None = None) -> dict:
+    """What a drain campaign leaves in the tank: the liquid at the last level.
+
+    The pump cannot draw the heel.  Its volume is the shell volume at the
+    last dip, less the blocked volumes below it (§6.3).  It is a shell
+    value, not a measurement, unless the empty tank was sounded.
+    """
+    last = rows[-1]
+    f_last = float(shell.volume(last.height))
+    blocked = float(blocked_below(bands or [], last.height))
+    return {
+        "row": len(rows),
+        "height": last.height,
+        "F": f_last,
+        "blocked": blocked,
+        "liquid": f_last - blocked,
+        "kind": "end heel (shell value at the last dip)",
     }
 
 
@@ -718,6 +759,7 @@ def parametric_bootstrap(
                     base=0.0,
                     h_prev=iv.h_prev + delta[iv.row - 1],
                     h_cur=iv.h_cur + delta[iv.row],
+                    direction=iv.direction,
                 )
             )
         try:
@@ -763,7 +805,7 @@ def gls_fit(
     """
     data = [iv for iv in intervals if iv.trusted]
     n = len(data)
-    hp, hc, s = _arrays(data)
+    hp, hc, s, _d = _arrays(data)
     b = _bounds(nominal, bounds)
     free, fixed = _free_names(False, h0_mode, None)
     lb = np.array([b[name][0] for name in free])

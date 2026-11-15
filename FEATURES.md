@@ -29,6 +29,7 @@ Every section and rule of [CALIBRATION_METHODOLOGY.md](CALIBRATION_METHODOLOGY.m
 | 3.4 Pour sizing | `FieldValidator.advisor` (30 mm target, 10σ floor, 100 mm ceiling) |
 | 3.9 Unknown cells | `data.parse_step` (`?`, `N+?`, `x1`) |
 | 3.10 Pour unit grid | `pour_unit`; `quantized.quantized_pour_search` |
+| 3.11 Reverse strapping (drain) | `direction` in the config; `Interval.direction`, `travel`, `h_lo`/`h_hi`, `predicted`; every module takes the sign; `fit.end_heel`; `scaffold.infer_neck_drain` / `infer_neck_entrance`; `fit_constrained(gap_pour=None)` for the neck-entrance equality; site `direction: "drain"`. Mirror test: `tests/test_drain.py` |
 
 ## §4 Geometry
 
@@ -99,6 +100,8 @@ set and reports the geometry delta. RMSE is labelled not comparable.
 
 `field.FieldValidator`: OK, CHECK, ALARM, DIP-PAIR, DETECTOR, BRIM-WARN,
 OVERFLOW, DRIFT, unknown pours with ±2σ, pour-size advisor, closure line.
+A drain (`direction="drain"`, from the presets) uses NECK and BOTTOM-WARN
+instead of OVERFLOW and BRIM-WARN, and the drain cause texts.
 `calib field` runs a CSV or an interactive session. The presets file is the
 adopted shell, so the tool cannot drift from the fit.
 

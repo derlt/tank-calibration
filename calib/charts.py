@@ -52,9 +52,22 @@ class Series:
     rise: np.ndarray
     excluded: np.ndarray
     heel: float = 0.0
+    direction: int = 1  # +1 fill, -1 drain
 
     def __len__(self) -> int:
         return len(self.H)
+
+    @property
+    def drain(self) -> bool:
+        return self.direction < 0
+
+    @property
+    def step_word(self) -> str:
+        return "drain" if self.drain else "pour"
+
+    @property
+    def travel_word(self) -> str:
+        return "fall" if self.drain else "rise"
 
 
 def _empty() -> Series:
@@ -71,8 +84,13 @@ def build_series(
     abs_: float,
     heel_row: bool,
     books_start: float | None = None,
+    direction: int = 1,
 ) -> Series:
     """Reduce a table to the arrays every chart reads.
+
+    A drain (``direction=-1``) takes each step off the books, and its drift
+    is ``F(H) - books`` so that it stays the residual sum of §2.  ``rise``
+    holds the travel: the fall of a drain, positive.
 
     The books start with the first row's pour: recorded when known,
     back-predicted ``F(H_0)`` when not (§9.3).  An unknown pour advances the
@@ -97,17 +115,17 @@ def build_series(
         step = rows[i].step
         h_prev = float(rows[i - 1].height)
         h_cur = float(rows[i].height)
-        pred = float(shell.volume(h_cur) - shell.volume(h_prev))
+        pred = direction * float(shell.volume(h_cur) - shell.volume(h_prev))
         if not step.known:
-            books += step.base + pred
+            books += direction * (step.base + pred)
             continue
         s = float(step.value)
         resid = s - pred
-        m = float(shell.slope(h_cur))
+        m = float(shell.slope(max(h_cur, h_prev)))  # upper level, both directions
         sigma = math.sqrt((m * sigma_h * math.sqrt(2.0)) ** 2 + (rel * s + abs_) ** 2)
         z = resid / sigma if sigma > 0 else float("nan")
-        books += s
-        rise = h_cur - h_prev
+        books += direction * s
+        rise = direction * (h_cur - h_prev)
         out["H"].append(h_cur)
         out["h_prev"].append(h_prev)
         out["mid"].append(0.5 * (h_prev + h_cur))
@@ -118,9 +136,9 @@ def build_series(
         out["sigma"].append(sigma)
         out["z"].append(z)
         out["books"].append(books)
-        out["drift"].append(books - float(shell.volume(h_cur)))
+        out["drift"].append(direction * (books - float(shell.volume(h_cur))))
         out["rise"].append(rise)
-        out["excluded"].append(bool(h_cur > brim or rise <= 0))
+        out["excluded"].append(bool(max(h_cur, h_prev) > brim or rise <= 0))
 
     return Series(
         H=np.array(out["H"], dtype=float),
@@ -137,6 +155,7 @@ def build_series(
         rise=np.array(out["rise"], dtype=float),
         excluded=np.array(out["excluded"], dtype=bool),
         heel=heel,
+        direction=direction,
     )
 
 
@@ -282,8 +301,9 @@ def panel_predicted(ax, raw: Series, cor: Series):
 
     ax.set_xlim(0.0, lim)
     ax.set_ylim(0.0, lim)
-    _finish(ax, "Recorded pour (L)", "Predicted pour from the shell (L)",
-            "3. Predicted vs recorded pour", "upper left")
+    word = (raw if len(raw) else cor).step_word
+    _finish(ax, f"Recorded {word} (L)", f"Predicted {word} from the shell (L)",
+            f"3. Predicted vs recorded {word}", "upper left")
 
 
 def panel_slope(ax, raw: Series, cor: Series, shell: Shell):
@@ -292,10 +312,12 @@ def panel_slope(ax, raw: Series, cor: Series, shell: Shell):
     _model_line(ax, hs, shell.slope(hs), "Shell slope dV/dH")
     if len(raw):
         ok = raw.rise > 0
-        _raw_pts(ax, raw.mid[ok], raw.s[ok] / raw.rise[ok], "Raw pour / rise")
+        _raw_pts(ax, raw.mid[ok], raw.s[ok] / raw.rise[ok],
+                 f"Raw {raw.step_word} / {raw.travel_word}")
     if len(cor):
         ok = cor.rise > 0
-        _cor_pts(ax, cor.mid[ok], cor.s[ok] / cor.rise[ok], "Corrected pour / rise")
+        _cor_pts(ax, cor.mid[ok], cor.s[ok] / cor.rise[ok],
+                 f"Corrected {cor.step_word} / {cor.travel_word}")
     _finish(ax, "Level midpoint (mm)", "Slope (L per mm)",
             "4. Slope profile", "upper left")
 
@@ -316,7 +338,9 @@ def panel_drift(ax, raw: Series, cor: Series):
             _ann(ax, f"{steps[k]:+.0f} L", (raw.H[k + 1], raw.drift[k + 1]))
         _ann(ax, f"end {raw.drift[-1]:+.0f} L", (raw.H[-1], raw.drift[-1]), dx=-40)
 
-    _finish(ax, "Tape reading H (mm)", "Drift, books − F (L)",
+    drain = (raw if len(raw) else cor).drain
+    _finish(ax, "Tape reading H (mm)",
+            "Drift, F − books (L)" if drain else "Drift, books − F (L)",
             "5. Drift: the running disagreement", "upper left")
 
 
@@ -463,11 +487,14 @@ def all_charts(
     rel: float,
     abs_: float,
     profile: dict | None = None,
+    direction: int = 1,
 ) -> dict:
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
-    raw = build_series(raw_rows, shell, sigma_h=sigma_h, rel=rel, abs_=abs_, heel_row=heel_row)
-    cor = build_series(rows, shell, sigma_h=sigma_h, rel=rel, abs_=abs_, heel_row=heel_row)
+    raw = build_series(raw_rows, shell, sigma_h=sigma_h, rel=rel, abs_=abs_,
+                       heel_row=heel_row, direction=direction)
+    cor = build_series(rows, shell, sigma_h=sigma_h, rel=rel, abs_=abs_,
+                       heel_row=heel_row, direction=direction)
 
     paths = {
         "strapping": _single(outdir / "01_strapping.png", panel_strapping, (raw, cor, shell, bands)),

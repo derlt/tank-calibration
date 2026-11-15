@@ -1,4 +1,4 @@
-.PHONY: test lint coverage demo gate site deploy deploy-dry clean
+.PHONY: test lint coverage demo demo-drain gate site deploy deploy-dry clean
 
 PY ?= uv run python
 
@@ -16,6 +16,11 @@ demo:
 	$(PY) examples/make_demo.py
 	$(PY) -m calib fit examples/demo.json -o out/demo
 	$(PY) -m calib gate out/demo/demo_workbook.xlsx
+
+demo-drain:
+	$(PY) examples/make_demo_drain.py
+	$(PY) -m calib fit examples/demo_drain.json -o out/demo_drain
+	$(PY) -m calib gate out/demo_drain/demo_drain_workbook.xlsx
 
 gate:
 	$(PY) -m calib gate out/demo/demo_workbook.xlsx

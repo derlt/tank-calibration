@@ -40,6 +40,7 @@ def block_intervals(
                 h_cur=last.h_cur,
                 trusted=True,
                 reason="blocked " + ",".join(str(iv.idx) for iv in current),
+                direction=first.direction,
             )
         )
         current.clear()
@@ -51,12 +52,14 @@ def block_intervals(
             blocks.append(iv)
             continue
         if current:
-            prospective = iv.h_cur - current[0].h_prev
-            current_rise = current[-1].h_cur - current[0].h_prev
+            # Travel in the campaign direction: a rise for a fill, a fall for a drain.
+            d = current[0].direction
+            prospective = d * (iv.h_cur - current[0].h_prev)
+            current_rise = d * (current[-1].h_cur - current[0].h_prev)
             if prospective > ceiling_mm and current_rise >= floor:
                 flush()
         current.append(iv)
-        rise = current[-1].h_cur - current[0].h_prev
+        rise = current[0].direction * (current[-1].h_cur - current[0].h_prev)
         if rise >= target:
             flush()
     flush()
@@ -64,7 +67,7 @@ def block_intervals(
 
 
 def blocking_report(blocks: list[Interval], sigma_h: float) -> dict:
-    rises = [b.h_cur - b.h_prev for b in blocks if b.trusted]
+    rises = [b.travel for b in blocks if b.trusted]
     return {
         "n_blocks": len(blocks),
         "n_trusted": len(rises),

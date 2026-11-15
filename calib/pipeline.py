@@ -26,6 +26,7 @@ from .data import (
 from .fit import (
     FitResult,
     empty_start_check,
+    end_heel,
     fit_constrained,
     fit_difference,
     gls_fit,
@@ -57,29 +58,69 @@ def _resolve_overflow(
     intervals: list[Interval],
     shell: Shell,
 ) -> tuple[list, list[Interval], dict | None]:
-    """Apply §5.3a's second direction: an overflow pour is a claim, not data."""
+    """Apply §5.3a's second direction: an overflow pour is a claim, not data.
+
+    A drain from the neck into the shell is the same claim in reverse: the
+    litres that left between a neck reading and the first shell level must
+    cover the shell-top gap at that level, ``G = Vcap - F(H*) <= P``.  In
+    both directions ``H*`` is the lower end of the last interval that
+    touches the neck.
+    """
     if cfg.overflow_pour is None:
         return rows, intervals, None
-    overflow = [iv for iv in intervals if iv.h_cur > shell.brim()]
+    overflow = [iv for iv in intervals if iv.h_hi > shell.brim()]
     if not overflow:
         return rows, intervals, None
     iv = overflow[-1]
-    info = overflow_direction(shell, iv.h_prev, cfg.overflow_pour, cfg.vent_volume)
-    info["h_last"] = iv.h_prev
-    info["h_overflow"] = iv.h_cur
+    info = overflow_direction(shell, iv.h_lo, cfg.overflow_pour, cfg.vent_volume)
+    info["h_last"] = iv.h_lo
+    info["h_overflow"] = iv.h_hi
     if info["could_fill"]:
         return rows, intervals, info
     # The pour cannot fill the gap: back-predict x = G and treat the row as unknown.
     row = rows[iv.row]
+    word = "drain" if cfg.drain else "pour"
     row.flags.append(
-        f"pour treated as unknown: recorded {cfg.overflow_pour:g} L cannot fill "
+        f"{word} treated as unknown: recorded {cfg.overflow_pour:g} L cannot fill "
         f"G={info['gap']:.1f} L (§5.3a)"
     )
     row.step = Step("unknown", raw="?")
-    new_intervals = build_intervals(rows)
+    new_intervals = build_intervals(rows, cfg.sign)
     info["back_predicted"] = info["gap"]
     info["action"] = "row pour replaced by unknown; height kept"
     return rows, new_intervals, info
+
+
+def _books_anchor(cfg: Config, rows, shell: Shell, bands: list[dict]) -> tuple[float, float, int]:
+    """Where the books start for the closure and the QA number (§9.3).
+
+    Fill: the first row's pour, recorded when known, ``F(H_0)`` when not.
+
+    Drain: the first level in the shell.  A neck reading is vent-column
+    height, and the liquid above the crown is unknown, so the books start
+    below it.  The volume there is the first row's value when the prefill
+    was metered and the first row is in the shell; else the shell's liquid
+    ``F(H) - blocked below H`` (every object lies below a full tank).
+    Returns ``(books, sigma, row index)``.
+    """
+    if not cfg.drain:
+        first = rows[0]
+        if first.step.known:
+            value = float(first.step.value)
+            return value, cfg.pour_rel * value + cfg.pour_abs, 0
+        return (
+            float(shell.volume(first.height)),
+            float(shell.slope(first.height)) * cfg.sigma_h,
+            0,
+        )
+    brim = shell.brim()
+    k = next((i for i, row in enumerate(rows) if row.height <= brim), 0)
+    row = rows[k]
+    if k == 0 and row.step.known:
+        value = float(row.step.value)
+        return value, cfg.pour_rel * value + cfg.pour_abs, 0
+    liquid = float(shell.volume(row.height)) - float(diagnostics.blocked_below(bands, row.height))
+    return liquid, float(shell.slope(row.height)) * cfg.sigma_h, k
 
 
 def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True) -> dict:
@@ -89,7 +130,7 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
 
     raw_rows = read_raw(cfg.raw)
     rows = apply_corrections(raw_rows, cfg.corrections)
-    intervals = build_intervals(rows)
+    intervals = build_intervals(rows, cfg.sign)
 
     brim = cfg.brim_reading if cfg.brim_reading is not None else (
         cfg.h0_value + 2.0 * cfg.nominal_r
@@ -159,12 +200,38 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
         "status": "not applicable",
         "gap": None,
         "pour": cfg.overflow_pour,
-        "note": "no overflow pour recorded",
+        "note": "no neck drain recorded" if cfg.drain else "no overflow pour recorded",
         "neck_status": "not tested",
         "neck_note": "",
     }
     adopted = free
     constrained = None
+    equality_only = (
+        cfg.overflow_pour is None and cfg.neck_equality and cfg.brim_reading is not None
+    )
+    if equality_only:
+        # A level read at the neck entrance is the brim B (§5.3a).  A drain
+        # that starts there has no neck drain, so the equality stands alone.
+        constrained = fit_constrained(
+            intervals, cfg.nominal,
+            start=free,
+            gap_pour=None,
+            brim_reading=cfg.brim_reading,
+            neck=True,
+            h0_mode=cfg.h0_mode,
+            h0_value=cfg.h0_value,
+        )
+        adopted = constrained
+        free_resid = free.shell.brim() - float(cfg.brim_reading)
+        constraint = {
+            "status": "neck equality enforced",
+            "gap": constrained.gap,
+            "pour": None,
+            "note": f"free-fit brim {free.shell.brim():.1f} mm vs reading "
+            f"{float(cfg.brim_reading):.1f} mm ({free_resid:+.1f} mm)",
+            "neck_status": f"residual {constrained.neck_resid:+.2f} mm",
+            "neck_note": "2r + h0 = B; the reading anchors the r-h0 trade (§5.3a)",
+        }
     if cfg.overflow_pour is not None:
         constrained = fit_constrained(
             intervals, cfg.nominal,
@@ -175,7 +242,7 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
             h0_mode=cfg.h0_mode,
             h0_value=cfg.h0_value,
         )
-        h_star = max(iv.h_cur for iv in intervals if iv.trusted)
+        h_star = max(iv.h_hi for iv in intervals if iv.trusted)
         free_gap = free.shell.capacity() - float(free.shell.volume(h_star))
         violates = free_gap > cfg.overflow_pour - cfg.vent_volume
         if constrained.binding or violates:
@@ -239,7 +306,7 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
     # -- unknowns (§8) -------------------------------------------------
     unknown_ivs = [
         iv for iv in intervals
-        if not iv.known and iv.h_cur <= adopted.shell.brim()
+        if not iv.known and iv.h_hi <= adopted.shell.brim()
     ]
     estimates = unknowns.estimate_unknowns(
         intervals, adopted.shell,
@@ -260,25 +327,21 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
     # The books start with the first row's pour: recorded when known,
     # back-predicted F(H_0) when not.  Without it the closure identity is
     # short by exactly the first pour (§9.3).
-    first = rows[0]
-    if first.step.known:
-        bstart = float(first.step.value)
-        start_sigma = cfg.pour_rel * bstart + cfg.pour_abs
-    else:
-        bstart = float(adopted.shell.volume(first.height))
-        start_sigma = float(adopted.shell.slope(first.height)) * cfg.sigma_h
+    bstart, start_sigma, start_row = _books_anchor(cfg, rows, adopted.shell, bands)
     closure = diagnostics.closure(
         intervals, adopted.shell, bands,
         books_start=bstart, start_sigma=start_sigma,
         sigma_h=cfg.sigma_h,
         rel=cfg.pour_rel, abs_=cfg.pour_abs,
         estimates=estimates,
+        start_row=start_row,
     )
     qa = report.qa_agreement(
         intervals, adopted.shell, bands=bands, books_start=bstart,
-        estimates=estimates,
+        estimates=estimates, start_row=start_row,
     )
-    empty = empty_start_check(rows, adopted.shell, cfg.heel_row)
+    empty = empty_start_check(rows, adopted.shell, cfg.heel_row, drain=cfg.drain)
+    heel_end = end_heel(rows, adopted.shell, bands) if cfg.drain else None
     mean_m = float(np.mean([iv.m for iv in intervals if iv.trusted]))
     sanity = diagnostics.sanity_rmse(adopted.rmse, mean_m, cfg.sigma_h)
     noise = diagnostics.noise_split(intervals)
@@ -330,16 +393,17 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
         quantized=quantized,
     )
     if overflow:
+        word, name = ("drain", "neck drain") if cfg.drain else ("pour", "overflow")
         if overflow.get("back_predicted") is not None:
             register.append(
                 {
-                    "kind": "overflow back-prediction",
+                    "kind": f"{name} back-prediction",
                     "where_mm": f"{overflow.get('h_last', 0):.0f}",
                     "magnitude_l": overflow["back_predicted"],
                     "rule": "5.3a",
                     "status": (
-                        f"recorded pour {overflow['pour']:.1f} L cannot fill "
-                        f"G={overflow['gap']:.1f} L; height is data, pour is a claim"
+                        f"recorded {word} {overflow['pour']:.1f} L cannot fill "
+                        f"G={overflow['gap']:.1f} L; height is data, {word} is a claim"
                     ),
                     "test": "re-dip the brim; confirm the vent volume",
                 }
@@ -347,12 +411,12 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
         else:
             register.append(
                 {
-                    "kind": "overflow interval",
+                    "kind": "neck interval" if cfg.drain else "overflow interval",
                     "where_mm": f"{overflow.get('h_overflow', 0):.0f}",
                     "magnitude_l": overflow["gap"],
                     "rule": "5.3a",
                     "status": (
-                        f"recorded pour {overflow['pour']:.1f} L can fill "
+                        f"recorded {word} {overflow['pour']:.1f} L can fill "
                         f"G={overflow['gap']:.1f} L; the reading is vent-column "
                         "height, the interval stays out of the fit"
                     ),
@@ -363,9 +427,10 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
     # -- acceptance (§5.7) ---------------------------------------------
     constraint_ok = True
     if constrained is not None:
-        constraint_ok = (
-            -1e-3 <= constrained.gap <= cfg.overflow_pour + 1e-3
-        )
+        upper = cfg.overflow_pour if cfg.overflow_pour is not None else math.inf
+        constraint_ok = -1e-3 <= constrained.gap <= upper + 1e-3
+        if constrained.neck_resid is not None:
+            constraint_ok = constraint_ok and abs(constrained.neck_resid) <= 0.5
     acceptance = _acceptance(
         free, huber, profile, profile_l, bootstrap, closure, sanity,
         intervals, pairs, singles, battery, constraint_ok, constraint,
@@ -373,8 +438,11 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
     )
 
     # -- deliverables ---------------------------------------------------
+    # The lowest verified level is the lowest end of a trusted interval in
+    # the travel direction; the highest is its top.  A fill keeps the
+    # historic H_1 floor; a drain reaches its last dip.
     lowest = min(iv.h_cur for iv in intervals if iv.trusted)
-    highest = max(iv.h_cur for iv in intervals if iv.trusted)
+    highest = max(iv.h_hi for iv in intervals if iv.trusted)
     strapping = report.strapping_table(
         adopted.shell, adopted,
         bands=bands, lowest_verified=lowest, highest_verified=highest,
@@ -407,8 +475,16 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
         sigma_h=cfg.sigma_h,
         brim=adopted.shell.brim(),
         max_liquid_l=max_liq,
-        heel_l=float(rows[0].step.value) if (cfg.heel_row and rows[0].step.known) else 0.0,
-        heel_kind="sounded" if (cfg.heel_row and rows[0].step.known) else "not sounded",
+        heel_l=(
+            heel_end["liquid"] if heel_end is not None
+            else float(rows[0].step.value) if (cfg.heel_row and rows[0].step.known)
+            else 0.0
+        ),
+        heel_kind=(
+            "left after the drain: shell value at the last dip"
+            if heel_end is not None
+            else "sounded" if (cfg.heel_row and rows[0].step.known) else "not sounded"
+        ),
         datum=report.datum_statement(
             adopted.shell, h0_mode=cfg.h0_mode, lock=lock,
             v0=float(adopted.shell.volume(0.0)),
@@ -423,6 +499,7 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
         rmse_mm=sanity["rmse_mm"],
         r_sigma=(profile["hi"] - profile["lo"]) / 2.0,
         l_sigma=(profile_l["hi"] - profile_l["lo"]) / 2.0,
+        direction=cfg.direction,
     )
 
     result = {
@@ -454,6 +531,8 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
         "closure": closure,
         "qa": qa,
         "empty_start": empty,
+        "end_heel": heel_end,
+        "direction": cfg.direction,
         "sanity": sanity,
         "noise_split": noise,
         "telescoping": telescoping,
@@ -479,7 +558,7 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
     invariance = None
     if cfg.corrections:
         try:
-            raw_ivs = build_intervals(raw_rows)
+            raw_ivs = build_intervals(raw_rows, cfg.sign)
             mark_trusted(
                 raw_ivs, brim=brim, object_bands=cfg.object_bands,
                 excluded_rows=cfg.excluded_interval_rows,
@@ -516,6 +595,7 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
             rel=cfg.pour_rel,
             abs_=cfg.pour_abs,
             profile=profile,
+            direction=cfg.sign,
         )
     else:
         result["charts"] = {}
@@ -661,6 +741,7 @@ def _write_artifacts(outdir: Path, result: dict) -> None:
 
     presets = {
         "tank": tank,
+        "direction": cfg.direction,
         "adopted": {
             "r": result["fit"].shell.r,
             "L": result["fit"].shell.L,
@@ -696,6 +777,20 @@ def _markdown(result: dict) -> str:
         "```",
         "",
     ]
+    if cfg.drain:
+        lines += [
+            "**Direction.** Drain campaign (reverse strapping, §3.11): the steps are "
+            "litres pumped out, the level falls. resid = s - (F(H_prev) - F(H_cur)); "
+            "a leak gives resid < 0, liquid that comes back gives resid > 0.",
+            "",
+        ]
+        heel = result.get("end_heel")
+        if heel:
+            lines += [
+                f"**End heel.** {heel['liquid']:.1f} L at {heel['height']:.1f} mm "
+                "(shell value at the last dip; sound the empty tank to verify).",
+                "",
+            ]
     header = result.get("table_header")
     if header:
         lines += ["## Customer table header", "", "| Field | Value |", "|---|---|"]
@@ -739,7 +834,7 @@ def _markdown(result: dict) -> str:
         lines.append(f"| {i} | {c['check']} | {c['result']} | {'yes' if c['pass'] else 'NO'} |")
     lines += [
         "",
-        "## Unknown pours (§8)",
+        f"## Unknown {'drains' if cfg.drain else 'pours'} (§8)",
         "",
         "| interval | at (mm) | known base (L) | total (L) | ±2σ (L) | settled |",
         "|---|---|---|---|---|---|",

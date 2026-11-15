@@ -10,13 +10,18 @@ from __future__ import annotations
 import json
 import math
 import os
+from itertools import pairwise
 from pathlib import Path
 
 from .config import load_config
 from .data import (
+    DRAIN,
     Row,
     apply_corrections,
     build_intervals,
+    direction_name,
+    direction_sign,
+    infer_direction,
     mark_trusted,
     read_raw,
 )
@@ -45,7 +50,8 @@ def infer_pour_unit(rows: list[Row], r: float) -> float | None:
     for row in rows:
         if not row.step.known:
             continue
-        if row.height > brim or "overflow" in row.note.lower():
+        note = row.note.lower()
+        if row.height > brim or "overflow" in note or "neck" in note:
             continue
         values.append(float(row.step.value))
     if len(values) < 2:
@@ -75,6 +81,31 @@ def infer_overflow(rows: list[Row], r: float) -> float | None:
     return None
 
 
+def infer_neck_drain(rows: list[Row], r: float) -> float | None:
+    """The drain out of the neck into the shell, if the data says so (§5.3a).
+
+    The site marks the first shell level after a neck start with
+    ``neck interval``.  Without the note: the first known drain that ends
+    at or below the nominal brim after a row above it.
+    """
+    for row in rows:
+        if row.step.known and "neck interval" in row.note.lower():
+            return float(row.step.value)
+    brim = _nominal_brim(r)
+    for prev, row in pairwise(rows):
+        if prev.height > brim >= row.height:
+            return float(row.step.value) if row.step.known else None
+    return None
+
+
+def infer_neck_entrance(rows: list[Row]) -> float | None:
+    """The brim reading of a drain that starts at the neck entrance."""
+    first = rows[0]
+    if "neck entrance" in first.note.lower():
+        return float(first.height)
+    return None
+
+
 def infer_heel(rows: list[Row], r: float, L: float) -> bool:
     """True when the first pour is far below the volume at the first dip."""
     first = rows[0]
@@ -93,11 +124,19 @@ def unknown_pours(rows: list[Row]) -> list[dict]:
     ]
 
 
-def scan_rows(rows: list[Row], r: float, L: float) -> list[str]:
+def scan_rows(rows: list[Row], r: float, L: float, direction: int | str = 1) -> list[str]:
     """Structural warnings a reader should see before the first fit."""
     warnings: list[str] = []
+    drain = direction_sign(direction) == DRAIN
     for i, row in enumerate(rows, start=1):
-        if i > 1 and row.height <= rows[i - 2].height:
+        if i == 1:
+            continue
+        prev = rows[i - 2].height
+        if drain and row.height >= prev:
+            warnings.append(
+                f"row {i}: height {row.height:g} mm does not fall below row {i - 1}"
+            )
+        elif not drain and row.height <= prev:
             warnings.append(
                 f"row {i}: height {row.height:g} mm does not rise above row {i - 1}"
             )
@@ -109,6 +148,15 @@ def scan_rows(rows: list[Row], r: float, L: float) -> list[str]:
             )
         else:
             seen[row.height] = i
+    if drain:
+        first = rows[0]
+        if first.height > _nominal_brim(r):
+            warnings.append(
+                f"row 1: height {first.height:g} mm is above the nominal brim "
+                f"{_nominal_brim(r):g} mm: the drain starts in the neck; check "
+                "brim.neck_drain"
+            )
+        return warnings
     last = rows[-1]
     if last.height > _nominal_brim(r):
         warnings.append(
@@ -136,12 +184,14 @@ def infer_config(
     brim: float | None = None,
     overflow_pour: float | None = None,
     heel_row: bool | None = None,
+    direction: str | None = None,
 ) -> tuple[dict, list[str]]:
     """Build a campaign dict from the raw CSV and the tank record.
 
-    ``None`` for ``pour_unit``, ``overflow_pour`` or ``heel_row`` means:
-    infer it from the data.  ``brim`` is never inferred; a missing brim is
-    refined by the fit from the shell.
+    ``None`` for ``pour_unit``, ``overflow_pour``, ``heel_row`` or
+    ``direction`` means: infer it from the data.  A fill never infers
+    ``brim``; a missing brim is refined by the fit from the shell.  A drain
+    whose first row says ``at neck entrance`` reads the brim there (§3.11).
     """
     raw_path = Path(raw_path)
     rows = read_raw(raw_path)
@@ -150,13 +200,18 @@ def infer_config(
     if sigma_h <= 0:
         raise ValueError("sigma_h must be positive")
 
+    sign = infer_direction(rows) if direction is None else direction_sign(direction)
+    drain = sign == DRAIN
     inferred_unit = infer_pour_unit(rows, r)
-    inferred_overflow = infer_overflow(rows, r)
-    inferred_heel = infer_heel(rows, r, L)
+    inferred_overflow = infer_neck_drain(rows, r) if drain else infer_overflow(rows, r)
+    inferred_heel = False if drain else infer_heel(rows, r, L)
 
     unit = inferred_unit if pour_unit is None else float(pour_unit)
     overflow = inferred_overflow if overflow_pour is None else float(overflow_pour)
     heel = inferred_heel if heel_row is None else bool(heel_row)
+    neck_entrance = infer_neck_entrance(rows) if drain else None
+    if drain and brim is None and neck_entrance is not None:
+        brim = neck_entrance
 
     data: dict = {
         "tank": tank or tank_stem(raw_path),
@@ -164,6 +219,7 @@ def infer_config(
         "table_version": "v1",
         "supersedes": "none",
         "raw": raw_path.name,
+        "direction": direction_name(sign),
         "nominal": {"r": float(r), "L": float(L)},
         "sigma_h": float(sigma_h),
         "pour_noise": {"rel": 0.005, "abs": 3.0},
@@ -182,11 +238,16 @@ def infer_config(
     if brim is not None:
         brim_data["reading"] = float(brim)
     if overflow is not None:
-        brim_data["overflow_pour"] = float(overflow)
+        brim_data["neck_drain" if drain else "overflow_pour"] = float(overflow)
+    if drain and neck_entrance is not None and brim == neck_entrance:
+        # The start reading at the neck entrance is the shell crown (§5.3a).
+        brim_data["neck_equality"] = True
     if brim_data:
         data["brim"] = brim_data
 
-    warnings = scan_rows(rows, r, L)
+    warnings = scan_rows(rows, r, L, sign)
+    if drain and direction is None:
+        warnings.insert(0, "direction: drain (the heights fall); give --direction to override")
     for item in unknown_pours(rows):
         warnings.insert(0, f"row {item['row']}: pour is unknown ({item['raw']})")
     if inferred_unit is not None and unit != inferred_unit:
@@ -228,7 +289,7 @@ def preflight(config_path: str | Path) -> dict:
     cfg = load_config(config_path)
     rows = read_raw(cfg.raw)
     corrected = apply_corrections(rows, cfg.corrections)
-    intervals = build_intervals(corrected)
+    intervals = build_intervals(corrected, cfg.sign)
     brim = (
         cfg.brim_reading
         if cfg.brim_reading is not None
@@ -255,11 +316,13 @@ def preflight(config_path: str | Path) -> dict:
         }
         for c in cfg.corrections
     ]
-    warnings = scan_rows(corrected, cfg.nominal_r, cfg.nominal_L)
+    warnings = scan_rows(corrected, cfg.nominal_r, cfg.nominal_L, cfg.sign)
     if cfg.heel_row:
         warnings = [w for w in warnings if "heel_row true" not in w]
     if cfg.brim_reading is not None and cfg.overflow_pour is not None:
         warnings = [w for w in warnings if "above the nominal brim" not in w]
+    if cfg.drain and cfg.overflow_pour is not None:
+        warnings = [w for w in warnings if "starts in the neck" not in w]
     return {
         "config": cfg,
         "rows": len(rows),

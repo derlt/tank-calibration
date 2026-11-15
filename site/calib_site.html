@@ -57,7 +57,7 @@
   .v-info h3 { color: var(--info); }
   .tag { display: inline-block; border-radius: 6px; padding: 0 0.4rem; font-size: 0.78rem; font-weight: 650; font-family: var(--mono); }
   .t-accepted, .t-start { background: var(--ok-bg); color: var(--ok); }
-  .t-learning, .t-unknown, .t-overflow { background: var(--info-bg); color: var(--info); }
+  .t-learning, .t-unknown, .t-overflow, .t-neck { background: var(--info-bg); color: var(--info); }
   .t-anomaly { background: var(--bad-bg); color: var(--bad); }
   .t-pending, .t-override, .t-watch { background: var(--warn-bg); color: var(--warn); }
   .table { overflow-x: auto; }
@@ -141,6 +141,11 @@
   <!-- ===================================================== setup -->
   <section id="setup" class="card hidden">
     <h2>New campaign</h2>
+    <nav class="seg" id="s-dir" aria-label="Campaign direction">
+      <button id="s-dir-fill" data-dir="fill" aria-pressed="true">Fill: pour in</button>
+      <button id="s-dir-drain" data-dir="drain" aria-pressed="false">Drain: pump out</button>
+    </nav>
+    <p class="muted" id="s-dir-note" style="margin-top:0"></p>
     <div class="grid">
       <label>Tank name<input id="s-tank" value="tank"></label>
       <label>Diameter estimate D, mm<input id="s-D" type="number" inputmode="decimal" placeholder="2480"></label>
@@ -151,11 +156,19 @@
     </div>
     <p class="muted" id="s-noise"></p>
     <h2 style="margin-top:0.9rem">First level</h2>
+    <div id="s-at-wrap" class="hidden">
+      <nav class="seg" id="s-at" aria-label="Where the first level stands">
+        <button id="s-at-entrance" data-at="entrance" aria-pressed="true">At the neck entrance (recommended)</button>
+        <button id="s-at-neck" data-at="neck" aria-pressed="false">In the neck</button>
+        <button id="s-at-shell" data-at="shell" aria-pressed="false">In the shell</button>
+      </nav>
+      <p class="muted" id="s-at-note" style="margin-top:0"></p>
+    </div>
     <div class="grid">
-      <label>Liquid before the first dip, L (? = unknown heel)<input id="s-step" value="?"></label>
+      <label><span id="s-step-label">Liquid before the first dip, L (? = unknown heel)</span><input id="s-step" value="?"></label>
       <label>First reading, mm<input id="s-dip" class="big" type="number" inputmode="decimal" step="0.5"></label>
     </div>
-    <p class="muted">Sound the bottom first and record the heel as this row (§3.3). The first level always needs two readings: no prediction can test it.</p>
+    <p class="muted" id="s-first-note">Sound the bottom first and record the heel as this row (§3.3). The first level always needs two readings: no prediction can test it.</p>
     <div class="row" style="margin-top:0.6rem"><button id="s-go">Start campaign</button></div>
     <p id="s-err" class="error"></p>
   </section>
@@ -172,7 +185,7 @@
     </div>
 
     <div class="card" id="pour-card" style="margin-top:0.8rem">
-      <h2>1 · Pour</h2>
+      <h2 id="pour-title">1 · Pour</h2>
       <div id="tally">
         <div class="row" style="align-items:end">
           <label style="min-width:7rem">Can size for the next can, L<input id="t-unit" type="number" inputmode="decimal" step="0.5"></label>
@@ -213,25 +226,25 @@
         <div class="chips" id="t-chips"></div>
         <div class="row">
           <button class="secondary small" id="t-undo">Undo last can</button>
-          <label class="check"><input type="checkbox" id="t-part"> last can not fully poured</label>
+          <label class="check"><input type="checkbox" id="t-part"> <span id="t-part-text">last can not fully poured</span></label>
         </div>
-        <p class="muted">Start the fill timer when you start the pump. The alarm rings before the can is full: close the valve. Tap <b>+1 can poured</b> when the can is full. Emptying the can into the tank has no timer. Each can keeps the size shown above, so one batch can mix sizes. The count is saved after each tap. One dip follows the batch.</p>
+        <p class="muted" id="t-help">Start the fill timer when you start the pump. The alarm rings before the can is full: close the valve. Tap <b>+1 can poured</b> when the can is full. Emptying the can into the tank has no timer. Each can keeps the size shown above, so one batch can mix sizes. The count is saved after each tap. One dip follows the batch.</p>
       </div>
       <details id="p-manual">
-        <summary>Enter litres instead (meter, odd can, unknown pour)</summary>
+        <summary id="p-manual-text">Enter litres instead (meter, odd can, unknown pour)</summary>
         <div class="row" style="margin-top:0.5rem">
-          <label style="min-width:9rem">Pour, L<input id="p-vol" class="big" type="number" inputmode="decimal"></label>
+          <label style="min-width:9rem"><span id="p-vol-label">Pour, L</span><input id="p-vol" class="big" type="number" inputmode="decimal"></label>
           <button class="secondary small" id="p-advice">Use advice</button>
           <button class="secondary small" id="p-minus">− unit</button>
           <button class="secondary small" id="p-plus">+ unit</button>
         </div>
         <div class="row" style="margin-top:0.5rem">
-          <label class="check"><input type="checkbox" id="p-unknown"> whole pour unknown (?)</label>
+          <label class="check"><input type="checkbox" id="p-unknown"> <span id="p-unknown-text">whole pour unknown (?)</span></label>
           <label class="check"><input type="checkbox" id="p-extra"> plus an unknown extra (N+?)</label>
         </div>
       </details>
       <div class="row" style="margin-top:0.5rem">
-        <label class="check"><input type="checkbox" id="p-over"> liquid reached the neck / overflowed</label>
+        <label class="check"><input type="checkbox" id="p-over"> <span id="p-over-text">liquid reached the neck / overflowed</span></label>
       </div>
       <label style="margin-top:0.5rem">Note (optional)<input id="p-note"></label>
       <div class="row" style="margin-top:0.6rem"><button id="p-go">Poured</button></div>
@@ -296,6 +309,7 @@
         <label>L is good to ±, mm (blank = 3 %)<input id="set-Lpm" type="number" inputmode="decimal"></label>
         <label>Pour unit, L<input id="set-unit" type="number" inputmode="decimal"></label>
       </div>
+      <p class="muted" id="set-dir"></p>
       <div class="row" style="margin-top:0.6rem"><button id="set-save">Save campaign settings</button></div>
       <p class="muted">A change refits the running shell from the levels already accepted. The levels keep their state; the next check uses the new values.</p>
       <p id="set-msg" class="muted"></p>
@@ -309,6 +323,7 @@
         <label>Pour noise, % of pour<input id="set-rel" type="number" inputmode="decimal"></label>
         <label>Pour noise, fixed L<input id="set-abs" type="number" inputmode="decimal"></label>
         <label>Datum: 0 ± mm<input id="set-h0" type="number" inputmode="decimal"></label>
+        <label>Drain: brim at the neck entrance ± mm (blank = 6)<input id="set-brim" type="number" inputmode="decimal"></label>
       </div>
       <div class="row" style="margin-top:0.6rem"><button id="set-noise-save">Save noise settings</button></div>
       <p class="muted" id="set-noise-note"></p>
@@ -370,7 +385,12 @@
       <label>D ±, mm<input id="r-Dpm" type="number" inputmode="decimal" value="200"></label>
       <label>L estimate, mm<input id="r-L" type="number" inputmode="decimal"></label>
       <label>Pour unit, L<input id="r-unit" type="number" inputmode="decimal"></label>
-      <label>Overflow row (optional)<input id="r-over" type="number" inputmode="numeric"></label>
+      <label>Overflow row (optional, fill)<input id="r-over" type="number" inputmode="numeric"></label>
+      <label>Neck rows (optional, drain: 1,2)<input id="r-neck"></label>
+    </div>
+    <div class="row" style="margin-top:0.5rem">
+      <label class="check"><input type="checkbox" id="r-drain"> drain campaign (found from the heights when they fall)</label>
+      <label class="check"><input type="checkbox" id="r-entrance"> drain: row 1 is at the neck entrance</label>
     </div>
     <div class="row" style="margin-top:0.6rem"><button id="r-go">Replay</button></div>
     <p id="r-err" class="error"></p>
@@ -395,6 +415,8 @@
     <p><b>The first pours.</b> The page does not know the bottom shape yet. For the first 3 intervals a confirmed miss is "learning": the level is kept and teaches the shape.</p>
     <p><b>Too wide to judge.</b> When the band is wider than ±3 mm (very large pours, an early shell), the prediction cannot catch a 3 mm slip. Then the page asks for a second reading.</p>
     <p><b>What it catches.</b> In a simulation of 100 campaigns per slip size, a reading off by 3 mm was caught 92 % of the time, and 4 mm or more every time. An honest reading triggered a second dip 3–6 % of the time.</p>
+    <p><b>Drain campaign (reverse strapping).</b> The tank starts full. A pump draws the water out into calibrated cans; each batch is one step, and the level falls. Start at the neck entrance: pump the neck down until the level just reaches the shell crown and dip. That reading is the brim, and the running shell knows the top from the first level. Keep the hose in the same state at every dip. Fill each can to its mark. When the pump loses suction, tick <i>pump lost suction: last can part</i>.</p>
+    <p><b>Signs in a drain.</b> resid &lt; 0: the fall came too large (an object exposed, a leak, a spill at the can, or more left than the count). resid &gt; 0: the fall came too small (RETURN?: the hose drained back, wall film, or less left than the count).</p>
     <p class="muted">Method: CALIBRATION_METHODOLOGY.md §10a. Residual convention §2: resid = pour − predicted pour. resid &lt; 0: the rise came too cheap (object, or more liquid than recorded). resid &gt; 0: the rise came too small (loss, or less liquid than recorded).</p>
   </section>
 </main>
@@ -411,6 +433,15 @@
  * priors, and predicts the level that the next pour must give.  The new dip
  * is compared with that prediction before the next pour, while the liquid
  * still stands at that level and a re-dip is still possible.
+ *
+ * Two directions.  A FILL campaign pours known volumes in and the level
+ * rises from the bottom to the brim.  A DRAIN campaign (reverse strapping)
+ * starts with a full tank and pumps known volumes out into calibrated cans;
+ * the level falls from the brim or the neck to the bottom.  Step volumes are
+ * always positive litres, heights are chronological, and dir = +1 (fill) or
+ * −1 (drain):
+ *   travel = dir·(H − H_anchor) > 0,   pred = dir·(F(H) − F(H_anchor)),
+ *   resid  = s − pred  (the §2 sign, the same in both directions).
  */
 (function (root) {
   "use strict";
@@ -503,6 +534,9 @@
    * Maximum a posteriori fit of (r, L, h0): the difference fit of §5.1 plus
    * one residual per prior.  Levenberg–Marquardt with a numerical Jacobian.
    * ivs: [{H1, H2, s, n1, n2}]  (n = number of dips averaged at the level)
+   * H1 is the lower level and H2 the upper one in both directions.
+   * prior.B (optional): a brim reading B with its σ prior.sB, one more
+   * residual ((2r + h0) − B)/σB — the neck-entrance dip of a drain (§5.3a).
    */
   function fitShell(ivs, prior, cfg, start) {
     const pr = [prior.r, prior.L, prior.h0];
@@ -510,6 +544,7 @@
     const lo = [0.5 * prior.r, 0.5 * prior.L, -400];
     const hi = [1.5 * prior.r, 1.5 * prior.L, 400];
     const clamp = (x) => x.map((v, i) => Math.min(Math.max(v, lo[i]), hi[i]));
+    const hasB = prior.B != null && isFinite(prior.B) && prior.sB > 0;
     function f(x) {
       const p = toP(x), out = [];
       for (const iv of ivs) {
@@ -519,6 +554,7 @@
         out.push((iv.s - (volume(iv.H2, p) - volume(iv.H1, p))) / sd);
       }
       for (let i = 0; i < 3; i++) out.push((x[i] - pr[i]) / ps[i]);
+      if (hasB) out.push((2 * x[0] + x[2] - prior.B) / prior.sB);
       return out;
     }
     function jac(x, f0) {
@@ -558,6 +594,11 @@
       return { x, c, fx };
     }
     let best = run(pr);
+    if (hasB) {
+      // The brim reading pins 2r + h0: start the search on it too.
+      const alt = run([pr[0], pr[1], prior.B - 2 * pr[0]]);
+      if (alt.c < best.c) best = alt;
+    }
     if (start) {
       const alt = run([start.r, start.L, start.h0]);
       if (alt.c < best.c) best = alt;
@@ -569,25 +610,30 @@
     return { p, cov, cost: best.c, n: ivs.length, sd: { r: sd[0], L: sd[1], h0: sd[2] } };
   }
 
-  /** Level a pour s from H1 must give, and its spread from the parameter covariance. */
-  function predictLevel(H1, s, fit) {
-    const p = fit.p;
-    const target = volume(H1, p) + s;
+  /**
+   * Level a step s from H1 must give, and its spread from the parameter
+   * covariance.  dir = +1 pours s in (default), −1 drains s out.  overflow:
+   * a pour larger than the shell gap; empty: a drain larger than the liquid.
+   */
+  function predictLevel(H1, s, fit, dir) {
+    const p = fit.p, d = dir < 0 ? -1 : 1;
+    const target = volume(H1, p) + d * s;
     const Hp = levelFor(target, p);
-    const over = target > capacity(p);
+    const over = d > 0 && target > capacity(p);
+    const empty = d < 0 && target < 0;
     let sdModel = 0;
     if (fit.cov) {
       const x = [p.r, p.L, p.h0], g = [];
       for (let j = 0; j < 3; j++) {
-        const d = 1e-3 * Math.max(1, Math.abs(x[j]));
+        const h = 1e-3 * Math.max(1, Math.abs(x[j]));
         const xp = x.slice(), xm = x.slice();
-        xp[j] += d; xm[j] -= d;
+        xp[j] += h; xm[j] -= h;
         const P = toP(xp), M = toP(xm);
-        g.push((levelFor(volume(H1, P) + s, P) - levelFor(volume(H1, M) + s, M)) / (2 * d));
+        g.push((levelFor(volume(H1, P) + d * s, P) - levelFor(volume(H1, M) + d * s, M)) / (2 * h));
       }
       sdModel = Math.sqrt(Math.max(quad(g, fit.cov), 0));
     }
-    return { H: Hp, sdModel, overflow: over };
+    return { H: Hp, sdModel, overflow: over, empty };
   }
 
   // ---------------------------------------------------------------- configuration
@@ -611,7 +657,23 @@
     alarmLead: 15,              // s before the can is full: close the valve
     learnN: 3,                  // intervals before a confirmed miss is an anomaly
     scalePrior: 4,              // pseudo-count for the noise scale estimate
+    direction: "fill",          // "fill": pour in, level rises; "drain": pump out, level falls
+    brimPm: 6,                  // drain: the neck-entrance reading is the brim B ± this (2σ), mm
+    brimStart: null,            // drain: B, the adopted neck-entrance reading (set by the core)
   };
+
+  /** Priors of the running fit (§10a.1); the brim prior only with a neck-entrance start. */
+  function makePrior(cfg) {
+    const pr = {
+      r: cfg.D / 2, sr: cfg.Dpm / 4,
+      L: cfg.Lest, sL: cfg.Lpm / 2,
+      h0: 0, sh0: cfg.h0pm / 2,
+    };
+    if (cfg.brimStart != null && isFinite(cfg.brimStart) && cfg.brimPm > 0) {
+      pr.B = cfg.brimStart; pr.sB = cfg.brimPm / 2;
+    }
+    return pr;
+  }
 
   function resolveConfig(c) {
     const cfg = Object.assign({}, DEFAULTS, c || {});
@@ -623,11 +685,12 @@
     if (cfg.pourSeconds && !cfg.fillSeconds) cfg.fillSeconds = cfg.pourSeconds;
     delete cfg.pourSeconds;
     cfg.fillSeconds = Object.assign({}, cfg.fillSeconds || {});
-    cfg.prior = {
-      r: cfg.D / 2, sr: cfg.Dpm / 4,
-      L: cfg.Lest, sL: cfg.Lpm / 2,
-      h0: 0, sh0: cfg.h0pm / 2,
-    };
+    if (cfg.direction == null || cfg.direction === "") cfg.direction = "fill";
+    if (cfg.direction !== "fill" && cfg.direction !== "drain") throw new Error(`direction must be "fill" or "drain", not ${JSON.stringify(cfg.direction)}`);
+    cfg.dir = cfg.direction === "drain" ? -1 : 1;
+    if (!(cfg.brimPm > 0)) cfg.brimPm = DEFAULTS.brimPm;
+    if (cfg.brimStart != null && !isFinite(cfg.brimStart)) cfg.brimStart = null;
+    cfg.prior = makePrior(cfg);
     return cfg;
   }
 
@@ -654,8 +717,11 @@
    *          "overflow" reading is vent-column height (§5.3a): out of the fit
    *          "override" accepted by the operator against the check: out of the fit
    *          "start"    the first level
+   *          "neck"     drain: a level in the neck, or the first shell level
+   *                     after one; the interval spans the neck (§5.3a): out of
+   *                     the running fit, kept as an anchor
    */
-  const GOOD = new Set(["accepted", "learning", "anomaly", "unknown", "override", "start"]);
+  const GOOD = new Set(["accepted", "learning", "anomaly", "unknown", "override", "start", "neck"]);
   const FIT = new Set(["accepted", "learning"]);
 
   function Session(config, saved) {
@@ -708,21 +774,42 @@
     return { H: dips[dips.length - 1], n: 1, agree: false, spread: best.d };
   }
 
+  /**
+   * Fit data: every accepted interval with a known step and a positive
+   * travel dir·(H − H_anchor).  H1 is the lower level, H2 the upper one, so
+   * fitShell needs no direction (n follows its level).  An interval that
+   * touches the neck is never fit data.
+   */
   Session.prototype._fitIntervals = function (upto) {
     const ivs = [];
+    const dir = this.cfg.dir;
     const end = upto == null ? this.levels.length : upto;
     for (let i = 1; i < end; i++) {
       const L = this.levels[i];
-      if (!FIT.has(L.state) || L.step.kind !== "known") continue;
+      if (!FIT.has(L.state) || L.step.kind !== "known" || L.neck) continue;
       const j = L.from;
-      if (j == null || j < 0 || !GOOD.has(this.levels[j].state) || this.levels[j].suspect) continue;
-      if (!(L.H > this.levels[j].H)) continue;
-      ivs.push({ H1: this.levels[j].H, H2: L.H, s: L.step.value, n1: this.levels[j].n, n2: L.n, row: i });
+      if (j == null || j < 0) continue;
+      const A = this.levels[j];
+      if (!GOOD.has(A.state) || A.suspect || A.neck) continue;
+      if (!(dir * (L.H - A.H) > 0)) continue;
+      if (dir > 0) ivs.push({ H1: A.H, H2: L.H, s: L.step.value, n1: A.n, n2: L.n, row: i });
+      else ivs.push({ H1: L.H, H2: A.H, s: L.step.value, n1: L.n, n2: A.n, row: i });
     }
     return ivs;
   };
 
+  /** Drain: the adopted neck-entrance reading is the brim B (§5.3a); null otherwise. */
+  Session.prototype._syncBrim = function () {
+    const cfg = this.cfg, L0 = this.levels[0];
+    const B = cfg.dir < 0 && L0 && L0.entrance && L0.state === "start" && L0.H != null ? L0.H : null;
+    if (B !== cfg.brimStart || (B != null) !== (cfg.prior.B != null)) {
+      cfg.brimStart = B;
+      cfg.prior = makePrior(cfg);
+    }
+  };
+
   Session.prototype._refit = function () {
+    this._syncBrim();
     const ivs = this._fitIntervals();
     this.fit = fitShell(ivs, this.cfg.prior, this.cfg, this.fit && this.fit.p);
     // Noise scale from the earlier one-step-ahead misses: robust (median), so
@@ -747,26 +834,49 @@
     return this.fit;
   };
 
-  /** Start the campaign: first row of the raw file (heel or first pour). */
-  Session.prototype.start = function (stepText, dip, note, time) {
+  /**
+   * Start the campaign: first row of the raw file (heel or first pour).
+   * opts.at (drain only) is where the first level stands:
+   *   "entrance"  the neck was pumped down until the level just reaches the
+   *               shell crown: the reading is the brim B (recommended)
+   *   "neck"      the level is in the neck: vent-column height, not shell level
+   *   "shell"     the level is in the shell, below the brim (default)
+   */
+  Session.prototype.start = function (stepText, dip, note, time, opts) {
     if (this.levels.length) throw new Error("the session has already started");
+    const at = (opts && opts.at) || "shell";
+    if (["entrance", "neck", "shell"].indexOf(at) < 0) throw new Error(`the start level is "entrance", "neck" or "shell", not ${JSON.stringify(at)}`);
+    if (at !== "shell" && this.cfg.dir > 0) throw new Error("a start at the neck is for a drain campaign");
     const step = parseStep(stepText);
     const L = { row: 1, step, dips: [], state: "pending", from: null, note: note || "", tags: [], H: null, n: 0, start: true };
+    if (at === "entrance") { L.entrance = true; addTag(L, "at neck entrance"); }
+    if (at === "neck") L.neck = true;
     this.levels.push(L);
     return this.dip(dip, time);
   };
 
-  /** A new pour.  The dip follows with dip(). */
+  /**
+   * A new pour (fill) or drain.  The dip follows with dip().
+   * opts.overflow (fill only): the pour reached the neck or overflowed.
+   * opts.neck (drain only): the level is still in the neck after this drain.
+   */
   Session.prototype.pour = function (stepText, opts) {
+    const o = opts || {};
     const cur = this.current();
     if (!cur) throw new Error("start the session first");
     if (cur.state === "pending") throw new Error("finish the dips at the current level first");
+    if (o.overflow && this.cfg.dir < 0) throw new Error("a drain cannot overflow: tick 'level still in the neck' for a level in the neck");
+    if (o.neck && this.cfg.dir > 0) throw new Error("the neck tick is for a drain campaign: a fill uses 'overflow'");
     const from = this.lastGood();
+    if (o.neck && !(from >= 0 && this.levels[from].neck)) {
+      throw new Error("a neck level must follow a neck level: in a drain the level only falls");
+    }
     const step = parseStep(stepText);
     const L = {
       row: this.levels.length + 1, step, dips: [], state: "pending", from,
-      note: (opts && opts.note) || "", tags: [], overflow: !!(opts && opts.overflow), H: null, n: 0,
+      note: o.note || "", tags: [], overflow: !!o.overflow, H: null, n: 0,
     };
+    if (o.neck) L.neck = true;
     this.levels.push(L);
     return L;
   };
@@ -920,7 +1030,7 @@
    */
   Session.prototype.preview = function (H1, s, nAnchor, nNew) {
     const fit = this.fit, p = fit.p;
-    const pr = predictLevel(H1, s, fit);
+    const pr = predictLevel(H1, s, fit, this.cfg.dir);
     const m1 = Math.max(slope(H1, p), 1e-3), m2 = Math.max(slope(pr.H, p), 1e-3);
     const sr = this.cfg.sigmaRead;
     const noise2 = sr * sr * (m1 / m2) * (m1 / m2) / Math.max(nAnchor || 1, 1)
@@ -928,7 +1038,7 @@
       + Math.pow(pourSigma(s, this.cfg) / m2, 2);
     const sdNoise = Math.sqrt(noise2);
     const sd = this.scale * Math.sqrt(noise2 + pr.sdModel * pr.sdModel);
-    return { H: pr.H, sd, sdNoise, sdModel: pr.sdModel, scale: this.scale, overflow: pr.overflow, m: m2, anchor: H1 };
+    return { H: pr.H, sd, sdNoise, sdModel: pr.sdModel, scale: this.scale, overflow: pr.overflow, empty: pr.empty, m: m2, anchor: H1 };
   };
 
   /** Prediction for level L (index i) from its anchor, or null. */
@@ -938,10 +1048,10 @@
     return this.preview(A.H, L.step.value, A.n, nNew);
   };
 
-  /** Interval residual in the §2 convention with the running fit. */
+  /** Interval residual in the §2 convention with the running fit (pred > 0 in both directions). */
   Session.prototype._resid = function (L, H) {
     const A = this.levels[L.from], p = this.fit.p;
-    const pred = volume(H, p) - volume(A.H, p);
+    const pred = this.cfg.dir * (volume(H, p) - volume(A.H, p));
     const resid = L.step.value - pred;
     const m = Math.max(slope(H, p), 1e-3);
     return { resid, mm: resid / m, pred };
@@ -975,6 +1085,40 @@
       setState("pending"); L.verdict = verdict; return verdict;
     }
 
+    // Drain through the neck: a level in the neck, and the first shell level
+    // after it, have no prediction.  The interval spans the neck: it feeds
+    // the brim constraint of the final fit (§5.3a), never the running fit.
+    const anchor = L.from != null && L.from >= 0 ? this.levels[L.from] : null;
+    if (cfg.dir < 0 && (L.neck || (anchor && anchor.neck))) {
+      const why = L.neck ? "a level in the neck" : "the first shell level below the neck";
+      if (nd < 2) {
+        Object.assign(verdict, {
+          status: "REDIP", color: "warn", title: "Second reading needed",
+          message: `No prediction can test ${why}. Only a repeat reading can.`,
+          advice: "Dip again. Do not look at the first reading.",
+        });
+        setState("pending"); L.verdict = verdict; return verdict;
+      }
+      let gapText = "";
+      if (!L.neck && this.fit) {
+        const p = this.fit.p, gap = capacity(p) - volume(a.H, p);
+        verdict.neckGap = gap;
+        gapText = ` Running shell: the shell gap Vcap − F(H) ≈ ${fmt(gap, 0)} L`
+          + (L.step.kind === "known" ? `; the drain was ${fmt(L.step.value, 0)} L, so the constraint reads ${fmt(gap, 0)} ≤ ${fmt(L.step.value, 0)} L.` : ".");
+      }
+      Object.assign(verdict, {
+        status: "NECK", color: "info",
+        title: L.neck ? "Neck reading recorded" : "Neck interval recorded",
+        message: `Two readings agree within ${fmt(a.spread, 1)} mm. Adopted ${fmt(a.H, 1)} mm. `
+          + (L.neck ? "The reading is vent-column height, not shell level. " : "The level is back in the shell. ")
+          + "The interval spans the neck, so it feeds the brim constraint Vcap − F(H) ≤ P of the final fit (§5.3a) and stays out of the running fit."
+          + gapText,
+        advice: L.neck ? "Drain the next batch. Tick 'level still in the neck' while the level is in the neck."
+          : "Drain the next batch. The next level is checked against this one.",
+      });
+      setState("neck"); L.verdict = verdict; this._refit(); this._advise(verdict, L); return verdict;
+    }
+
     // First level, unknown pour, overflow: no prediction can test the reading.
     if (L.start || L.step.kind !== "known" || L.overflow) {
       const why = L.start ? "the first level" : L.overflow ? "an overflow reading" : "an unknown pour";
@@ -997,16 +1141,19 @@
       Object.assign(verdict, {
         status: "ACCEPT", color: "ok", title: "Reading confirmed",
         message: `Two readings agree within ${fmt(a.spread, 1)} mm. Adopted ${fmt(a.H, 1)} mm.`,
-        advice: "Pour the next can.",
+        advice: nextStep(cfg),
       });
+      if (L.start && L.entrance) {
+        verdict.message += ` This is the brim B (the shell crown at the neck entrance): the running shell takes 2r + h0 = ${fmt(a.H, 1)} ± ${fmt(cfg.brimPm, 0)} mm (2σ).`;
+      }
       if (!L.start && L.step.kind !== "known" && this.fit) {
         const A = this.levels[L.from], p = this.fit.p, m = Math.max(slope(a.H, p), 1e-3);
-        const x = volume(a.H, p) - volume(A.H, p) - L.step.base;
+        const x = cfg.dir * (volume(a.H, p) - volume(A.H, p)) - L.step.base;
         const sr = cfg.sigmaRead;
         const sx = this.scale * Math.sqrt(m * m * sr * sr * (1 / Math.max(A.n, 1) + 1 / a.n)
           + Math.pow(cfg.pourRel * L.step.base + cfg.pourAbs, 2));
         verdict.unknown = { x, sigma: sx, base: L.step.base };
-        verdict.message += ` Back-predicted pour: ${L.step.base ? fmt(L.step.base, 0) + " + " : ""}${fmt(x, 1)} ± ${fmt(2 * sx, 1)} L (running shell, refined by the final fit).`;
+        verdict.message += ` Back-predicted ${cfg.dir < 0 ? "drain" : "pour"}: ${L.step.base ? fmt(L.step.base, 0) + " + " : ""}${fmt(x, 1)} ± ${fmt(2 * sx, 1)} L (running shell, refined by the final fit).`;
       }
       setState(L.start ? "start" : "unknown");
       L.verdict = verdict; this._refit(); this._advise(verdict, L); return verdict;
@@ -1032,7 +1179,7 @@
     if (!miss && (sharp || nd >= 2)) {
       Object.assign(verdict, {
         status: "ACCEPT", color: "ok", title: nd >= 2 ? "Reading confirmed" : "Reading good",
-        message: off, advice: "Pour the next can.",
+        message: off, advice: nextStep(cfg),
       });
       setState("accepted"); L.verdict = verdict; this._refit(); this._advise(verdict, L); return verdict;
     }
@@ -1055,8 +1202,8 @@
       Object.assign(verdict, {
         status: "LEARNING", color: "info", title: "Reading confirmed, shape still unknown",
         message: off + " Two readings agree, so the dip is good. The running shell has fewer than "
-          + `${cfg.learnN} intervals, so the miss is most likely the shape (bottom, datum), not the pour.`,
-        advice: "Pour the next can. The level is kept and used by the fit.",
+          + `${cfg.learnN} intervals, so the miss is most likely the shape (bottom, datum), not the ${cfg.dir < 0 ? "drain" : "pour"}.`,
+        advice: nextStep(cfg) + " The level is kept and used by the fit.",
       });
       setState("learning"); L.verdict = verdict; this._refit(); this._advise(verdict, L); return verdict;
     }
@@ -1066,22 +1213,31 @@
         status: "WATCH", color: "info", title: "Reading confirmed: watch item",
         message: off + " Two readings agree, so the dip is good. The miss is below the action bar "
           + `(|z| ≥ ${fmt(cfg.zAlarm, 0)} and ≥ ${fmt(cfg.mmAlarm, 0)} mm): a watch item (§6.5), kept in the fit.`,
-        advice: "Pour the next can.",
+        advice: nextStep(cfg),
       });
       L.watch = true;
       setState("accepted"); L.verdict = verdict; this._refit(); this._advise(verdict, L); return verdict;
     }
-    const cause = res.resid < 0
-      ? "OBJECT? or the pour was under-recorded: the rise came too cheap, more liquid went in than recorded or a solid displaced it"
-      : "LOSS? or the pour was over-recorded: the rise came too small, less liquid went in than recorded, or liquid went somewhere (leak, film, trapped air)";
+    const drain = cfg.dir < 0;
+    const cause = drain
+      ? (res.resid < 0
+        ? "OBJECT? or LEAK? or the drain was under-recorded: the fall came too large — a solid was exposed in this band, liquid left another way, or more left than the count says (a spill at the can counts here)"
+        : "RETURN? or the drain was over-recorded: the fall came too small — liquid came back (hose drained back into the tank, wall film) or less left than the count says")
+      : (res.resid < 0
+        ? "OBJECT? or the pour was under-recorded: the rise came too cheap, more liquid went in than recorded or a solid displaced it"
+        : "LOSS? or the pour was over-recorded: the rise came too small, less liquid went in than recorded, or liquid went somewhere (leak, film, trapped air)");
     Object.assign(verdict, {
       status: "ALARM", color: "bad",
-      title: "Reading confirmed: the pour or the tank is off",
+      title: drain ? "Reading confirmed: the drain or the tank is off" : "Reading confirmed: the pour or the tank is off",
       message: off + ` Two readings agree, so the dip is good. ${cause}.`,
-      advice: "Count the cans (or read the meter) of this pour again. If the count was wrong, edit the pour. "
-        + "If it was right, keep it: this interval stays out of the running fit and goes to the anomaly register (§6.2). "
-        + "A repeat pour of the same size into this band tells an object from a pour error. Pour the next can.",
-      cause: res.resid < 0 ? "OBJECT?" : "LOSS?",
+      advice: drain
+        ? "Count the full cans (or read the meter) of this drain again. If the count was wrong, edit the drain. "
+          + "If it was right, keep it: this interval stays out of the running fit and goes to the anomaly register (§6.2). "
+          + "Check the hose and the cans for a spill or a drain-back. Drain the next batch."
+        : "Count the cans (or read the meter) of this pour again. If the count was wrong, edit the pour. "
+          + "If it was right, keep it: this interval stays out of the running fit and goes to the anomaly register (§6.2). "
+          + "A repeat pour of the same size into this band tells an object from a pour error. Pour the next can.",
+      cause: drain ? (res.resid < 0 ? "OBJECT?" : "RETURN?") : (res.resid < 0 ? "OBJECT?" : "LOSS?"),
     });
     // Pours live on the unit grid (§3.10, §6.2): a miss of a whole number of
     // cans that a changed count explains is a count error before anything else.
@@ -1098,9 +1254,10 @@
         + `${k} can${k > 1 ? "s" : ""} ${hint.extra > 0 ? "more" : "fewer"} than the count `
         + (single ? `(${fmt(was + hint.extra, 0)}, not ${fmt(was, 0)})` : `(${fmt(total, 0)} L, not ${fmt(L.step.value, 0)} L)`)
         + ` explains it: z ${sgn(z, 1)} becomes ${sgn(hint.zAfter, 1)}.`;
-      verdict.advice = "Count the empty cans now, before the next pour. "
-        + (single ? `If you count ${fmt(was + hint.extra, 0)} cans, edit the pour to ${fmt(total, 0)} L. `
-          : `If the recount gives ${fmt(total, 0)} L, edit the pour to match it. `)
+      const what = drain ? "drain" : "pour";
+      verdict.advice = (drain ? "Count the full cans now, before the next drain. " : "Count the empty cans now, before the next pour. ")
+        + (single ? `If you count ${fmt(was + hint.extra, 0)} cans, edit the ${what} to ${fmt(total, 0)} L. `
+          : `If the recount gives ${fmt(total, 0)} L, edit the ${what} to match it. `)
         + verdict.advice;
     }
     // Pair pattern with the previous interval: the previous level may be the misread one.
@@ -1109,7 +1266,9 @@
       const r1 = prev.check.resid, r2 = res.resid;
       const net = Math.abs(r1 + r2) / (Math.abs(r1) + Math.abs(r2));
       if (net <= 0.15) {
-        const delta = (r2 - r1) / (2 * Math.max(slope(prev.H, this.fit.p), 1e-3));
+        // §6.1: δ = (r2 − r1)/(2m) for a fill.  A drain reverses the travel,
+        // so the same misread flips both residuals: δ = dir·(r2 − r1)/(2m).
+        const delta = cfg.dir * (r2 - r1) / (2 * Math.max(slope(prev.H, this.fit.p), 1e-3));
         verdict.pair = { level: prev.H, delta, net };
         verdict.message += ` With the previous interval this is the pattern of a misread at ${fmt(prev.H, 0)} mm `
           + `(δ ≈ ${sgn(delta, 1)} mm, net ${fmt(100 * net, 0)} %).`;
@@ -1119,6 +1278,9 @@
     }
     setState("anomaly"); L.verdict = verdict; this._refit(); this._advise(verdict, L); return verdict;
   };
+
+  /** The advice line after a good level. */
+  function nextStep(cfg) { return cfg.dir < 0 ? "Drain the next batch." : "Pour the next can."; }
 
   /**
    * Can-count hypothesis for a confirmed miss.  resid < 0 means more liquid
@@ -1161,8 +1323,11 @@
     const next = {
       tank: cfg.tank, D: cfg.D, Dpm: cfg.Dpm, Lest: cfg.Lest, Lpm: cfg.Lpm,
       pourUnit: cfg.pourUnit, sigmaRead: cfg.sigmaRead, pourRel: cfg.pourRel,
-      pourAbs: cfg.pourAbs, h0pm: cfg.h0pm,
+      pourAbs: cfg.pourAbs, h0pm: cfg.h0pm, brimPm: cfg.brimPm,
     };
+    if (has("direction") && o.direction != null && o.direction !== cfg.direction) {
+      throw new Error("the direction (fill or drain) is fixed at the start of the campaign");
+    }
     if (has("tank")) {
       const t = String(o.tank == null ? "" : o.tank).trim();
       if (t) next.tank = t;
@@ -1206,17 +1371,18 @@
       if (!(o.h0pm > 0)) throw new Error("the datum limit ± must be more than 0 mm");
       next.h0pm = o.h0pm;
     }
+    if (has("brimPm")) {
+      if (o.brimPm == null || o.brimPm === "") next.brimPm = DEFAULTS.brimPm;
+      else if (!(o.brimPm > 0)) throw new Error("the brim limit ± must be more than 0 mm");
+      else next.brimPm = o.brimPm;
+    }
     // The repeat limit follows the reading noise unless it was set by hand.
     // "By hand" means it differs from the default made from the old sigma.
     const oldTol = Math.max(1.0, 2.5 * Math.SQRT2 * cfg.sigmaRead);
     const tolIsDefault = !(cfg.repeatTol > 0) || Math.abs(cfg.repeatTol - oldTol) < 1e-9;
     Object.assign(cfg, next);
     if (has("sigmaRead") && tolIsDefault) cfg.repeatTol = Math.max(1.0, 2.5 * Math.SQRT2 * cfg.sigmaRead);
-    cfg.prior = {
-      r: cfg.D / 2, sr: cfg.Dpm / 4,
-      L: cfg.Lest, sL: cfg.Lpm / 2,
-      h0: 0, sh0: cfg.h0pm / 2,
-    };
+    cfg.prior = makePrior(cfg);
     this._refit();
     return cfg;
   };
@@ -1293,13 +1459,17 @@
    * first level at or above it is dipped.  The last step to the brim takes
    * only the cans the gap needs (the planned overflow pour, §3.7).
    *
+   * A drain counts the volume down: half, then the end (`end`): the first
+   * level in the bottom zone (within 60 mm of the bottom, or less than 5 %
+   * of the capacity left), where the pump may lose suction.
+   *
    * o = { size, cycleSeconds, settleSeconds, dipSeconds, now, pourElapsed }
    *   cycleSeconds  time one can costs: fill, carry and drain
    *   now           ms, for the settle time already spent at a pending level
    *   pourElapsed   s spent on the can that is filling now (fill timer)
    */
   Session.prototype.fillPlan = function (o) {
-    const cfg = this.cfg, p = this.fit.p, size = o && o.size;
+    const cfg = this.cfg, p = this.fit.p, size = o && o.size, dir = cfg.dir;
     const pourS = o && o.cycleSeconds, settle = o.settleSeconds != null ? o.settleSeconds : cfg.settleSeconds;
     const dipS = o.dipSeconds != null ? o.dipSeconds : cfg.dipSeconds;
     if (!(size > 0) || !(pourS > 0)) return null;
@@ -1310,20 +1480,40 @@
     const cur = this.current();
     if (cur && cur.state === "pending" && !cur.start) {
       // The pour is in; the settle and the dip are still to come.
-      if (cur.step.kind === "known") V = volume(this.levels[cur.from].H, p) + cur.step.value;
-      else if (cur.step.kind === "partial") V = volume(this.levels[cur.from].H, p) + cur.step.base;
+      if (cur.step.kind === "known") V = volume(this.levels[cur.from].H, p) + dir * cur.step.value;
+      else if (cur.step.kind === "partial") V = volume(this.levels[cur.from].H, p) + dir * cur.step.base;
       const spent = cur.pourTime && o.now ? (o.now - cur.pourTime) / 1000 : 0;
       t = Math.max(0, settle - spent) + dipS;
     } else if (this.batch) {
-      V += this.batchVolume();
+      V += dir * this.batchVolume();
       open = this.cans();
     }
     t -= Math.min(Math.max(o.pourElapsed || 0, 0), pourS);
     const start = { volume: V, seconds: t };
     const mark = (levels, cans) => ({ seconds: Math.max(0, t), levels, cans, volume: V });
+    let levels = 0, cans = 0;
+    const base = { size, cycleSeconds: pourS, settleSeconds: settle, dipSeconds: dipS, start, capacity: cap };
+    if (dir < 0) {
+      const endV = Math.max(0.05 * cap, volume(p.h0 + 60, p));
+      let atHalf = V <= half ? Object.assign(mark(0, 0), { done: true }) : null;
+      let atEnd = V <= endV + 1e-6 ? Object.assign(mark(0, 0), { done: true }) : null;
+      for (let guard = 0; !atEnd && guard < 100000 && V > 0; guard++) {
+        const H = levelFor(Math.max(V, 0), p);
+        const a = this.advice(H);
+        let n = Math.max(1, Math.round(a.target / size)) - open;
+        if (n < 0) n = 0;
+        open = 0;
+        // The pump cannot draw more than is left: the last can is a part can.
+        if (n * size > V) n = Math.max(1, Math.ceil(V / size - 1e-9));
+        V -= n * size; cans += n; levels++;
+        t += n * pourS + settle + dipS;
+        if (!atHalf && V <= half) atHalf = mark(levels, cans);
+        if (V <= endV + 1e-6) atEnd = mark(levels, cans);
+      }
+      return Object.assign(base, { half: atHalf, end: atEnd, brim: null, endVolume: endV });
+    }
     let atHalf = V >= half ? Object.assign(mark(0, 0), { done: true }) : null;
     let atBrim = V >= cap - 1e-6 ? Object.assign(mark(0, 0), { done: true }) : null;
-    let levels = 0, cans = 0;
     for (let guard = 0; !atBrim && guard < 100000; guard++) {
       const H = levelFor(Math.min(V, cap), p);
       const a = this.advice(H);
@@ -1338,7 +1528,7 @@
       if (!atHalf && V >= half) atHalf = mark(levels, cans);
       if (V >= cap - 1e-6) atBrim = mark(levels, cans);
     }
-    return { size, cycleSeconds: pourS, settleSeconds: settle, dipSeconds: dipS, start, half: atHalf, brim: atBrim, capacity: cap };
+    return Object.assign(base, { half: atHalf, brim: atBrim });
   };
 
   /** Pour advisor and brim watch (§3.4, §10). */
@@ -1353,6 +1543,7 @@
     const m = slope(H, p);
     const gap = capacity(p) - volume(H, p);
     const toBrim = brim(p) - H;
+    if (cfg.dir < 0) return this._adviceDrain(H, m, gap, toBrim);
     let target = 30 * m;
     const halve = gap < 0.05 * capacity(p) || toBrim < 60;
     if (halve) target /= 2;
@@ -1365,6 +1556,28 @@
       text: (halve ? `Near the brim (≈ ${fmt(toBrim, 0)} mm, gap ≈ ${fmt(gap, 0)} L): halve the pour. ` : "")
         + `Next pour ≈ ${fmt(target, 0)} L` + (units ? ` = ${units} × ${cfg.pourUnit} L` : "")
         + ` (≈ ${fmt(target / Math.max(m, 1e-3), 0)} mm rise).`,
+    };
+  };
+
+  /**
+   * Drain advisor: the same 30 mm target, no halving (the brim is behind
+   * us), and a bottom watch: the pump may lose suction near the bottom.
+   */
+  Session.prototype._adviceDrain = function (H, m, gap, toBrim) {
+    const p = this.fit.p, cfg = this.cfg, cap = capacity(p);
+    const left = volume(H, p), toBottom = H - p.h0;
+    let target = 30 * m;
+    let units = null;
+    if (cfg.pourUnit) { units = Math.max(1, Math.round(target / cfg.pourUnit)); target = units * cfg.pourUnit; }
+    const after = levelFor(left - target, p);
+    const bottom = after - p.h0 < 60 || left < 0.05 * cap;
+    const sdB = Math.sqrt(Math.max(this.fit.cov ? 4 * this.fit.cov[0][0] + 4 * this.fit.cov[0][2] + this.fit.cov[2][2] : 0, 0));
+    return {
+      slope: m, target, units, floor: 15 * m, ceiling: 100 * m, halve: false, bottom,
+      gap, toBrim, brim: brim(p), brimSd: sdB, capacity: cap, left, toBottom,
+      text: (bottom ? `Near the bottom (≈ ${fmt(toBottom, 0)} mm, ≈ ${fmt(left, 0)} L left): the pump may lose suction; a part can is fine (N+?). ` : "")
+        + `Next drain ≈ ${fmt(target, 0)} L` + (units ? ` = ${units} × ${cfg.pourUnit} L` : "")
+        + ` (≈ ${fmt(target / Math.max(m, 1e-3), 0)} mm fall).`,
     };
   };
 
@@ -1386,7 +1599,7 @@
       fit: this.fit, scale: this.scale, scaleN: this.scaleN, learning: this.learning(), intervals: ivs.length,
       drift, driftLimit: limit, driftAlarm: ivs.length > 2 && Math.abs(drift) > limit,
       counts, redips, levels: this.levels.length,
-      brim: brim(p), capacity: capacity(p),
+      brim: brim(p), capacity: capacity(p), direction: this.cfg.direction,
     };
   };
 
@@ -1394,35 +1607,51 @@
    * Chart series against the running shell as it is now (§6.6): one entry per
    * decided interval with a known pour.  resid = s - pred (§2), z = resid / σ,
    * drift D_k = Σ resid, with its 3σ√n limit (§10 DRIFT).  Pending levels stay
-   * blind; overflow readings and unknown pours carry no residual.
+   * blind; overflow readings, neck intervals and unknown pours carry no
+   * residual.  `rise` is the travel dir·(H − H1): positive in both directions.
    */
   Session.prototype.series = function () {
-    const p = this.fit.p, cfg = this.cfg, top = brim(p), out = [];
+    const p = this.fit.p, cfg = this.cfg, top = brim(p), out = [], dir = cfg.dir;
     let drift = 0, s2 = 0;
     for (const L of this.levels) {
       if (L.start || L.H == null || L.state === "pending" || L.overflow) continue;
       if (L.step.kind !== "known" || L.from == null || L.from < 0) continue;
-      const H1 = this.levels[L.from].H, rise = L.H - H1;
+      const A = this.levels[L.from];
+      if (L.neck || A.neck || L.state === "neck") continue;
+      const H1 = A.H, rise = dir * (L.H - H1);
       if (!(rise > 0) || L.H > top) continue;
-      const s = L.step.value, pred = volume(L.H, p) - volume(H1, p), resid = s - pred;
+      const s = L.step.value, pred = dir * (volume(L.H, p) - volume(H1, p)), resid = s - pred;
       const m = Math.max(slope(L.H, p), 1e-3);
       const v = 2 * m * m * cfg.sigmaRead * cfg.sigmaRead + Math.pow(pourSigma(s, cfg), 2);
       const sigma = this.scale * Math.sqrt(v);
       drift += resid; s2 += v;
       out.push({
-        row: L.row, H: L.H, H1, mid: 0.5 * (H1 + L.H), rise, s, pred, resid, m, mm: resid / m,
+        row: L.row, H: L.H, H1, mid: 0.5 * (H1 + L.H), rise, travel: rise, s, pred, resid, m, mm: resid / m,
         sigma, z: resid / sigma, drift, limit: 3 * Math.sqrt(s2), state: L.state, watch: !!L.watch,
       });
     }
     return out;
   };
 
-  /** Raw file for calib init / calib fit (§3.9).  One row per level, adopted reading. */
+  /**
+   * Raw file for calib init / calib fit (§3.9).  One row per level, adopted
+   * reading.  A drain keeps the same three columns and positive volumes; row
+   * 1 carries "drain campaign" first, then "at neck entrance" or "neck
+   * level"; a neck level carries "neck level" and the first shell level
+   * after the neck "neck interval".
+   */
   Session.prototype.toRawCsv = function () {
     const out = ["step_volume,measured_height,note"];
+    const drain = this.cfg.dir < 0;
     for (const L of this.levels) {
       if (L.H == null) continue;
       const bits = [];
+      if (drain) {
+        if (L.start) bits.push("drain campaign");
+        if (L.entrance) bits.push("at neck entrance");
+        if (L.neck) bits.push("neck level");
+        else if (L.from != null && L.from >= 0 && this.levels[L.from].neck) bits.push("neck interval");
+      }
       if (L.dips.length > 1) bits.push("dips " + L.dips.map((d) => fmt(d, 1)).join("/"));
       bits.push("site " + L.state);
       if (L.verdict && L.verdict.cause && L.state === "anomaly") bits.push(L.verdict.cause);
@@ -1434,10 +1663,10 @@
         for (const u of L.cans.units) by[u] = (by[u] || 0) + 1;
         const spec = Object.keys(by).map(Number).sort((a, b) => b - a)
           .map((u) => `${by[u]}x${fmt(u, 0)}`).join("+");
-        bits.push(`cans ${spec} L` + (L.cans.partial ? " last can part" : "")
+        bits.push(`cans ${spec} L` + (L.cans.partial ? (drain ? " pump lost suction: last can part" : " last can part") : "")
           + (ts.length ? ` ${clock(ts[0])}-${clock(ts[ts.length - 1])}` : ""));
       }
-      if (L.tags) for (const t of L.tags) bits.push(t);
+      if (L.tags) for (const t of L.tags) if (!(drain && L.entrance && t === "at neck entrance")) bits.push(t);
       if (L.note) bits.push(L.note);
       const note = bits.join("; ").replace(/[",\r\n]/g, " ");
       out.push(`${L.step.text},${round(L.H, 2)},${note}`);
@@ -1450,12 +1679,17 @@
    * Feed raw rows [{step, H}] through the check, as if each were dipped now.
    * When the check asks for another dip, second(i, k) gives it; by default the
    * recorded reading again: the answer a correct reading gives.
+   * A drain (config.direction = "drain") takes opts.neckRows (a Set of
+   * 1-based rows that are neck levels) and opts.neckEntrance (row 1 is the
+   * neck-entrance reading, the brim B).
    */
   function replayRows(rows, config, opts) {
     const o = opts || {};
     const s = new Session(config);
+    const drain = s.cfg.dir < 0;
     const second = o.second || ((i) => rows[i].H);
     const overflow = o.overflowRows || new Set();
+    const neck = o.neckRows || new Set();
     const out = [];
     const settle = (i, v) => {
       let d = 1;
@@ -1464,8 +1698,13 @@
     };
     for (let i = 0; i < rows.length; i++) {
       let v;
-      if (i === 0) v = s.start(rows[0].step, rows[0].H);
-      else { s.pour(rows[i].step, { overflow: overflow.has(i + 1) }); v = s.dip(o.first ? o.first(i) : rows[i].H); }
+      if (i === 0) {
+        v = drain ? s.start(rows[0].step, rows[0].H, "", null, { at: o.neckEntrance ? "entrance" : neck.has(1) ? "neck" : "shell" })
+          : s.start(rows[0].step, rows[0].H);
+      } else {
+        s.pour(rows[i].step, drain ? { neck: neck.has(i + 1) } : { overflow: overflow.has(i + 1) });
+        v = s.dip(o.first ? o.first(i) : rows[i].H);
+      }
       const firstStatus = i === 0 ? "" : v.status;
       const r = settle(i, v);
       out.push({
@@ -1475,6 +1714,16 @@
       });
     }
     return { session: s, out, status: s.status() };
+  }
+
+  /** "drain" when the heights of the rows mostly fall, else "fill". */
+  function detectDirection(rows) {
+    let up = 0, down = 0;
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i].H > rows[i - 1].H) up++;
+      else if (rows[i].H < rows[i - 1].H) down++;
+    }
+    return down > up ? "drain" : "fill";
   }
 
   /** Read a raw CSV text (§3.9): comma or semicolon, '#' comments, BOM. */
@@ -1508,6 +1757,7 @@
   const api = {
     area, volume, slope, capacity, brim, levelFor, fitShell, predictLevel, parseStep,
     resolveConfig, Session, DEFAULTS, adopt, canHint, NAMES, replayRows, readRawText,
+    detectDirection, makePrior,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.CalibSite = api;
@@ -1553,6 +1803,8 @@
     };
   }
   function pending() { const L = S && S.current(); return L && L.state === "pending" ? L : null; }
+  /** A drain campaign (reverse strapping): the level falls, the cans fill from the tank. */
+  function isDrain() { return !!S && S.cfg.dir < 0; }
 
   // ------------------------------------------------------------ tabs
   $("tabs").addEventListener("click", (ev) => {
@@ -1562,13 +1814,49 @@
   });
 
   // ------------------------------------------------------------ setup
+  // The direction and the start level are chosen once, at Start campaign.
+  let setupDir = "fill", setupAt = "entrance";
+  function pickDir(d) {
+    if (d === setupDir) return;
+    setupDir = d;
+    // A drain starts with an unknown volume in the tank.
+    if (d === "drain") $("s-step").value = "?";
+    render();
+  }
+  function pickAt(a) { setupAt = a; render(); }
+  $("s-dir-fill").addEventListener("click", () => pickDir("fill"));
+  $("s-dir-drain").addEventListener("click", () => pickDir("drain"));
+  $("s-at-entrance").addEventListener("click", () => pickAt("entrance"));
+  $("s-at-neck").addEventListener("click", () => pickAt("neck"));
+  $("s-at-shell").addEventListener("click", () => pickAt("shell"));
+  const AT_NOTE = {
+    entrance: "Pump the neck down until the level just reaches the shell crown, then dip. That reading is the brim B: the running shell knows the top from the first level. Recommended.",
+    neck: "The level is in the neck: the reading is vent-column height, not shell level. Tick 'level still in the neck' on each drain until the level is back in the shell. These intervals feed the brim constraint of the final fit, not the running fit.",
+    shell: "The level is in the shell, below the brim. A plain start: the running shell learns the top from D, L and the datum only.",
+  };
+  function renderSetup() {
+    const drain = setupDir === "drain";
+    $("s-dir-fill").setAttribute("aria-pressed", String(!drain));
+    $("s-dir-drain").setAttribute("aria-pressed", String(drain));
+    $("s-dir-note").textContent = drain
+      ? "Drain: the tank is full. A pump draws the water out into calibrated cans, and the level falls to the bottom. The direction is fixed for the whole campaign."
+      : "Fill: pour known volumes in, and the level rises to the brim. The direction is fixed for the whole campaign.";
+    $("s-at-wrap").classList.toggle("hidden", !drain);
+    for (const a of ["entrance", "neck", "shell"]) $("s-at-" + a).setAttribute("aria-pressed", String(a === setupAt));
+    $("s-at-note").textContent = AT_NOTE[setupAt];
+    $("s-step-label").textContent = drain ? "Liquid in the tank at the first dip, L (? = unknown)" : "Liquid before the first dip, L (? = unknown heel)";
+    $("s-first-note").textContent = drain
+      ? "Prime the pump and fill the hose before this reading: water that fills the hose later leaves the tank off the record. The first level always needs two readings: no prediction can test it."
+      : "Sound the bottom first and record the heel as this row (§3.3). The first level always needs two readings: no prediction can test it.";
+  }
   $("s-go").addEventListener("click", guard("s-err", () => {
     const n = readNoise();
     const cfg = {
       tank: $("s-tank").value.trim() || "tank",
       D: num("s-D"), Dpm: num("s-Dpm") || 200, Lest: num("s-L"), Lpm: num("s-Lpm"),
       pourUnit: num("s-unit"), sigmaRead: n.sigmaRead,
-      pourRel: n.pourRel, pourAbs: n.pourAbs, h0pm: n.h0pm,
+      pourRel: n.pourRel, pourAbs: n.pourAbs, h0pm: n.h0pm, brimPm: n.brimPm,
+      direction: setupDir,
     };
     if (!(cfg.D > 0)) throw new Error("Enter the diameter estimate D.");
     if (!(cfg.Lest > 0)) throw new Error("Enter the length estimate L.");
@@ -1576,7 +1864,7 @@
     if (dip == null) throw new Error("Enter the first reading.");
     resetTallySize();   // a new campaign takes its own default can size
     const s = new C.Session(cfg);
-    s.start($("s-step").value.trim() || "?", dip, "", Date.now());
+    s.start($("s-step").value.trim() || "?", dip, "", Date.now(), setupDir === "drain" ? { at: setupAt } : undefined);
     s.levels[0].pourTime = null;
     S = s; save(); tab = "live";
     // The noise card is the draft: keep the next campaign in step with it.
@@ -1621,7 +1909,7 @@
   $("t-part").addEventListener("change", () => render());
   $("p-go").addEventListener("click", guard("p-err", () => {
     if (S.cans()) {
-      const L = S.closeBatch({ partial: $("t-part").checked, overflow: $("p-over").checked, note: $("p-note").value.trim() });
+      const L = S.closeBatch(Object.assign({ partial: $("t-part").checked, note: $("p-note").value.trim() }, overNeck()));
       const ts = L.cans.taps.filter((x) => x != null);
       L.pourTime = ts.length ? ts[ts.length - 1] : Date.now();
       if (T.pour) { delete T.pour; saveTimer(); }
@@ -1635,10 +1923,13 @@
     if ($("p-unknown").checked) text = "?";
     else {
       const v = num("p-vol");
-      if (!(v > 0)) throw new Error(unit() ? "Tap one can at least, or enter the pour in litres." : "Enter the pour in litres, or tick 'whole pour unknown'.");
+      if (!(v > 0)) {
+        const w = isDrain() ? "drain" : "pour";
+        throw new Error(unit() ? `Tap one can at least, or enter the ${w} in litres.` : `Enter the ${w} in litres, or tick 'whole ${w} unknown'.`);
+      }
       text = $("p-extra").checked ? `${v}+?` : String(v);
     }
-    const L = S.pour(text, { overflow: $("p-over").checked, note: $("p-note").value.trim() });
+    const L = S.pour(text, Object.assign({ note: $("p-note").value.trim() }, overNeck()));
     L.pourTime = Date.now();
     if (T.pour) { delete T.pour; saveTimer(); }
     stopAlarm(); unlockAudio();
@@ -1646,6 +1937,12 @@
     save();
     setTimeout(() => $("d-val").focus(), 50);
   }));
+
+  /** The one tick under the pour: overflow in a fill, still in the neck in a drain. */
+  function overNeck() {
+    const on = $("p-over").checked;
+    return isDrain() ? { neck: on } : { overflow: on };
+  }
 
   // ------------------------------------------------------------ dip
   function doDip() {
@@ -1666,7 +1963,7 @@
   });
   $("a-edit").addEventListener("click", guard("d-err", () => {
     const L = S.current();
-    const t = prompt("Pour after the recount, L (? = unknown, 200+? = 200 plus unknown):", L.step.text);
+    const t = prompt(`${isDrain() ? "Drain" : "Pour"} after the recount, L (? = unknown, 200+? = 200 plus unknown):`, L.step.text);
     if (t == null) return;
     S.editPour(t.trim()); save();
   }));
@@ -1728,12 +2025,18 @@
     const cfg = { D: num("r-D"), Dpm: num("r-Dpm") || 200, Lest: num("r-L"), pourUnit: num("r-unit") };
     if (!(cfg.D > 0) || !(cfg.Lest > 0)) throw new Error("Enter D and L estimates.");
     const over = num("r-over");
+    const neck = new Set($("r-neck").value.split(/[,; ]+/).map(Number).filter((x) => x > 0));
     file.text().then((t) => {
       try {
         const rows = C.readRawText(t);
-        const r = C.replayRows(rows, cfg, { overflowRows: new Set(over ? [over] : []) });
+        const found = C.detectDirection(rows) === "drain";
+        const drain = $("r-drain").checked || $("r-entrance").checked || neck.size > 0 || found;
+        cfg.direction = drain ? "drain" : "fill";
+        const r = C.replayRows(rows, cfg, drain ? { neckRows: neck, neckEntrance: $("r-entrance").checked }
+          : { overflowRows: new Set(over ? [over] : []) });
         const st = r.status, p = st.fit.p;
-        $("r-sum").innerHTML = `${rows.length} levels · <b>${st.redips}</b> extra readings · states ${esc(JSON.stringify(st.counts))}<br>`
+        $("r-sum").innerHTML = (drain ? `<b>Drain campaign</b>${$("r-drain").checked ? "" : found ? " (found: the heights fall)" : ""}. ` : "")
+          + `${rows.length} levels · <b>${st.redips}</b> extra readings · states ${esc(JSON.stringify(st.counts))}<br>`
           + `running shell r ${f(p.r)} ± ${f(st.fit.sd.r)}, L ${f(p.L)} ± ${f(st.fit.sd.L)}, h0 ${f(p.h0)} ± ${f(st.fit.sd.h0)} mm`;
         let h = "<tr><th>row</th><th>H</th><th>pour</th><th>dips</th><th class=l>first</th><th class=l>final</th><th>pred</th><th>±2σ</th><th>e mm</th><th>z</th></tr>";
         for (const o of r.out) {
@@ -1755,12 +2058,13 @@
     }
     for (const id of ["f-csv", "f-json", "f-show", "f-new"]) $(id).disabled = !has;
     renderArchive();
+    renderSetup();
     renderSetupNoise();
     renderSettings();
     if (!has) { $("hdr-phase").textContent = "no session"; $("hdr-count").textContent = ""; $("hdr-title").textContent = "calib site — live dip check"; return; }
     const st = S.status();
     $("hdr-title").textContent = `${S.cfg.tank} — live dip check`;
-    $("hdr-phase").textContent = st.learning ? `learning (${st.intervals}/${S.cfg.learnN})` : "checking";
+    $("hdr-phase").textContent = (st.learning ? `learning (${st.intervals}/${S.cfg.learnN})` : "checking") + (isDrain() ? " · drain" : "");
     $("hdr-count").textContent = `${S.levels.length} levels · ${st.redips} extra dips`;
     renderLive(st); renderLog(); renderShell(st);
   }
@@ -1772,13 +2076,18 @@
     const G = gi >= 0 ? S.levels[gi] : null;
     const p = st.fit.p;
     const adv = G ? S.advice(G.H) : null;
+    const drain = isDrain();
     $("now-kv").innerHTML = G ? [
-      ["level", `${f(G.H)} mm (row ${G.row}, ${G.n > 1 ? "2 readings" : "1 reading"})`],
+      ["level", `${f(G.H)} mm (row ${G.row}, ${G.n > 1 ? "2 readings" : "1 reading"})${G.neck ? " · in the neck" : ""}`],
       ["liquid (running shell)", `${f(C.volume(G.H, p), 0)} L of ${f(st.capacity, 0)} L`],
-      ["brim", `≈ ${f(adv.brim, 0)} ± ${f(2 * adv.brimSd, 0)} mm · ${f(adv.toBrim, 0)} mm to go`],
+      drain ? ["brim", `≈ ${f(adv.brim, 0)} ± ${f(2 * adv.brimSd, 0)} mm${S.cfg.brimStart != null ? " (neck-entrance reading " + f(S.cfg.brimStart) + " mm)" : ""}`]
+        : ["brim", `≈ ${f(adv.brim, 0)} ± ${f(2 * adv.brimSd, 0)} mm · ${f(adv.toBrim, 0)} mm to go`],
+      drain ? ["bottom", `≈ ${f(adv.toBottom, 0)} mm to go · ≈ ${f(adv.left, 0)} L left`] : null,
       ["slope", `${f(adv.slope, 2)} L/mm`],
-    ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("") : "";
-    $("now-advice").textContent = adv && !pend ? adv.text : "";
+    ].filter(Boolean).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("") : "";
+    $("now-advice").textContent = adv && !pend
+      ? (G.neck ? "The level is in the neck. Drain until the level is back in the shell. Tick 'level still in the neck' while it stays in the neck." : adv.text)
+      : "";
     $("now-drift").textContent = st.intervals > 2
       ? `Running books − shell: ${sg(st.drift)} L (alarm beyond ±${f(st.driftLimit, 0)} L)${st.driftAlarm ? " — DRIFT: stop and audit (tilt? can size? leak?)" : ""}`
       : "";
@@ -1792,7 +2101,7 @@
     if (pend) {
       const n = pend.dips.length;
       $("dip-title").textContent = n === 0 ? "2 · Dip" : `2 · Dip again (reading ${n + 1})`;
-      $("dip-label").textContent = n === 0 ? `Reading after ${pend.step.text} L, mm` : "Next reading, mm — earlier readings hidden";
+      $("dip-label").textContent = n === 0 ? `Reading after ${drain ? "draining " : ""}${pend.step.text} L, mm` : "Next reading, mm — earlier readings hidden";
     }
     tickSettle(Date.now());
     tickEta(Date.now());
@@ -1826,14 +2135,15 @@
   function pourInput() {
     const n = S.cans();
     if (n) {
-      if ($("t-part").checked) return { unknown: "the last can is a part can" };
+      if ($("t-part").checked) return { unknown: isDrain() ? "the pump lost suction: the last can is a part can" : "the last can is a part can" };
       const s = S.batchVolume();
       return s > 0 ? { s } : null;
     }
-    if ($("p-unknown").checked) return { unknown: "the pour is unknown" };
+    const w = isDrain() ? "drain" : "pour";
+    if ($("p-unknown").checked) return { unknown: `the ${w} is unknown` };
     const v = num("p-vol");
     if (!(v > 0)) return null;
-    if ($("p-extra").checked) return { unknown: "the pour has an unknown extra" };
+    if ($("p-extra").checked) return { unknown: `the ${w} has an unknown extra` };
     return { s: v };
   }
 
@@ -1850,6 +2160,7 @@
     const gi = S.lastGood();
     const q = !pending() && gi >= 0 ? pourInput() : null;
     if (!q) { box.textContent = ""; box.className = "pred"; return; }
+    if (isDrain()) { renderDrainPrediction(box, q, S.levels[gi], adv); return; }
     if (q.unknown) {
       box.textContent = `After this pour: no prediction (${q.unknown}).`;
       box.className = "pred muted";
@@ -1870,6 +2181,29 @@
     const sharp = 2 * pr.sd <= S.cfg.sharpMm;
     box.textContent = `After this pour (${f(q.s, 0)} L): ${f(pr.H)} mm ± ${f(2 * pr.sd)} mm (2σ)`
       + ` · ${sg(pr.H - G.H)} mm rise · ≈ ${f(C.volume(pr.H, S.fit.p), 0)} L`
+      + (sharp ? " · sharp: one reading may do" : " · too wide to judge: expect two readings");
+    box.className = "pred";
+  }
+
+  /** The drain line: the level falls, and the volume left replaces the gap. */
+  function renderDrainPrediction(box, q, G, adv) {
+    const why = q.unknown ? q.unknown
+      : $("p-over").checked ? "the level is still in the neck"
+        : G.neck ? "the level is in the neck now: the drain spans the neck" : null;
+    if (why) {
+      box.textContent = `After this drain: no prediction (${why}).`;
+      box.className = "pred muted";
+      return;
+    }
+    const pr = S.preview(G.H, q.s, G.n);
+    if (pr.empty) {
+      box.textContent = `After this drain: the tank runs dry. ${f(q.s, 0)} L is more than the liquid left (≈ ${f(adv.left, 0)} L).`;
+      box.className = "pred error";
+      return;
+    }
+    const sharp = 2 * pr.sd <= S.cfg.sharpMm;
+    box.textContent = `After this drain (${f(q.s, 0)} L): ${f(pr.H)} mm ± ${f(2 * pr.sd)} mm (2σ)`
+      + ` · ${sg(pr.H - G.H)} mm fall · ≈ ${f(C.volume(pr.H, S.fit.p), 0)} L left`
       + (sharp ? " · sharp: one reading may do" : " · too wide to judge: expect two readings");
     box.className = "pred";
   }
@@ -1908,13 +2242,20 @@
     if (!sizes.length) $("p-manual").open = true;
     $("t-units").innerHTML = sizes.map((u) => `<button data-unit="${u}" aria-pressed="${u === act}">${f(u, 0)} L</button>`).join("");
 
+    const drain = isDrain();
     $("t-plus").disabled = !(act > 0);
-    $("t-plus").textContent = act > 0 ? `+1 can poured (${f(act, 0)} L)` : "Enter the can size, L";
+    $("t-plus").textContent = act > 0 ? `+1 can ${drain ? "full" : "poured"} (${f(act, 0)} L)` : "Enter the can size, L";
+    wordPourCard(drain);
 
     const cans = adv && act ? Math.max(1, Math.round(adv.target / act)) : 0;
     $("t-bar").style.width = `${cans ? Math.min(100, 100 * n / cans) : 0}%`;
     let note = "", warn = false;
-    if (adv) {
+    if (adv && drain) {
+      note = `Advice ≈ ${f(adv.target, 0)} L` + (cans ? ` = ${cans} × ${f(act, 0)} L` : "") + " (≈ 30 mm fall).";
+      if (vol > adv.left) { note = `${f(vol, 0)} L is more than the liquid left (≈ ${f(adv.left, 0)} L): the pump will lose suction. Tick the part can.`; warn = true; }
+      else if (adv.bottom) { note = "Near the bottom: the pump may lose suction; a part can is fine (N+?). " + note; warn = true; }
+      else if (cans && n > cans) note += ` ${n - cans} more than the advice.`;
+    } else if (adv) {
       note = `Advice ≈ ${f(adv.target, 0)} L` + (cans ? ` = ${cans} × ${f(act, 0)} L` : "") + " (≈ 30 mm rise).";
       if (vol > adv.gap) { note = `${f(vol, 0)} L is more than the shell gap (≈ ${f(adv.gap, 0)} L): expect an overflow.`; warn = true; }
       else if (adv.halve) { note = "Near the brim: small batches. " + note; warn = true; }
@@ -1934,8 +2275,23 @@
     $("t-chips").innerHTML = chips;
     $("t-undo").disabled = n === 0;
     $("t-part").disabled = n === 0;
-    $("p-go").textContent = n ? `Batch done: ${n} can${n > 1 ? "s" : ""}, ${f(vol, 0)} L → dip` : "Poured";
+    $("p-go").textContent = drain
+      ? (n ? `Drained: ${n} can${n > 1 ? "s" : ""}, ${f(vol, 0)} L → dip` : "Drained")
+      : (n ? `Batch done: ${n} can${n > 1 ? "s" : ""}, ${f(vol, 0)} L → dip` : "Poured");
     tickPour(Date.now());
+  }
+
+  /** The pour card in the words of the campaign direction. */
+  function wordPourCard(drain) {
+    $("pour-title").textContent = drain ? "1 · Drain" : "1 · Pour";
+    $("t-part-text").textContent = drain ? "pump lost suction: last can part" : "last can not fully poured";
+    $("p-manual-text").textContent = drain ? "Enter litres instead (meter, measured part can, unknown drain)" : "Enter litres instead (meter, odd can, unknown pour)";
+    $("p-vol-label").textContent = drain ? "Drained, L" : "Pour, L";
+    $("p-unknown-text").textContent = drain ? "whole drain unknown (?)" : "whole pour unknown (?)";
+    $("p-over-text").textContent = drain ? "level still in the neck" : "liquid reached the neck / overflowed";
+    $("t-help").innerHTML = drain
+      ? "Start the fill timer when you start the pump. The pump fills the can <b>from the tank</b>. The alarm rings before the can is full: close the valve at the calibrated mark. Tap <b>+1 can full</b> when the can is full. A spill is litres that left the tank but not the record. Keep the hose in the same state at every dip. When the pump loses suction, tap the part can and tick <i>pump lost suction: last can part</i>, or enter its measured litres instead. The count is saved after each tap. One dip follows the batch."
+      : "Start the fill timer when you start the pump. The alarm rings before the can is full: close the valve. Tap <b>+1 can poured</b> when the can is full. Emptying the can into the tank has no timer. Each can keeps the size shown above, so one batch can mix sizes. The count is saved after each tap. One dip follows the batch.";
   }
 
   // ------------------------------------------------------------ settings
@@ -1943,7 +2299,7 @@
   // timers need a session; the noise card also sets the next campaign.
   let settingsSig = "";
   function noiseDraft() {
-    return Object.assign({ sigmaRead: 0.4, pourRel: 0.005, pourAbs: 3, h0pm: 80 }, P.noise || {});
+    return Object.assign({ sigmaRead: 0.4, pourRel: 0.005, pourAbs: 3, h0pm: 80, brimPm: 6 }, P.noise || {});
   }
   function pct(x) { return String(Math.round(x * 1000) / 1000); }
   function renderSetupNoise() {
@@ -1955,7 +2311,7 @@
     const n = has ? S.cfg : noiseDraft();
     return JSON.stringify([has,
       has ? [S.cfg.tank, S.cfg.D, S.cfg.Dpm, S.cfg.Lest, S.cfg.Lpm, S.cfg.pourUnit] : null,
-      n.sigmaRead, n.pourRel, n.pourAbs, n.h0pm]);
+      n.sigmaRead, n.pourRel, n.pourAbs, n.h0pm, n.brimPm]);
   }
   function renderSettings() {
     const has = !!S;
@@ -1978,6 +2334,13 @@
       $("set-rel").value = pct(100 * n.pourRel);
       $("set-abs").value = String(n.pourAbs);
       $("set-h0").value = String(n.h0pm);
+      $("set-brim").value = n.brimPm == null ? "" : String(n.brimPm);
+    }
+    if (has) {
+      const L0 = S.levels[0];
+      $("set-dir").textContent = isDrain()
+        ? `Direction: drain (pump out), fixed at the start. First level: ${L0 && L0.entrance ? "at the neck entrance (brim B = " + f(S.cfg.brimStart) + " mm)" : L0 && L0.neck ? "in the neck" : "in the shell"}.`
+        : "Direction: fill (pour in), fixed at the start.";
     }
     $("set-noise-note").textContent = has
       ? "These are the numbers the check uses, one set everywhere (§9.1). A change refits the running shell and restarts the noise scale; earlier rows keep the z from their dip."
@@ -1985,12 +2348,13 @@
     if (has) renderTimers();
   }
   function readNoise() {
-    const sr = num("set-sr"), rel = num("set-rel"), abs = num("set-abs"), h0 = num("set-h0");
+    const sr = num("set-sr"), rel = num("set-rel"), abs = num("set-abs"), h0 = num("set-h0"), bp = num("set-brim");
     if (!(sr > 0)) throw new Error("Enter the reading repeatability σ, more than 0 mm.");
     if (rel == null || !(rel >= 0)) throw new Error("Enter the pour noise in %, 0 or more.");
     if (abs == null || !(abs >= 0)) throw new Error("Enter the fixed pour noise in L, 0 or more.");
     if (!(h0 > 0)) throw new Error("Enter the datum limit ±, more than 0 mm.");
-    return { sigmaRead: sr, pourRel: rel / 100, pourAbs: abs, h0pm: h0 };
+    if (bp != null && !(bp > 0)) throw new Error("Enter the brim limit ±, more than 0 mm, or leave it blank for 6 mm.");
+    return { sigmaRead: sr, pourRel: rel / 100, pourAbs: abs, h0pm: h0, brimPm: bp == null ? 6 : bp };
   }
   $("set-noise-save").addEventListener("click", guard("set-noise-err", () => {
     $("set-noise-msg").textContent = "";
@@ -2027,7 +2391,7 @@
   function loadJSON(k, d) { try { return JSON.parse(localStorage.getItem(k) || "null") || d; } catch (e) { return d; } }
   let T = loadJSON(TIMER, {});   // { pour: { start, dur, size, alarmed }, settled: "row@time" }
   const P = Object.assign({ anim: true, sound: true, vibrate: true, wake: true }, loadJSON(PREFS, {}));
-  P.noise = Object.assign({ sigmaRead: 0.4, pourRel: 0.005, pourAbs: 3, h0pm: 80 }, P.noise || {});
+  P.noise = Object.assign({ sigmaRead: 0.4, pourRel: 0.005, pourAbs: 3, h0pm: 80, brimPm: 6 }, P.noise || {});
   let timersSig = "", lastEta = 0;
   function saveTimer() { localStorage.setItem(TIMER, JSON.stringify(T)); }
   function clearTimers() { T = {}; localStorage.removeItem(TIMER); stopAlarm(); releaseWake(); stopPourAnim(); }
@@ -2183,7 +2547,8 @@
     for (const id of ["pt-less", "pt-more", "pt-stop"]) $(id).classList.toggle("hidden", !run);
     $("pt-start").classList.toggle("hidden", run);
     const gi = S.lastGood(), p = S.fit.p;
-    const tankFrac = gi >= 0 ? Math.min(1, (C.volume(S.levels[gi].H, p) + S.batchVolume()) / C.capacity(p)) : 0;
+    // A drain takes the batch out of the tank; a fill puts it in.
+    const tankFrac = gi >= 0 ? Math.min(1, Math.max(0, (C.volume(S.levels[gi].H, p) + S.cfg.dir * S.batchVolume()) / C.capacity(p))) : 0;
     $("pt-tank").setAttribute("y", String(82 - 42 * tankFrac));
     $("pt-tank").setAttribute("height", String(42 * tankFrac));
     let frac = 0;
@@ -2216,7 +2581,7 @@
       } else {
         box.className = "timer done";
         $("pt-clock").textContent = "0:00";
-        $("pt-status").textContent = `Can full (${f(pt.size, 0)} L): the pump must be off. Tap +1 can poured.`;
+        $("pt-status").textContent = `Can full (${f(pt.size, 0)} L): the pump must be off. Tap +1 can ${isDrain() ? "full" : "poured"}.`;
         $("t-plus").classList.add("pulse");
         if (!pt.fullAlarmed) {
           pt.fullAlarmed = true; saveTimer();
@@ -2299,14 +2664,15 @@
     const list = S.canList(), last = list.length ? list[list.length - 1].u : null;
     const u = activeUnit() || last, d = cycleFor(u);
     if (!(u > 0)) { box.innerHTML = ""; return; }
-    if (!d) { box.innerHTML = `<div class="muted">Set the fill time for ${f(u, 0)} L cans (Timers and alarm, below) to see the time to half and to the brim.</div>`; return; }
+    if (!d) { box.innerHTML = `<div class="muted">Set the fill time for ${f(u, 0)} L cans (Timers and alarm, below) to see the time to half and to the ${isDrain() ? "bottom" : "brim"}.</div>`; return; }
     const pe = T.pour && T.pour.size === u ? (now - T.pour.start) / 1000 : 0;
     const plan = S.fillPlan({ size: u, cycleSeconds: d.seconds, now, pourElapsed: pe });
     if (!plan) { box.innerHTML = ""; return; }
     const line = (name, m, V) => !m ? `<div><b>${name}</b>: —</div>`
       : m.done ? `<div><b>${name}</b> (${f(V, 0)} L): reached</div>`
         : `<div><b>${name}</b> (${f(V, 0)} L): ≈ ${fmtSpan(m.seconds)} · done ≈ <b>${hhmm(now + 1000 * m.seconds)}</b> · ${m.levels} level${m.levels > 1 ? "s" : ""} · ${m.cans} × ${f(u, 0)} L</div>`;
-    box.innerHTML = line("To half", plan.half, plan.capacity / 2) + line("To brim", plan.brim, plan.capacity)
+    box.innerHTML = line("To half", plan.half, plan.capacity / 2)
+      + (plan.end !== undefined ? line("To bottom", plan.end, plan.endVolume) : line("To brim", plan.brim, plan.capacity))
       + `<div class="muted">${fmtClock(d.seconds)} per can${d.source === "measured" ? " (measured cycle: fill, carry, drain)" : " (fill time only: a floor)"}, settle ${fmtClock(plan.settleSeconds)}, dip ${fmtClock(plan.dipSeconds)} per level. From the running shell and the pour advice, without extra dips.</div>`;
   }
 
@@ -2384,7 +2750,8 @@
 
   function renderLog() {
     if (tab !== "log") return;
-    let h = "<tr><th>row</th><th>pour L</th><th>readings</th><th>adopted</th><th>pred</th><th>±2σ</th><th>e mm</th><th>resid L</th><th>z</th><th class=l>state</th><th class=l>note</th></tr>";
+    let h = `<tr><th>row</th><th>${isDrain() ? "drained L" : "pour L"}</th><th>readings</th>`
+      + "<th>adopted</th><th>pred</th><th>±2σ</th><th>e mm</th><th>resid L</th><th>z</th><th class=l>state</th><th class=l>note</th></tr>";
     for (const L of S.levels) {
       const blind = L.state === "pending" && L.dips.length > 0;
       const c = !blind && L.check ? L.check : {};
@@ -2459,10 +2826,12 @@
     slope: {
       title: "Slope profile", draw: chartSlope,
       note: "Line: the slope dV/dH of the running shell. Points: pour ÷ rise for each interval, at the middle of the interval. A point that jumps off the smooth line is not possible for this tank: a wrong pour count or a wrong dip.",
+      noteDrain: "Line: the slope dV/dH of the running shell. Points: drain ÷ fall for each interval, at the middle of the interval. A point that jumps off the smooth line is not possible for this tank: a wrong can count or a wrong dip. Neck intervals have no point.",
     },
     drift: {
       title: "Drift", draw: chartDrift,
       note: "The running sum of the residuals (pour minus predicted pour), against the running shell as it is now. Band: the ±3σ√n limit. Flat wobble = noise. One spike that returns = one misread dip. A step = one event: up is a loss or an over-recorded pour, down is an object or an under-recorded pour. A ramp = a persistent effect: stop and audit.",
+      noteDrain: "The running sum of the residuals (drain minus predicted drain), against the running shell as it is now. The level falls, so the points run from right to left. Band: the ±3σ√n limit. Flat wobble = noise. One spike that returns = one misread dip. A step = one event: up is liquid that came back (hose drain-back, film) or an over-recorded drain, down is an exposed object, a leak, a spill or an under-recorded drain. A ramp = a persistent effect: stop and audit.",
     },
     z: {
       title: "z-score alarm", draw: chartZ,
@@ -2499,7 +2868,7 @@
     for (const b of $("chart-pick").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.chart === which));
     const c = CHARTS[which];
     $("chart-title").textContent = c.title;
-    $("chart-note").textContent = c.note;
+    $("chart-note").textContent = (isDrain() && c.noteDrain) || c.note;
     $("chart").innerHTML = c.draw();
     $("chart-legend").innerHTML = Object.keys(COL).map((k) => `<span><i style="background:${COL[k]}"></i>${k}</span>`).join("")
       + `<span><i style="background:#fff;border:2px solid ${COL.accepted}"></i>watch</span>`;
@@ -2552,11 +2921,11 @@
 
   function chartSlope() {
     const D = S.series(), p = S.fit.p, mMax = C.slope(p.h0 + p.r, p);
-    const F = frame("slope profile: pour over rise against the shell slope", 0, 1.3 * mMax, "L per mm");
+    const F = frame(isDrain() ? "slope profile: drain over fall against the shell slope" : "slope profile: pour over rise against the shell slope", 0, 1.3 * mMax, "L per mm");
     const line = [];
     for (let i = 0; i <= 120; i++) { const h = F.top * i / 120; line.push([F.X(h), F.Y(C.slope(h, p))]); }
     let s = F.s + `<path d="${path(line)}" fill="none" stroke="${MODEL}" stroke-width="2.2"/>`;
-    for (const d of D) s += dot(F.X(d.mid), F.Y(d.s / d.rise), d, `row ${d.row}: ${f(d.s, 0)} L over ${f(d.rise)} mm = ${f(d.s / d.rise, 2)} L/mm, shell ${f(d.pred / d.rise, 2)} L/mm`);
+    for (const d of D) s += dot(F.X(d.mid), F.Y(d.s / d.rise), d, `row ${d.row}: ${f(d.s, 0)} L over ${f(d.rise)} mm ${isDrain() ? "fall" : "rise"} = ${f(d.s / d.rise, 2)} L/mm, shell ${f(d.pred / d.rise, 2)} L/mm`);
     return s + (D.length ? "" : F.empty) + "</svg>";
   }
 
