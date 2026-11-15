@@ -66,12 +66,12 @@ tape gets 0.2–0.4 mm. Do not use the §9 interval σ (about 1–1.5 mm) here: 
 
 ## Settings
 
-The **Settings** tab holds the page language and every number the check
+The **Settings** tab holds the display settings and every number the check
 uses, in four cards:
 
 | Card | Holds | When |
 |---|---|---|
-| Language | The language of the page: English or Tiếng Việt (Vietnamese) | Any time |
+| Display | The language of the page (English or Tiếng Việt) and the theme (Auto, Light, Dark) | Any time |
 | This campaign | Tank name, D, L, pour unit and their ± | After the first level |
 | Noise and limits | Reading σ, pour noise, datum ±, brim ± at the neck entrance (drain) | Before or during a campaign |
 | Timers, alarm and device | Settle and dip times, fill time per can, alarm lead, animation, sound, vibration, screen | After the first level |
@@ -93,9 +93,22 @@ the 3 % default from the L you enter, so a corrected L also gets a new limit.
 The timers and device settings are operator settings, not data: they never
 enter the raw file or the fit.
 
+### Theme
+
+Choose the theme in **Settings → Display → Theme**. *Auto* (the default)
+follows the phone: dark when the phone is in dark mode. *Light* and *Dark*
+fix the theme. The device keeps the choice, and the page applies it before
+it draws, so a dark choice never flashes light. Dark mode helps at night and
+in a dark pump room; in strong sun, *Light* reads better.
+
+Every colour of the page is a CSS variable with a light and a dark value, in
+the `:root` block of `page.html`; the charts read the same variables when
+they draw. `tests/test_site.py` fails on a colour written outside the
+variables.
+
 ### Language
 
-Choose the language in **Settings → Language**. The device keeps the choice;
+Choose the language in **Settings → Display**. The device keeps the choice;
 the page reloads in the new language (the open session is saved). Without a
 choice, a phone set to Vietnamese starts in Vietnamese, any other in English.
 

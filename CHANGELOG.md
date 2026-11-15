@@ -20,6 +20,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Dark mode for the on-site page. **Settings → Display → Theme**: *Auto*
+  (the default, follows the phone), *Light* or *Dark*. The choice stays on the
+  device and applies before the first paint. Every colour is a CSS variable
+  with a light and a dark value; the charts, the tank pictograms and the pour
+  animation use them too. The Language card is now the Display card, with the
+  language and the theme.
 - The on-site page speaks Vietnamese. Choose the language in **Settings →
   Language** (English or Tiếng Việt); the device keeps the choice, and a
   phone set to Vietnamese starts in Vietnamese. Every text the page shows is

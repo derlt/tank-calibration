@@ -710,6 +710,11 @@
     // Settings
     "Language": "Ngôn ngữ",
     "Language of the page": "Ngôn ngữ của trang",
+    "Display": "Hiển thị",
+    "Theme": "Giao diện",
+    "Auto (follow the device)": "Tự động (theo thiết bị)",
+    "Light": "Sáng",
+    "Dark": "Tối",
     "The exported files stay in English: they are the record for": "Các tệp xuất vẫn bằng tiếng Anh: đó là bản ghi cho",
     "calib": "calib",
     "This campaign": "Đợt đo này",

@@ -3,23 +3,63 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#14324a">
+<meta name="theme-color" content="#14324a" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0a1c2c" media="(prefers-color-scheme: dark)">
+<script>
+  // The chosen theme before the first paint, so a dark choice never flashes light.
+  (function () {
+    try {
+      var t = JSON.parse(localStorage.getItem("calib-site:prefs") || "{}").theme;
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) { /* no storage: the device theme applies */ }
+  })();
+</script>
 <meta name="description" content="On-site dip check for horizontal tank calibration: one reading, one verdict, before the next pour.">
 <title>calib site — live dip check</title>
 <!-- Built file: edit site/page.html and site/site_core.js, then run
      `uv run python -m calib site-page`.  Works offline: no network, no install. -->
 <style>
+  /* Colours by role.  Light is the default; dark follows the device
+     (prefers-color-scheme) unless Settings → Display chooses a theme, which
+     sets data-theme on <html>.  The charts read the same variables. */
   :root {
-    --bg: #f4f6f8; --card: #ffffff; --ink: #14202b; --muted: #5b6b7a; --line: #d5dde5;
-    --brand: #14324a; --ok: #1d7a3e; --ok-bg: #e3f4e8; --warn: #9a5b00; --warn-bg: #fff2d6;
+    color-scheme: light;
+    --bg: #f4f6f8; --card: #ffffff; --surface: #ffffff; --ink: #14202b; --muted: #5b6b7a; --line: #d5dde5;
+    --brand: #14324a; --brand-ink: #14324a; --hdr: #14324a;
+    --ok: #1d7a3e; --ok-bg: #e3f4e8; --warn: #9a5b00; --warn-bg: #fff2d6;
     --bad: #b3261e; --bad-bg: #fde4e1; --info: #1f5d99; --info-bg: #e2eefb;
+    --alarm: #b3261e; --sel-bg: #fff1c2; --mark: #14324a; --todo-bg: #eef1f4; --todo: #9aa7b3; --can: #dfe6ec;
+    --row-a-bg: #fffaf1; --row-a-line: #e7c9a0; --row-b-bg: #f5f9fd; --row-b-line: #b9d2ea; --batch-line: #9fb6c9;
+    --model: #1a6fa8; --chart-warn: #ff9f1c; --shadow: rgba(0, 0, 0, 0.25);
     --radius: 12px; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #0e1318; --card: #171f27; --surface: #1e2832; --ink: #e3e9ef; --muted: #98a8b7; --line: #2c3a47;
+      --brand: #2f6a9e; --brand-ink: #8fc1ec; --hdr: #0a1c2c;
+      --ok: #5ec98a; --ok-bg: #133022; --warn: #e6a957; --warn-bg: #33260f;
+      --bad: #f2857a; --bad-bg: #3b1a17; --info: #72b4ec; --info-bg: #13283b;
+      --alarm: #c2362b; --sel-bg: #4b3e12; --mark: #e3e9ef; --todo-bg: #25303a; --todo: #7c8b98; --can: #2b3743;
+      --row-a-bg: #261e10; --row-a-line: #6b5226; --row-b-bg: #122130; --row-b-line: #2e4b66; --batch-line: #3b5368;
+      --model: #6fb0ea; --chart-warn: #ffb54d; --shadow: rgba(0, 0, 0, 0.6);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0e1318; --card: #171f27; --surface: #1e2832; --ink: #e3e9ef; --muted: #98a8b7; --line: #2c3a47;
+    --brand: #2f6a9e; --brand-ink: #8fc1ec; --hdr: #0a1c2c;
+    --ok: #5ec98a; --ok-bg: #133022; --warn: #e6a957; --warn-bg: #33260f;
+    --bad: #f2857a; --bad-bg: #3b1a17; --info: #72b4ec; --info-bg: #13283b;
+    --alarm: #c2362b; --sel-bg: #4b3e12; --mark: #e3e9ef; --todo-bg: #25303a; --todo: #7c8b98; --can: #2b3743;
+    --row-a-bg: #261e10; --row-a-line: #6b5226; --row-b-bg: #122130; --row-b-line: #2e4b66; --batch-line: #3b5368;
+    --model: #6fb0ea; --chart-warn: #ffb54d; --shadow: rgba(0, 0, 0, 0.6);
   }
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   /* One slim line: the tank (or the tank switch), then the status in small text. */
-  header { background: var(--brand); color: #fff; padding: 0.35rem 0.8rem; position: sticky; top: 0; z-index: 5; display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; min-height: 2.6rem; }
+  header { background: var(--hdr); color: #fff; padding: 0.35rem 0.8rem; position: sticky; top: 0; z-index: 5; display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; min-height: 2.6rem; }
   header h1 { font-size: 1rem; margin: 0; font-weight: 650; flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   header .hdr-status { margin-left: auto; font-size: 0.78rem; color: rgba(255, 255, 255, 0.8); white-space: nowrap; font-variant-numeric: tabular-nums; }
   header .hdr-status span + span:not(:empty)::before { content: " · "; }
@@ -30,12 +70,12 @@
   .grid { display: grid; gap: 0.6rem; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); }
   label { display: grid; gap: 0.2rem; font-size: 0.85rem; color: var(--muted); }
   label.check { display: flex; align-items: center; gap: 0.45rem; color: var(--ink); font-size: 0.95rem; }
-  input[type=text], input[type=number], input:not([type]), select { font: inherit; font-size: 1.05rem; padding: 0.55rem 0.6rem; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); width: 100%; }
+  input[type=text], input[type=number], input:not([type]), select { font: inherit; font-size: 1.05rem; padding: 0.55rem 0.6rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); width: 100%; }
   input.big { font-size: 1.6rem; font-family: var(--mono); padding: 0.5rem 0.7rem; }
   input[type=checkbox] { width: 1.3rem; height: 1.3rem; }
   button { font: inherit; font-weight: 600; border-radius: 10px; border: 1px solid var(--brand); background: var(--brand); color: #fff; padding: 0.65rem 1rem; min-height: 2.9rem; cursor: pointer; }
-  button.secondary { background: #fff; color: var(--brand); }
-  button.danger { background: #fff; color: var(--bad); border-color: var(--bad); }
+  button.secondary { background: var(--surface); color: var(--brand-ink); }
+  button.danger { background: var(--surface); color: var(--bad); border-color: var(--bad); }
   button.small { min-height: 2.2rem; padding: 0.3rem 0.7rem; font-size: 0.9rem; }
   button:disabled { opacity: 0.45; cursor: default; }
   .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: end; }
@@ -70,19 +110,19 @@
   td.l, th.l { text-align: left; }
   td { font-family: var(--mono); }
   #log-table tr[data-row] { cursor: pointer; }
-  #log-table tr.sel td { background: #fff1c2; }
-  #log-table tr.sel td:first-child { box-shadow: inset 4px 0 0 #14324a; }
+  #log-table tr.sel td { background: var(--sel-bg); }
+  #log-table tr.sel td:first-child { box-shadow: inset 4px 0 0 var(--mark); }
   #chart .mark { cursor: pointer; }
   #chart .mark:focus { outline: none; }
-  #chart .mark:focus-visible .hit { stroke: #14324a; stroke-width: 1.5; stroke-dasharray: 2 2; }
+  #chart .mark:focus-visible .hit { stroke: var(--mark); stroke-width: 1.5; stroke-dasharray: 2 2; }
   td input.note { width: 16rem; max-width: 55vw; font-size: 0.9rem; padding: 0.25rem 0.4rem; }
   .tabs { display: flex; gap: 0.3rem; flex-wrap: wrap; }
-  .tabs button { background: #fff; color: var(--brand); min-height: 2.3rem; padding: 0.3rem 0.8rem; }
+  .tabs button { background: var(--surface); color: var(--brand-ink); min-height: 2.3rem; padding: 0.3rem 0.8rem; }
   .tabs button[aria-pressed=true] { background: var(--brand); color: #fff; }
   .hidden { display: none !important; }
   svg text { font: 11px system-ui, sans-serif; fill: var(--muted); }
   .seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 0; border: 1px solid var(--brand); border-radius: 10px; overflow: hidden; margin-bottom: 0.6rem; }
-  .seg button { border: 0; border-radius: 0; background: #fff; color: var(--brand); min-height: 2.9rem; padding: 0.3rem 0.2rem; font-size: 0.95rem; }
+  .seg button { border: 0; border-radius: 0; background: var(--surface); color: var(--brand-ink); min-height: 2.9rem; padding: 0.3rem 0.2rem; font-size: 0.95rem; }
   .seg button + button { border-left: 1px solid var(--brand); }
   .seg button[aria-pressed=true] { background: var(--brand); color: #fff; }
   #chart { touch-action: pan-y; min-height: 260px; }
@@ -91,9 +131,9 @@
   button.huge { width: 100%; min-height: 4.8rem; font-size: 1.3rem; margin-top: 0.3rem; }
   .chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.5rem 0; }
   .chips span { background: var(--ok-bg); color: var(--ok); border-radius: 6px; padding: 0 0.4rem; font: 600 0.78rem var(--mono); }
-  .chips span.todo { background: #eef1f4; color: #9aa7b3; }
+  .chips span.todo { background: var(--todo-bg); color: var(--todo); }
   .sizes { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem; }
-  .sizes button { min-height: 2.3rem; padding: 0.2rem 0.7rem; font-size: 0.9rem; background: #fff; color: var(--brand); }
+  .sizes button { min-height: 2.3rem; padding: 0.2rem 0.7rem; font-size: 0.9rem; background: var(--surface); color: var(--brand-ink); }
   .sizes button[aria-pressed=true] { background: var(--brand); color: #fff; }
   .timer { border: 1px solid var(--line); border-radius: 10px; padding: 0.6rem; margin: 0.7rem 0 0.2rem; display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 0.8rem; align-items: center; }
   .timer.run { border-color: var(--info); background: var(--info-bg); }
@@ -105,18 +145,18 @@
   .timer .acts { grid-column: 1 / -1; display: flex; gap: 0.4rem; flex-wrap: wrap; }
   .timer .acts button { flex: 1 1 auto; }
   .pour-anim { width: 110px; height: 82px; display: block; }
-  .pour-anim .tank-bg { fill: #fff; }
+  .pour-anim .tank-bg { fill: var(--surface); }
   .pour-anim .tank { fill: none; stroke: var(--brand); stroke-width: 1.5; }
   .pour-anim .liq { fill: var(--info); }
-  .pour-anim .can { fill: #dfe6ec; stroke: var(--brand); stroke-width: 1.5; }
+  .pour-anim .can { fill: var(--can); stroke: var(--brand); stroke-width: 1.5; }
   .pour-anim .stream { fill: none; stroke: var(--info); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 5 4; }
   .pour-anim .hose { fill: none; stroke: var(--brand); stroke-width: 3; }
-  .pour-anim .nozzle { fill: #dfe6ec; stroke: var(--brand); stroke-width: 1.5; }
+  .pour-anim .nozzle { fill: var(--can); stroke: var(--brand); stroke-width: 1.5; }
   button.pulse { animation: pulse 1s ease-in-out infinite; }
   @keyframes pulse { 50% { box-shadow: 0 0 0 7px rgba(29, 122, 62, 0.35); } }
-  .alarm { position: fixed; left: 0.6rem; right: 0.6rem; bottom: calc(0.6rem + env(safe-area-inset-bottom)); z-index: 20; background: var(--bad); color: #fff; border-radius: 12px; padding: 0.8rem 1rem; display: flex; gap: 0.6rem; align-items: center; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25); max-width: 740px; margin: 0 auto; }
+  .alarm { position: fixed; left: 0.6rem; right: 0.6rem; bottom: calc(0.6rem + env(safe-area-inset-bottom)); z-index: 20; background: var(--alarm); color: #fff; border-radius: 12px; padding: 0.8rem 1rem; display: flex; gap: 0.6rem; align-items: center; box-shadow: 0 6px 24px var(--shadow); max-width: 740px; margin: 0 auto; }
   .alarm b { flex: 1; font-size: 1.05rem; }
-  .alarm button { background: #fff; color: var(--bad); border-color: #fff; }
+  .alarm button { background: #fff; color: var(--alarm); border-color: #fff; }
   .eta { margin: 0.6rem 0 0; font-size: 0.93rem; }
   .eta div { margin: 0.15rem 0; }
   .pred { margin: 0.45rem 0 0; font-size: 0.93rem; font-weight: 650; }
@@ -126,8 +166,8 @@
   .dipfield-in > button { flex: 0 0 auto; }
   .inwrap { position: relative; flex: 1 1 9rem; }
   #dip-card.two .dipfield { border: 1px solid; border-left-width: 6px; border-radius: 12px; padding: 0.6rem 0.7rem; margin: 0.6rem 0; }
-  #dip-card.two #dip-row-a { border-color: #e7c9a0; border-left-color: var(--warn); background: #fffaf1; }
-  #dip-card.two #dip-row-b { border-color: #b9d2ea; border-left-color: var(--info); background: #f5f9fd; }
+  #dip-card.two #dip-row-a { border-color: var(--row-a-line); border-left-color: var(--warn); background: var(--row-a-bg); }
+  #dip-card.two #dip-row-b { border-color: var(--row-b-line); border-left-color: var(--info); background: var(--row-b-bg); }
   #dip-card.two .inwrap input { padding-right: 2.4rem; }
   #dip-card.two #d-val:focus { outline: 3px solid var(--warn); outline-offset: 1px; }
   #dip-card.two #d-val-b:focus { outline: 3px solid var(--info); outline-offset: 1px; }
@@ -135,9 +175,9 @@
   .wm.out { color: var(--warn); }
   .wm.in { color: var(--info); }
   .chip { display: inline-flex; align-items: center; justify-content: center; width: 1.5rem; height: 1.5rem; border-radius: 6px; font-weight: 800; font-size: 0.8rem; flex: 0 0 auto; }
-  .chip.out { background: var(--warn); color: #fff; }
-  .chip.in { background: #fff; color: var(--info); border: 2px solid var(--info); }
-  .batch { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; background: var(--info-bg); border: 1px dashed #9fb6c9; border-radius: 8px; padding: 0.35rem 0.55rem; font-size: 0.8rem; margin-bottom: 0.5rem; }
+  .chip.out { background: var(--warn); color: var(--card); }
+  .chip.in { background: var(--surface); color: var(--info); border: 2px solid var(--info); }
+  .batch { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; background: var(--info-bg); border: 1px dashed var(--batch-line); border-radius: 8px; padding: 0.35rem 0.55rem; font-size: 0.8rem; margin-bottom: 0.5rem; }
   .batch .same { background: var(--brand); color: #fff; border-radius: 999px; padding: 0 0.5rem; font-size: 0.72rem; font-weight: 700; }
   .dip-legend { font-size: 0.8rem; color: var(--muted); margin: 0 0 0.5rem; }
   .tankicon { width: 58px; height: 35px; flex: 0 0 auto; }
@@ -153,11 +193,16 @@
   .error { color: var(--bad); font-weight: 600; }
   .big-num { font-family: var(--mono); font-size: 1.5rem; font-weight: 650; }
   .kv dt.hd { grid-column: 1 / -1; color: var(--ink); font-weight: 700; padding-top: 0.35rem; }
-  .tag.t-current { background: #eef1f4; color: var(--muted); }
+  .tag.t-current { background: var(--todo-bg); color: var(--muted); }
   header .seg { margin: 0; border-color: rgba(255, 255, 255, 0.6); }
   header .seg button { min-height: 2rem; padding: 0.1rem 0.7rem; font-size: 0.88rem; font-weight: 600; }
   header .seg button + button { border-left-color: rgba(255, 255, 255, 0.6); }
   details summary { cursor: pointer; color: var(--muted); }
+  .tankicon .frame { stroke: var(--mark); }
+  .tankicon .w-out { fill: var(--warn); }
+  .tankicon .w-in { fill: var(--info); }
+  .tankicon .a-out { stroke: var(--warn); }
+  .tankicon .a-in { stroke: var(--info); }
   /* Simple mode: the Live tab keeps the actions and the numbers to read. */
   .mode-seg { width: max-content; margin: 0 0 0.5rem auto; }
   .mode-seg button { min-height: 2rem; padding: 0.15rem 0.8rem; font-size: 0.85rem; }
@@ -331,9 +376,9 @@
         <div class="dipfield-h">
           <span class="chip out hidden" id="dip-chip-a">A</span>
           <svg class="tankicon hidden" id="dip-tank-a" viewBox="0 0 72 44" aria-hidden="true">
-            <rect id="dip-tank-a-water" x="4" y="18" width="64" height="20" rx="10" fill="#9a5b00" opacity=".6"/>
-            <rect x="2" y="14" width="68" height="26" rx="13" fill="none" stroke="#14324a" stroke-width="2"/>
-            <path d="M36 12 V3 M30 9 L36 3 L42 9" fill="none" stroke="#9a5b00" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect id="dip-tank-a-water" class="w-out" x="4" y="18" width="64" height="20" rx="10" fill="#9a5b00" opacity=".6"/>
+            <rect class="frame" x="2" y="14" width="68" height="26" rx="13" fill="none" stroke="#14324a" stroke-width="2"/>
+            <path class="a-out" d="M36 12 V3 M30 9 L36 3 L42 9" fill="none" stroke="#9a5b00" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
           <span class="role out hidden" id="dip-role"></span>
           <span id="dip-label">Reading, mm</span>
@@ -353,9 +398,9 @@
         <div class="dipfield-h">
           <span class="chip in" id="dip-chip-b">B</span>
           <svg class="tankicon" id="dip-tank-b" viewBox="0 0 72 44" aria-hidden="true">
-            <rect id="dip-tank-b-water" x="4" y="30" width="64" height="8" rx="4" fill="#1f5d99" opacity=".6"/>
-            <rect x="2" y="14" width="68" height="26" rx="13" fill="none" stroke="#14324a" stroke-width="2"/>
-            <path d="M36 3 V12 M30 6 L36 12 L42 6" fill="none" stroke="#1f5d99" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect id="dip-tank-b-water" class="w-in" x="4" y="30" width="64" height="8" rx="4" fill="#1f5d99" opacity=".6"/>
+            <rect class="frame" x="2" y="14" width="68" height="26" rx="13" fill="none" stroke="#14324a" stroke-width="2"/>
+            <path class="a-in" d="M36 3 V12 M30 6 L36 12 L42 6" fill="none" stroke="#1f5d99" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
           <span class="role in" id="dip-role-b"></span>
           <span id="dip-label-b">Tank B reading, mm</span>
@@ -415,8 +460,11 @@
   <!-- ===================================================== settings -->
   <section id="settings" class="hidden">
     <div class="card" id="set-lang-card">
-      <h2>Language</h2>
-      <label style="max-width:16rem">Language of the page<select id="set-lang" translate="no"></select></label>
+      <h2>Display</h2>
+      <div class="grid">
+        <label>Language of the page<select id="set-lang" translate="no"></select></label>
+        <label>Theme<select id="set-theme"></select></label>
+      </div>
       <p class="muted">The exported files stay in English: they are the record for <span class="mono">calib</span>.</p>
     </div>
 
@@ -1257,6 +1305,11 @@
     // Settings
     "Language": "Ngôn ngữ",
     "Language of the page": "Ngôn ngữ của trang",
+    "Display": "Hiển thị",
+    "Theme": "Giao diện",
+    "Auto (follow the device)": "Tự động (theo thiết bị)",
+    "Light": "Sáng",
+    "Dark": "Tối",
     "The exported files stay in English: they are the record for": "Các tệp xuất vẫn bằng tiếng Anh: đó là bản ghi cho",
     "calib": "calib",
     "This campaign": "Đợt đo này",
@@ -5044,8 +5097,24 @@
   }
 
   // ------------------------------------------------------------ charts
-  const COL = { accepted: "#1d7a3e", learning: "#1f5d99", anomaly: "#b3261e", override: "#9a5b00" };
-  const INK = "#5b6b7a", MODEL = "#1a6fa8", BAD = "#b3261e", WARN = "#ff9f1c";
+  // Chart colours come from the theme's CSS variables, read at each draw;
+  // the fallbacks are the light theme (and what the tests see).
+  let COL = { accepted: "#1d7a3e", learning: "#1f5d99", anomaly: "#b3261e", override: "#9a5b00" };
+  let INK = "#5b6b7a", MODEL = "#1a6fa8", BAD = "#b3261e", WARN = "#ff9f1c";
+  let GRID = "#d5dde5", MARK = "#14324a", SELBG = "#fff1c2", CARD = "#fff";
+  function cssVar(name, fallback) {
+    try {
+      const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      return v || fallback;
+    } catch (e) { return fallback; }
+  }
+  function paintColors() {
+    COL = { accepted: cssVar("--ok", "#1d7a3e"), learning: cssVar("--info", "#1f5d99"), anomaly: cssVar("--bad", "#b3261e"), override: cssVar("--warn", "#9a5b00") };
+    INK = cssVar("--muted", "#5b6b7a"); MODEL = cssVar("--model", "#1a6fa8");
+    BAD = cssVar("--bad", "#b3261e"); WARN = cssVar("--chart-warn", "#ff9f1c");
+    GRID = cssVar("--line", "#d5dde5"); MARK = cssVar("--mark", "#14324a");
+    SELBG = cssVar("--sel-bg", "#fff1c2"); CARD = cssVar("--card", "#fff");
+  }
   const CHARTS = {
     miss: {
       title: "Reading minus prediction", draw: chartMiss,
@@ -5095,6 +5164,7 @@
 
   function renderChart() {
     for (const b of $("chart-pick").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.chart === which));
+    paintColors();
     const c = CHARTS[which];
     $("chart-title").textContent = isTransfer() ? `${S.cfg.tank} — ${c.title}` : c.title;
     $("chart-note").textContent = (isDrain() && c.noteDrain) || c.note;
@@ -5103,7 +5173,7 @@
     const marked = !!sel && svg.indexOf(`data-row="${sel.row}"`) >= 0;
     $("chart-sel").textContent = selNote(marked);
     $("chart-legend").innerHTML = Object.keys(COL).map((k) => `<span><i style="background:${COL[k]}"></i>${k}</span>`).join("")
-      + `<span><i style="background:#fff;border:2px solid ${COL.accepted}"></i>watch</span>`;
+      + `<span><i style="background:${CARD};border:2px solid ${COL.accepted}"></i>watch</span>`;
   }
 
   function ticks(lo, hi, n) {
@@ -5125,7 +5195,7 @@
     const Y = (v) => t + (H - t - b) * (1 - (Math.min(Math.max(v, ylo), yhi) - ylo) / (yhi - ylo));
     let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="${esc(label)}">`;
     for (const v of ticks(ylo, yhi, 5)) {
-      s += `<line x1="${l}" x2="${W - r}" y1="${Y(v)}" y2="${Y(v)}" stroke="#d5dde5" stroke-width="${v === 0 ? 0 : 1}"/>`;
+      s += `<line x1="${l}" x2="${W - r}" y1="${Y(v)}" y2="${Y(v)}" stroke="${GRID}" stroke-width="${v === 0 ? 0 : 1}"/>`;
       s += `<text x="${l - 6}" y="${Y(v) + 4}" text-anchor="end">${tick(v)}</text>`;
     }
     for (const h of ticks(0, top, W < 420 ? 4 : 6)) s += `<text x="${X(h)}" y="${H - 8}" text-anchor="middle">${tick(h)}</text>`;
@@ -5140,11 +5210,11 @@
    */
   function dot(x, y, d, text) {
     const k = COL[d.state] || INK, on = isSel(d.row);
-    const guide = on ? `<line x1="${x}" x2="${x}" y1="${plotY[0]}" y2="${plotY[1]}" stroke="#14324a" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.7"/>` : "";
-    const ring = on ? `<circle cx="${x}" cy="${y}" r="10" fill="#fff1c2" stroke="#14324a" stroke-width="2.5"/>` : "";
+    const guide = on ? `<line x1="${x}" x2="${x}" y1="${plotY[0]}" y2="${plotY[1]}" stroke="${MARK}" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.7"/>` : "";
+    const ring = on ? `<circle cx="${x}" cy="${y}" r="10" fill="${SELBG}" stroke="${MARK}" stroke-width="2.5"/>` : "";
     return `<g class="mark${on ? " sel" : ""}" data-row="${d.row}" tabindex="0" role="button" aria-label="${esc(text)}"${on ? ' aria-pressed="true"' : ""}>`
       + `${guide}<circle class="hit" cx="${x}" cy="${y}" r="14" fill="transparent"/>${ring}`
-      + `<circle cx="${x}" cy="${y}" r="${d.watch ? 5 : 4}" fill="${d.watch ? "#fff" : k}" stroke="${k}" stroke-width="2"/><title>${esc(text)}</title></g>`;
+      + `<circle cx="${x}" cy="${y}" r="${d.watch ? 5 : 4}" fill="${d.watch ? CARD : k}" stroke="${k}" stroke-width="2"/><title>${esc(text)}</title></g>`;
   }
   function path(pts) { return pts.map((q, i) => `${i ? "L" : "M"}${q[0].toFixed(1)} ${q[1].toFixed(1)}`).join(""); }
 
@@ -5285,8 +5355,38 @@
     if (typeof location !== "undefined" && location.reload) location.reload();
   });
 
+  // ------------------------------------------------------------ theme
+  // Auto follows the device (prefers-color-scheme); Light and Dark set
+  // data-theme on <html>.  The head script applies the saved choice before
+  // the first paint; this code keeps it in step and redraws the charts,
+  // which read their colours from the theme.
+  const THEMES = [["auto", "Auto (follow the device)"], ["light", "Light"], ["dark", "Dark"]];
+  function theme() { return P.theme === "light" || P.theme === "dark" ? P.theme : "auto"; }
+  function applyTheme() {
+    const t = theme(), root = document.documentElement;
+    if (root && root.setAttribute) {
+      if (t === "auto") root.removeAttribute("data-theme"); else root.setAttribute("data-theme", t);
+    }
+    const sel = $("set-theme");
+    sel.innerHTML = THEMES.map(([v, n]) => `<option value="${v}"${v === t ? " selected" : ""}>${esc(n)}</option>`).join("");
+    sel.value = t;
+  }
+  $("set-theme").addEventListener("change", () => {
+    P.theme = $("set-theme").value;
+    localStorage.setItem(PREFS, JSON.stringify(P));
+    applyTheme();
+    render();
+  });
+  if (window.matchMedia) {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const follow = () => { if (theme() === "auto") render(); };
+    if (mq.addEventListener) mq.addEventListener("change", follow);
+    else if (mq.addListener) mq.addListener(follow);
+  }
+
   S = load();
   startLang();
+  applyTheme();
   render();
 })();
 </script>

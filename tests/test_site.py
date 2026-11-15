@@ -10,6 +10,7 @@ import csv
 import io
 import itertools
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -90,6 +91,51 @@ class TestSitePage(unittest.TestCase):
             r'<div id="tally"[^>]*class="[^"]*hidden',
             "the can tally must show: the size field is the only way to tap a can",
         )
+
+    def test_css_colours_come_from_the_theme(self):
+        """Every colour in a CSS rule is a theme variable, so dark mode covers it.
+
+        Only the variable declarations hold colours; the one exception is
+        white text (#fff) on the brand and alarm colours, the same in both
+        themes.
+        """
+        page = (SITE / "page.html").read_text(encoding="utf-8")
+        css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+        rules = [ln for ln in css.splitlines() if not ln.strip().startswith("--")]
+        stray = []
+        for ln in rules:
+            for m in re.finditer(r"#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)", ln):
+                ok = m.group(0) == "#fff" and re.search(r"(color|border-color|background): #fff", ln)
+                ok = ok or "rgba(255, 255, 255" in m.group(0) or "rgba(29, 122, 62" in m.group(0)
+                if not ok:
+                    stray.append(ln.strip())
+        self.assertEqual(stray, [], "a colour outside the theme variables")
+        self.assertIn(':root[data-theme="dark"]', css)
+        self.assertIn("prefers-color-scheme: dark", css)
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_theme_setting(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "out.options = el('set-theme').innerHTML;\n"
+            "out.value = el('set-theme').value;\n"
+            "el('set-theme').value = 'dark';\n"
+            "el('set-theme')._listeners.change[0]({});\n"
+            "out.saved = JSON.parse(store.get('calib-site:prefs')).theme;\n"
+            "const p2 = stub.boot(page, corePath, store);\n"
+            "out.reloaded = p2.el('set-theme').value;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        for v in ("auto", "light", "dark"):
+            self.assertIn(f'value="{v}"', got["options"])
+        self.assertEqual(got["value"], "auto", "without a choice the device theme applies")
+        self.assertEqual(got["saved"], "dark")
+        self.assertEqual(got["reloaded"], "dark", "the choice stays on the device")
 
     @unittest.skipUnless(NODE, "node is not installed")
     def test_page_tally_shows_and_keeps_the_size(self):
