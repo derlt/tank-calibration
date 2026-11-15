@@ -66,6 +66,7 @@
   th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--card); }
   td.l, th.l { text-align: left; }
   td { font-family: var(--mono); }
+  td input.note { width: 16rem; max-width: 55vw; font-size: 0.9rem; padding: 0.25rem 0.4rem; }
   .tabs { display: flex; gap: 0.3rem; flex-wrap: wrap; }
   .tabs button { background: #fff; color: var(--brand); min-height: 2.3rem; padding: 0.3rem 0.8rem; }
   .tabs button[aria-pressed=true] { background: var(--brand); color: #fff; }
@@ -270,6 +271,7 @@
     <p class="muted">Tap a button, or swipe the chart left or right, to change the chart.</p>
     <h2 style="margin-top:0.8rem">Levels</h2>
     <div class="table"><table id="log-table"></table></div>
+    <p id="log-err" class="error"></p>
   </section>
 
   <!-- ===================================================== shell -->
@@ -667,7 +669,7 @@
     }
     if (saved) {
       this.levels = saved.levels.map((l) => {
-        const L = Object.assign({}, l, { dips: l.dips.slice(), times: (l.times || []).slice() });
+        const L = Object.assign({}, l, { dips: l.dips.slice(), times: (l.times || []).slice(), tags: (l.tags || []).slice() });
         // Older pages saved a closed batch with one unit and no per-can sizes.
         if (L.cans && !L.cans.units) L.cans.units = (L.cans.taps || []).map(() => L.cans.unit);
         return L;
@@ -746,7 +748,7 @@
   Session.prototype.start = function (stepText, dip, note, time) {
     if (this.levels.length) throw new Error("the session has already started");
     const step = parseStep(stepText);
-    const L = { row: 1, step, dips: [], state: "pending", from: null, note: note || "", H: null, n: 0, start: true };
+    const L = { row: 1, step, dips: [], state: "pending", from: null, note: note || "", tags: [], H: null, n: 0, start: true };
     this.levels.push(L);
     return this.dip(dip, time);
   };
@@ -760,7 +762,7 @@
     const step = parseStep(stepText);
     const L = {
       row: this.levels.length + 1, step, dips: [], state: "pending", from,
-      note: (opts && opts.note) || "", overflow: !!(opts && opts.overflow), H: null, n: 0,
+      note: (opts && opts.note) || "", tags: [], overflow: !!(opts && opts.overflow), H: null, n: 0,
     };
     this.levels.push(L);
     return L;
@@ -828,13 +830,27 @@
     return L;
   };
 
+  /** Add a site marker to a level.  Markers stay apart from the operator note. */
+  function addTag(L, text) {
+    if (!L.tags) L.tags = [];
+    L.tags.push(text);
+  }
+
   /** Change the pour of the pending (or last) level after a recount. */
   Session.prototype.editPour = function (stepText) {
     const L = this.current();
     if (!L || L.start) throw new Error("no pour to edit");
     L.step = parseStep(stepText);
-    L.note = (L.note ? L.note + "; " : "") + "pour edited on site";
+    addTag(L, "pour edited on site");
     return this._evaluate(L);
+  };
+
+  /** Replace the operator note of a level.  row is 1-based, as in the raw file. */
+  Session.prototype.editNote = function (row, text) {
+    const L = this.levels.find((l) => l.row === row);
+    if (!L) throw new Error(`no row ${row}`);
+    L.note = String(text == null ? "" : text).trim();
+    return L;
   };
 
   /** Record one dip reading at the current level and judge it. */
@@ -859,7 +875,7 @@
     if (!L || !L.dips.length) throw new Error("nothing to accept");
     const a = adopt(L.dips, this.cfg.repeatTol);
     L.H = a.H; L.n = a.n; L.state = "override";
-    L.note = (L.note ? L.note + "; " : "") + "accepted against the check" + (why ? ": " + why : "");
+    addTag(L, "accepted against the check" + (why ? ": " + why : ""));
     L.verdict = { status: "OVERRIDE", color: "warn", title: "Accepted by the operator", message: "This level is kept as an anchor. Its interval stays out of the running fit.", advice: "" };
     this._refit();
     return L.verdict;
@@ -1408,6 +1424,7 @@
         bits.push(`cans ${spec} L` + (L.cans.partial ? " last can part" : "")
           + (ts.length ? ` ${clock(ts[0])}-${clock(ts[ts.length - 1])}` : ""));
       }
+      if (L.tags) for (const t of L.tags) bits.push(t);
       if (L.note) bits.push(L.note);
       const note = bits.join("; ").replace(/[",\r\n]/g, " ");
       out.push(`${L.step.text},${round(L.H, 2)},${note}`);
@@ -1495,6 +1512,7 @@
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   let S = null;           // the session
   let tab = "live";
+  let editRow = null;     // the row whose note is open for editing
 
   // ------------------------------------------------------------ storage
   function save() { if (S) localStorage.setItem(KEY, JSON.stringify(S.toJSON())); }
@@ -1527,7 +1545,7 @@
   $("tabs").addEventListener("click", (ev) => {
     const b = ev.target.closest("button[data-tab]");
     if (!b) return;
-    tab = b.dataset.tab; render();
+    tab = b.dataset.tab; editRow = null; render();
   });
 
   // ------------------------------------------------------------ setup
@@ -2299,10 +2317,61 @@
       h += `<tr><td>${L.row}</td><td>${esc(L.step.text)}${L.cans ? ` · ${L.cans.unit ? `${L.cans.tapped}×${f(L.cans.unit, 0)}` : `${L.cans.tapped} cans`}` : ""}</td><td>${blind ? "• • •" : L.dips.map((d) => f(d)).join(" / ")}</td>`
         + `<td>${blind || L.H == null ? "—" : f(L.H)}</td><td>${f(c.predicted)}</td><td>${c.sd ? f(2 * c.sd) : "—"}</td>`
         + `<td>${c.e == null ? "—" : sg(c.e)}</td><td>${c.resid == null ? "—" : sg(c.resid)}</td><td>${c.z == null ? "—" : sg(c.z)}</td>`
-        + `<td class=l>${stateTag(L)}${L.suspect ? ' <span class="tag t-pending">suspect</span>' : ""}</td><td class=l>${esc(L.note || "")}</td></tr>`;
+        + `<td class=l>${stateTag(L)}${L.suspect ? ' <span class="tag t-pending">suspect</span>' : ""}</td><td class=l>${noteCell(L)}</td></tr>`;
     }
     $("log-table").innerHTML = h;
     renderChart();
+  }
+
+  /** The note cell: the site markers, the text and an Edit button, or the open editor. */
+  function noteCell(L) {
+    const tags = (L.tags || []).map((t) => `<span class="muted">${esc(t)}</span>`).join("; ");
+    const sep = tags && L.note ? "; " : "";
+    if (editRow === L.row) {
+      return `${tags}${sep}<input id="note-edit" class="note" value="${esc(L.note || "")}" aria-label="Note for row ${L.row}">`
+        + ` <button class="small" data-note-save="${L.row}">Save</button>`
+        + ` <button class="small secondary" data-note-cancel="${L.row}">Cancel</button>`;
+    }
+    return `${tags}${sep}${esc(L.note || "")} <button class="small secondary" id="note-edit-${L.row}" data-note-edit="${L.row}" title="Edit the note" aria-label="Edit note for row ${L.row}">Edit</button>`;
+  }
+
+  /** Put the focus back on the row's Edit button after the editor closes. */
+  function focusEdit(row) {
+    const b = row == null ? null : $(`note-edit-${row}`);
+    if (b && b.focus) b.focus();
+  }
+
+  $("log-table").addEventListener("click", (ev) => {
+    const t = ev.target, pick = (sel) => (t.closest ? t.closest(sel) : null);
+    const e = pick("button[data-note-edit]");
+    if (e) {
+      editRow = +e.dataset.noteEdit; $("log-err").textContent = ""; renderLog();
+      const i = $("note-edit"); if (i && i.focus) i.focus();
+      return;
+    }
+    const s = pick("button[data-note-save]");
+    if (s) { saveNote(+s.dataset.noteSave); return; }
+    const c = pick("button[data-note-cancel]");
+    if (c) { const row = +c.dataset.noteCancel; editRow = null; renderLog(); focusEdit(row); }
+  });
+  $("log-table").addEventListener("keydown", (ev) => {
+    if (!ev.target || ev.target.id !== "note-edit") return;
+    if (ev.key === "Enter") {
+      // An input method may use Enter to pick a character.
+      if (ev.isComposing) return;
+      if (ev.preventDefault) ev.preventDefault();
+      if (editRow != null) saveNote(editRow);
+    } else if (ev.key === "Escape") {
+      const row = editRow; editRow = null; renderLog(); focusEdit(row);
+    }
+  });
+  function saveNote(row) {
+    $("log-err").textContent = "";
+    try {
+      const i = $("note-edit");
+      S.editNote(row, i ? i.value : "");
+      save(); editRow = null; render(); focusEdit(row);
+    } catch (e) { $("log-err").textContent = e.message; }
   }
 
   // ------------------------------------------------------------ charts

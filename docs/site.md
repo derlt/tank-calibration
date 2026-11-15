@@ -258,6 +258,13 @@ Slope, Drift and z alarm use the running shell as it is now. Thus they can
 differ from the z in the Levels table, which is the z at the time of the dip.
 An unknown pour and an overflow reading have no point on these charts.
 
+The **Levels** table lists every level. Its note cell has an *Edit* button:
+correct a typo or add what you learned after the pour. *Save* keeps the new
+note and *Cancel* leaves the old one. The note goes into the raw CSV with its
+level. The site's own markers, such as *pour edited on site* and *accepted
+against the check*, stay apart from the note: an edit cannot erase them, and
+the cell shows them before the note in grey.
+
 ## After the campaign
 
 1. *Files → Download raw CSV* gives `TANK_raw.csv`: one row per level with the

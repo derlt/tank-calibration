@@ -66,6 +66,7 @@
   th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--card); }
   td.l, th.l { text-align: left; }
   td { font-family: var(--mono); }
+  td input.note { width: 16rem; max-width: 55vw; font-size: 0.9rem; padding: 0.25rem 0.4rem; }
   .tabs { display: flex; gap: 0.3rem; flex-wrap: wrap; }
   .tabs button { background: #fff; color: var(--brand); min-height: 2.3rem; padding: 0.3rem 0.8rem; }
   .tabs button[aria-pressed=true] { background: var(--brand); color: #fff; }
@@ -270,6 +271,7 @@
     <p class="muted">Tap a button, or swipe the chart left or right, to change the chart.</p>
     <h2 style="margin-top:0.8rem">Levels</h2>
     <div class="table"><table id="log-table"></table></div>
+    <p id="log-err" class="error"></p>
   </section>
 
   <!-- ===================================================== shell -->
@@ -409,6 +411,7 @@
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   let S = null;           // the session
   let tab = "live";
+  let editRow = null;     // the row whose note is open for editing
 
   // ------------------------------------------------------------ storage
   function save() { if (S) localStorage.setItem(KEY, JSON.stringify(S.toJSON())); }
@@ -441,7 +444,7 @@
   $("tabs").addEventListener("click", (ev) => {
     const b = ev.target.closest("button[data-tab]");
     if (!b) return;
-    tab = b.dataset.tab; render();
+    tab = b.dataset.tab; editRow = null; render();
   });
 
   // ------------------------------------------------------------ setup
@@ -1213,10 +1216,61 @@
       h += `<tr><td>${L.row}</td><td>${esc(L.step.text)}${L.cans ? ` · ${L.cans.unit ? `${L.cans.tapped}×${f(L.cans.unit, 0)}` : `${L.cans.tapped} cans`}` : ""}</td><td>${blind ? "• • •" : L.dips.map((d) => f(d)).join(" / ")}</td>`
         + `<td>${blind || L.H == null ? "—" : f(L.H)}</td><td>${f(c.predicted)}</td><td>${c.sd ? f(2 * c.sd) : "—"}</td>`
         + `<td>${c.e == null ? "—" : sg(c.e)}</td><td>${c.resid == null ? "—" : sg(c.resid)}</td><td>${c.z == null ? "—" : sg(c.z)}</td>`
-        + `<td class=l>${stateTag(L)}${L.suspect ? ' <span class="tag t-pending">suspect</span>' : ""}</td><td class=l>${esc(L.note || "")}</td></tr>`;
+        + `<td class=l>${stateTag(L)}${L.suspect ? ' <span class="tag t-pending">suspect</span>' : ""}</td><td class=l>${noteCell(L)}</td></tr>`;
     }
     $("log-table").innerHTML = h;
     renderChart();
+  }
+
+  /** The note cell: the site markers, the text and an Edit button, or the open editor. */
+  function noteCell(L) {
+    const tags = (L.tags || []).map((t) => `<span class="muted">${esc(t)}</span>`).join("; ");
+    const sep = tags && L.note ? "; " : "";
+    if (editRow === L.row) {
+      return `${tags}${sep}<input id="note-edit" class="note" value="${esc(L.note || "")}" aria-label="Note for row ${L.row}">`
+        + ` <button class="small" data-note-save="${L.row}">Save</button>`
+        + ` <button class="small secondary" data-note-cancel="${L.row}">Cancel</button>`;
+    }
+    return `${tags}${sep}${esc(L.note || "")} <button class="small secondary" id="note-edit-${L.row}" data-note-edit="${L.row}" title="Edit the note" aria-label="Edit note for row ${L.row}">Edit</button>`;
+  }
+
+  /** Put the focus back on the row's Edit button after the editor closes. */
+  function focusEdit(row) {
+    const b = row == null ? null : $(`note-edit-${row}`);
+    if (b && b.focus) b.focus();
+  }
+
+  $("log-table").addEventListener("click", (ev) => {
+    const t = ev.target, pick = (sel) => (t.closest ? t.closest(sel) : null);
+    const e = pick("button[data-note-edit]");
+    if (e) {
+      editRow = +e.dataset.noteEdit; $("log-err").textContent = ""; renderLog();
+      const i = $("note-edit"); if (i && i.focus) i.focus();
+      return;
+    }
+    const s = pick("button[data-note-save]");
+    if (s) { saveNote(+s.dataset.noteSave); return; }
+    const c = pick("button[data-note-cancel]");
+    if (c) { const row = +c.dataset.noteCancel; editRow = null; renderLog(); focusEdit(row); }
+  });
+  $("log-table").addEventListener("keydown", (ev) => {
+    if (!ev.target || ev.target.id !== "note-edit") return;
+    if (ev.key === "Enter") {
+      // An input method may use Enter to pick a character.
+      if (ev.isComposing) return;
+      if (ev.preventDefault) ev.preventDefault();
+      if (editRow != null) saveNote(editRow);
+    } else if (ev.key === "Escape") {
+      const row = editRow; editRow = null; renderLog(); focusEdit(row);
+    }
+  });
+  function saveNote(row) {
+    $("log-err").textContent = "";
+    try {
+      const i = $("note-edit");
+      S.editNote(row, i ? i.value : "");
+      save(); editRow = null; render(); focusEdit(row);
+    } catch (e) { $("log-err").textContent = e.message; }
   }
 
   // ------------------------------------------------------------ charts
