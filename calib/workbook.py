@@ -233,7 +233,8 @@ def _series_sheet(wb, name, title, subtitle, series, result, *, raw):
     r = _header(
         ws, r,
         ["i", "H_prev", "H_cur", "Step", "Predicted", "Residual", "m (L/mm)",
-         "mm-equiv", "sigma", "z", "Drift", "Flag", "Books", "Pour/rise",
+         "mm-equiv", "sigma", "z", "Drift", "Flag", "Books",
+         "Drain/fall" if series.drain else "Pour/rise",
          "+sigma", "-sigma"],
     )
     ivs = {iv.row: iv for iv in result["intervals"]}
@@ -241,7 +242,7 @@ def _series_sheet(wb, name, title, subtitle, series, result, *, raw):
     for k in range(len(series)):
         row = int(series.row[k])
         iv = ivs.get(row)
-        m = float(shell.slope(series.H[k]))
+        m = float(shell.slope(max(series.H[k], series.h_prev[k])))
         mm = series.resid[k] / m if m > 0 else ""
         pour_rise = series.s[k] / series.rise[k] if series.rise[k] > 0 else ""
         if raw:
@@ -264,17 +265,29 @@ def _series_sheet(wb, name, title, subtitle, series, result, *, raw):
     return ws
 
 
+def _residual_note(cfg) -> str:
+    if getattr(cfg, "drain", False):
+        return (
+            "Drain: resid = step - (F(H_i-1) - F(H_i)). Negative: fall too large "
+            "(object, leak, under-recorded). Positive: fall too small (liquid came "
+            "back, over-recorded) (§2, §3.11). Drift = F - books."
+        )
+    return (
+        "resid = step - (F(H_i) - F(H_i-1)). Negative: rise too cheap. "
+        "Positive: rise too small (§2). Drift = books - F."
+    )
+
+
 def _model(wb, result):
     cfg = result["config"]
     series = charts.build_series(
         result["rows"], result["fit"].shell,
         sigma_h=cfg.sigma_h, rel=cfg.pour_rel, abs_=cfg.pour_abs,
-        heel_row=cfg.heel_row,
+        heel_row=cfg.heel_row, direction=cfg.sign,
     )
     _series_sheet(
         wb, "Model", "Model — corrected interval series",
-        "resid = step - (F(H_i) - F(H_i-1)). Negative: rise too cheap. "
-        "Positive: rise too small (§2). Drift = books - F.",
+        _residual_note(cfg),
         series, result, raw=False,
     )
 
@@ -284,7 +297,7 @@ def _raw_model(wb, result):
     series = charts.build_series(
         result["raw_rows"], result["fit"].shell,
         sigma_h=cfg.sigma_h, rel=cfg.pour_rel, abs_=cfg.pour_abs,
-        heel_row=cfg.heel_row,
+        heel_row=cfg.heel_row, direction=cfg.sign,
     )
     _series_sheet(
         wb, "RawModel", "RawModel — raw interval series",
@@ -598,7 +611,7 @@ def _raw_pairs(wb, result):
     series = charts.build_series(
         result["raw_rows"], result["fit"].shell,
         sigma_h=cfg.sigma_h, rel=cfg.pour_rel, abs_=cfg.pour_abs,
-        heel_row=cfg.heel_row,
+        heel_row=cfg.heel_row, direction=cfg.sign,
     )
     ws = wb.create_sheet("RawPairs")
     r = _title(ws, "Raw adjacent-pair scatter data", 1, 4)
@@ -883,6 +896,8 @@ def _audit(wb, result):
     ws["A9"] = "pour abs (L)"
     ws["B9"] = cfg.pour_abs
     ws["A10"] = "Objective SSE"
+    ws["A11"] = "direction"
+    ws["B11"] = "drain: Predicted = F(H_prev) - F(H_cur)" if cfg.drain else "fill"
 
     hdr = ["i", "H_prev", "H_cur", "Step", "h_prev", "A_prev", "h_cur", "A_cur",
            "Predicted", "Residual", "m", "mm-equiv", "sigma", "z"]
@@ -909,9 +924,13 @@ def _audit(wb, result):
             f"=$B$4^2*ACOS(MAX(-1,MIN(1,($B$4-G{row})/$B$4)))"
             f"-($B$4-G{row})*SQRT(MAX(0,2*$B$4*G{row}-G{row}^2))"
         ))
-        ws.cell(row=row, column=9, value=f"=$B$5*(H{row}-F{row})/1E6")
+        # A drain moves litres the other way: the step is F(H_prev) - F(H_cur).
+        ws.cell(row=row, column=9, value=(
+            f"=$B$5*(F{row}-H{row})/1E6" if cfg.drain else f"=$B$5*(H{row}-F{row})/1E6"
+        ))
         ws.cell(row=row, column=10, value=f"=D{row}-I{row}")
-        ws.cell(row=row, column=11, value=f"=2*$B$5*SQRT(MAX(0,2*$B$4*G{row}-G{row}^2))/1E6")
+        up = "E" if cfg.drain else "G"  # slope at the upper level (§3.11)
+        ws.cell(row=row, column=11, value=f"=2*$B$5*SQRT(MAX(0,2*$B$4*{up}{row}-{up}{row}^2))/1E6")
         ws.cell(row=row, column=12, value=f"=IF(K{row}=0,\"\",J{row}/K{row})")
         ws.cell(row=row, column=13, value=(
             f"=SQRT((K{row}*$B$7*SQRT(2))^2+($B$8*D{row}+$B$9)^2)"

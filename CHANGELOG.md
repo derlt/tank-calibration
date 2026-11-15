@@ -8,6 +8,23 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Reverse strapping (drain campaigns, §3.11): a tank that is already full is
+  calibrated from the top down, with a pump that draws known volumes out in
+  cans. `"direction": "drain"` in the campaign JSON; `calib init` infers it
+  from falling heights. Steps stay positive litres and `resid = s - pred`
+  keeps its sign meaning; a leak now gives `resid < 0`, and liquid that comes
+  back gives `resid > 0`. Every module follows the direction: the fit and its
+  covariance, the brim constraint (a drain out of the neck, `brim.neck_drain`,
+  or the neck-entrance equality alone), the pair rule (`δ` flips), unknown
+  drains, closure and QA (the books start at the first level in the shell),
+  blocking, the grid search, the charts, the workbook formulas, the field
+  check (NECK, BOTTOM-WARN), and the end heel in the shell record. The slope
+  of an interval is taken at its upper level in both directions, so a drain
+  gives the same numbers as the same steps poured in reverse
+  (`tests/test_drain.py`).
+- `examples/make_demo_drain.py` and `make demo-drain`: a synthetic drain
+  campaign with known truth.
+
 - On-site live dip check (§10a): `site/calib_site.html`, one offline page for
   a phone or tablet. It checks each dip before the next pour, while a re-dip
   is still possible. A running shell fitted on the accepted levels, with the

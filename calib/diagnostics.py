@@ -12,7 +12,7 @@ from itertools import pairwise
 
 import numpy as np
 
-from .data import Interval
+from .data import DRAIN, Interval
 from .geometry import Shell
 
 ACTION_MM = 3.0
@@ -43,25 +43,35 @@ def apply_model(
     """Fill pred, resid, slope, sigma, z, flag and drift on every interval.
 
     ``books_start`` is the liquid already on the books at the first level
-    (§9.3).  The drift is anchored so that ``drift_k = books_k - F(H_k)``:
-    it starts at the first pour's residual and carries an unknown pour at
-    the shell's predicted rise for that interval (its residual is zero by
-    construction, §8.1).  ``None`` keeps the plain running residual sum.
+    (§9.3).  The drift is anchored so that ``drift_k = books_k - F(H_k)``
+    for a fill: it starts at the first pour's residual and carries an
+    unknown pour at the shell's predicted rise for that interval (its
+    residual is zero by construction, §8.1).  ``None`` keeps the plain
+    running residual sum.
+
+    The slope ``m`` of an interval is taken at its upper level, in both
+    directions: for a fill that is ``H_i``, as before; for a drain it is
+    ``H_{i-1}``.  So a drain gives the same numbers as the same steps poured
+    in the reverse order.
+
+    A drain removes litres from the books, so there ``books_k - F(H_k)``
+    is minus the residual sum.  The drift keeps ``D_k = sum resid`` in both
+    directions (§2), so a drain anchors it as ``F(H_k) - books_k``.
     """
     for iv in intervals:
         if not iv.known:
-            iv.pred = float(shell.volume(iv.h_cur) - shell.volume(iv.h_prev))
+            iv.pred = iv.predicted(shell)
             iv.resid = float("nan")
-            iv.m = float(shell.slope(iv.h_cur))
+            iv.m = float(shell.slope(iv.h_hi))
             iv.mm_equiv = float("nan")
             iv.sigma = float("nan")
             iv.z = float("nan")
             iv.flag = "unknown pour"
             continue
-        pred = float(shell.volume(iv.h_cur) - shell.volume(iv.h_prev))
+        pred = iv.predicted(shell)
         iv.pred = pred
         iv.resid = float(iv.s) - pred
-        iv.m = float(shell.slope(iv.h_cur))
+        iv.m = float(shell.slope(iv.h_hi))
         iv.mm_equiv = iv.resid / iv.m if iv.m > 0 else float("nan")
         iv.sigma = interval_sigma(iv.m, iv.s, sigma_h, rel, abs_)
         iv.z = iv.resid / iv.sigma if iv.sigma > 0 else float("nan")
@@ -69,7 +79,9 @@ def apply_model(
 
     anchor = 0.0
     if books_start is not None and intervals:
-        anchor = books_start - float(shell.volume(intervals[0].h_prev))
+        anchor = intervals[0].direction * (
+            books_start - float(shell.volume(intervals[0].h_prev))
+        )
     running = anchor
     for iv in intervals:
         if iv.known and math.isfinite(iv.resid):
@@ -84,8 +96,19 @@ def interval_sigma(m: float, s: float, sigma_h: float, rel: float, abs_: float) 
     return math.sqrt((m * sigma_h * math.sqrt(2.0)) ** 2 + (rel * s + abs_) ** 2)
 
 
-def residual_meaning(resid: float) -> str:
-    """The two signs of §2, in one line each."""
+def residual_meaning(resid: float, direction: int = 1) -> str:
+    """The two signs of §2, in one line each.
+
+    A drain keeps the object and record signs.  A leak flips: liquid that
+    leaves by another way makes the fall too large.  A drain has one new
+    cause for ``resid > 0``: liquid that comes back (hose, wall film).
+    """
+    if direction == DRAIN:
+        if resid < 0:
+            return "fall too large: solid exposed, leak, or drain under-recorded"
+        if resid > 0:
+            return "fall too small: liquid came back (hose, film), or drain over-recorded"
+        return "no residual"
     if resid < 0:
         return "rise too cheap: solid displaced liquid, or pour under-recorded"
     if resid > 0:
@@ -131,7 +154,9 @@ def find_pairs(intervals: list[Interval], shell: Shell) -> list[PairFinding]:
         total = abs(a.resid) + abs(b.resid)
         ratio = abs(net) / total if total else float("inf")
         m = float(shell.slope(a.h_cur))
-        delta = (b.resid - a.resid) / (2.0 * m) if m > 0 else float("nan")
+        # Fill: r_first = -m*delta, r_second = +m*delta.  A drain reverses
+        # both signs, so the same arithmetic carries the direction (§3.11).
+        delta = a.direction * (b.resid - a.resid) / (2.0 * m) if m > 0 else float("nan")
         out.append(
             PairFinding(
                 first=a,
@@ -184,7 +209,7 @@ def band_displacement(band: dict, intervals: list[Interval]) -> float:
     for iv in intervals:
         if not iv.known or not math.isfinite(iv.resid):
             continue
-        if iv.h_cur >= lo and iv.h_prev <= hi:
+        if iv.h_hi >= lo and iv.h_lo <= hi:
             total += iv.resid
     return -total
 
@@ -238,6 +263,7 @@ def closure(
     rel: float,
     abs_: float,
     estimates: list[dict] | None = None,
+    start_row: int = 0,
 ) -> dict:
     """books_start + sum poured + sum blocked below H versus F(H) (§9.3).
 
@@ -245,12 +271,19 @@ def closure(
     back-predicted ``F(H_0)`` when not.  Only liquid that entered the shell
     counts: overflow pours are excluded, and an unknown pour enters at its
     back-predicted value.
+
+    A drain subtracts: ``books_start - sum drained + blocked below H``.
+    There ``books_start`` is the liquid at the books level ``start_row`` (the
+    first level in the shell), and only the drains after it count: a drain
+    from the neck took liquid that the shell volume never held.
     """
     data = [iv for iv in intervals if iv.trusted]
     if not data:
         return {"lhs": 0.0, "rhs": 0.0, "diff": float("nan"), "sigma": float("nan"),
                 "z": float("nan"), "limit": float("nan"), "ok": False, "n": 0}
+    sign = data[0].direction
     h_last = data[-1].h_cur
+    last_row = data[-1].row
     poured = 0.0
     var = float(start_sigma) ** 2
     by_idx = {u["interval"]: u for u in (estimates or [])}
@@ -259,7 +292,10 @@ def closure(
     # The books include every pour below H, trusted or not: trust is about
     # the fit, not about what was poured.
     for iv in intervals:
-        if iv.h_cur > h_last:
+        if sign == DRAIN:
+            if iv.row <= start_row or iv.row > last_row:
+                continue
+        elif iv.h_cur > h_last:
             continue
         if iv.known:
             poured += float(iv.s)
@@ -273,7 +309,7 @@ def closure(
         var += float(est["sigma"]) ** 2
         n_unknown += 1
     blocked = float(blocked_below(bands, h_last))
-    lhs = books_start + poured + blocked
+    lhs = books_start + sign * poured + blocked
     rhs = float(shell.volume(h_last))
     diff = lhs - rhs
     m = float(shell.slope(h_last))
@@ -387,7 +423,7 @@ def telescoping_blocks(
             block = [run[i] for i in idx]
             if len(block) < 2:
                 continue
-            total = sum(iv.s for iv in block) - (
+            total = sum(iv.s for iv in block) - block[0].direction * (
                 float(shell.volume(block[-1].h_cur)) - float(shell.volume(block[0].h_prev))
             )
             m1 = float(shell.slope(block[0].h_prev))

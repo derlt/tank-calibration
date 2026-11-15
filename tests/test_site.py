@@ -6,6 +6,9 @@ test still runs.
 
 from __future__ import annotations
 
+import csv
+import io
+import itertools
 import json
 import shutil
 import subprocess
@@ -22,6 +25,34 @@ NODE = shutil.which("node")
 CORE = (SITE / "site_core.js").as_posix()
 SIM = (SITE / "simulate.js").as_posix()
 DEMO = (HERE / "examples" / "demo_raw.csv").as_posix()
+
+
+# A synthetic drain campaign (reverse strapping) from a known shell, top-down.
+# liquid(H) = F(H) - the solid volume below H; an object fills [a, b] evenly.
+DRAIN_JS = r"""
+const P = {r: 1240, L: 5200, h0: -30};
+const CAP = core.capacity(P), B = core.brim(P);
+const SCHED = [100, 100, 200, 200, 400, 400, 600, 600, 1200, 1200, 1200, 1200, 1200, 1200, 1200,
+  1200, 600, 600, 400, 400, 200, 200];
+function inv(V, obj) {
+  if (!obj) return core.levelFor(V, P);
+  const liq = (H) => core.volume(H, P) - obj.d * Math.min(Math.max((H - obj.a) / (obj.b - obj.a), 0), 1);
+  let lo = P.h0, hi = P.h0 + 2 * P.r;
+  for (let i = 0; i < 100; i++) { const mid = 0.5 * (lo + hi); if (liq(mid) < V) lo = mid; else hi = mid; }
+  return 0.5 * (lo + hi);
+}
+/** rows from the neck entrance down; actual[i] overrides the litres that really left at step i. */
+function drainRows(obj, actual) {
+  const rows = [{step: '?', H: B}];
+  let V = CAP - (obj ? obj.d : 0);
+  SCHED.forEach((s, i) => {
+    V -= actual && actual[i] != null ? actual[i] : s;
+    rows.push({step: String(s), H: inv(V, obj)});
+  });
+  return rows;
+}
+const DRAIN_CFG = {D: 2400, Dpm: 200, Lest: 5100, direction: 'drain'};
+"""
 
 
 def _node(body: str):
@@ -505,6 +536,82 @@ class TestSitePage(unittest.TestCase):
         self.assertEqual(got["kept"], 'say "hi" <b>', "the note is stored as typed")
         self.assertIn("&quot;hi&quot; &lt;b&gt;", got["escapedHtml"], "the cell escapes the note")
         self.assertIn('value="say &quot;hi&quot; &lt;b&gt;"', got["reopen"], "the editor escapes the note")
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_drain_wording(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "let p = stub.boot(page, corePath, store), el = p.el;\n"
+            "out.atHiddenFill = el('s-at-wrap')._classes.has('hidden');\n"
+            "el('s-step').value = '400';\n"
+            "el('s-dir-drain').click();\n"
+            "out.atShown = !el('s-at-wrap')._classes.has('hidden');\n"
+            "out.step = el('s-step').value; out.pressed = el('s-dir-drain')['aria-pressed'];\n"
+            "out.atPressed = el('s-at-entrance')['aria-pressed'];\n"
+            "out.stepLabel = el('s-step-label').textContent; out.firstNote = el('s-first-note').textContent;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '1800'; el('s-unit').value = '200';\n"
+            "el('s-go').click(); el('d-val').value = '1800'; el('d-go').click();\n"
+            "const cfg = JSON.parse(store.get('calib-site:active')).config;\n"
+            "out.cfg = {direction: cfg.direction, brimStart: cfg.brimStart, brimPm: cfg.brimPm};\n"
+            "out.csv1 = JSON.parse(store.get('calib-site:active')).levels[0].tags;\n"
+            "out.plus = el('t-plus').textContent; out.go = el('p-go').textContent;\n"
+            "out.title = el('pour-title').textContent; out.over = el('p-over-text').textContent;\n"
+            "out.part = el('t-part-text').textContent; out.help = el('t-help').innerHTML;\n"
+            "out.phase = el('hdr-phase').textContent; out.kv = el('now-kv').innerHTML;\n"
+            "out.advice = el('now-advice').textContent;\n"
+            "el('p-vol').value = '400'; el('p-vol')._listeners.input[0]({target: el('p-vol')});\n"
+            "out.pred = el('now-pred').textContent;\n"
+            "el('p-vol').value = '99999'; el('p-vol')._listeners.input[0]({target: el('p-vol')});\n"
+            "out.dry = el('now-pred').textContent;\n"
+            "el('p-vol').value = '400'; el('p-over').checked = true; el('p-over')._listeners.change[0]({target: el('p-over')});\n"
+            "out.neckLine = el('now-pred').textContent;\n"
+            "el('p-over').checked = false; el('p-vol').value = '';\n"
+            "el('t-plus').click(); out.batch = el('p-go').textContent; out.tally = el('t-target').textContent;\n"
+            "el('p-go').click(); out.dip = el('dip-label').textContent;\n"
+            "el('d-val').value = '1700'; el('d-go').click();\n"
+            "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'settings' } }) } });\n"
+            "out.dir = el('set-dir').textContent; out.brim = el('set-brim').value;\n"
+            "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'log' } }) } });\n"
+            "out.table = el('log-table').innerHTML;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertTrue(got["atHiddenFill"], "a fill has no start-level choice")
+        self.assertTrue(got["atShown"], "a drain asks where the first level stands")
+        self.assertEqual(got["step"], "?", "a drain starts with an unknown volume")
+        self.assertEqual(got["pressed"], "true")
+        self.assertEqual(got["atPressed"], "true", "the neck entrance is the default")
+        self.assertIn("in the tank", got["stepLabel"])
+        self.assertIn("Prime the pump", got["firstNote"])
+        self.assertEqual(got["cfg"], {"direction": "drain", "brimStart": 1800, "brimPm": 6})
+        self.assertEqual(got["csv1"], ["at neck entrance"])
+        self.assertEqual(got["plus"], "+1 can full (200 L)")
+        self.assertEqual(got["go"], "Drained")
+        self.assertEqual(got["title"], "1 · Drain")
+        self.assertEqual(got["over"], "level still in the neck")
+        self.assertEqual(got["part"], "pump lost suction: last can part")
+        self.assertIn("from the tank", got["help"])
+        self.assertIn("drain", got["phase"])
+        self.assertIn("L left", got["kv"])
+        self.assertIn("Next drain", got["advice"])
+        self.assertNotIn("halve", got["advice"])
+        self.assertTrue(got["pred"].startswith("After this drain (400 L):"), got["pred"])
+        self.assertIn("mm fall", got["pred"])
+        self.assertIn("−", got["pred"].split("(2σ)")[1], "the fall is negative")
+        self.assertIn("L left", got["pred"])
+        self.assertIn("runs dry", got["dry"])
+        self.assertIn("still in the neck", got["neckLine"])
+        self.assertEqual(got["batch"], "Drained: 1 can, 200 L → dip")
+        self.assertIn("mm fall", got["tally"])
+        self.assertIn("draining 200 L", got["dip"])
+        self.assertIn("drain", got["dir"])
+        self.assertIn("neck entrance", got["dir"])
+        self.assertEqual(got["brim"], "6")
+        self.assertIn("drained L", got["table"])
 
 
 @unittest.skipUnless(NODE, "node is not installed")
@@ -1033,6 +1140,229 @@ class TestSiteCore(unittest.TestCase):
         )
         self.assertGreaterEqual(got["5"]["caught"], 0.95)
         self.assertLessEqual(got["5"]["falseRedip"], 0.12)
+
+    # ------------------------------------------------------------ drain mode
+    def test_drain_clean_campaign(self):
+        got = _node(
+            DRAIN_JS
+            + "const rows = drainRows();\n"
+            "const r = core.replayRows(rows, Object.assign({pourUnit: 100}, DRAIN_CFG), {neckEntrance: true});\n"
+            "const s = r.session;\n"
+            "const j = JSON.parse(JSON.stringify(s.toJSON()));\n"
+            "const back = core.Session.fromJSON(j);\n"
+            "console.log(JSON.stringify({out: r.out, status: r.status, csv: s.toRawCsv(), P, B,"
+            " brimStart: s.cfg.brimStart, priorB: s.cfg.prior.B, series: s.series(),"
+            " cfg: {direction: j.config.direction, brimPm: j.config.brimPm, brimStart: j.config.brimStart},"
+            " backCsv: back.toRawCsv(), backB: back.cfg.prior.B, backDir: back.cfg.dir,"
+            " detected: core.detectDirection(rows)}));"
+        )
+        statuses = [o["status"] for o in got["out"]]
+        self.assertNotIn("ALARM", statuses, statuses)
+        self.assertNotIn("NECK", statuses)
+        self.assertEqual(got["detected"], "drain")
+        self.assertEqual(got["out"][0]["dips"], 2, "the first level needs two readings")
+        self.assertAlmostEqual(got["brimStart"], got["B"], places=6, msg="the neck-entrance reading is B")
+        self.assertAlmostEqual(got["priorB"], got["B"], places=6)
+        p, t = got["status"]["fit"]["p"], got["P"]
+        self.assertLess(abs(p["r"] - t["r"]) / t["r"], 0.02, p)
+        self.assertLess(abs(p["L"] - t["L"]) / t["L"], 0.03, p)
+        self.assertLess(abs(2 * p["r"] + p["h0"] - got["B"]), 3.0, "the brim prior holds the top")
+        self.assertEqual(got["status"]["direction"], "drain")
+        self.assertEqual(got["cfg"], {"direction": "drain", "brimPm": 6, "brimStart": got["B"]})
+        self.assertEqual(got["backCsv"], got["csv"], "the session JSON round-trips")
+        self.assertAlmostEqual(got["backB"], got["B"], places=6)
+        self.assertEqual(got["backDir"], -1)
+        rows = list(csv.reader(io.StringIO(got["csv"])))
+        self.assertEqual(rows[0], ["step_volume", "measured_height", "note"])
+        heights = [float(r[1]) for r in rows[1:]]
+        self.assertTrue(all(b < a for a, b in itertools.pairwise(heights)), "heights fall")
+        self.assertEqual(rows[1][0], "?")
+        self.assertTrue(all(float(r[0]) > 0 for r in rows[2:]), "drain volumes are positive")
+        notes = rows[1][2].split("; ")
+        self.assertEqual(notes[0], "drain campaign", "the token comes first")
+        self.assertEqual(notes[1], "at neck entrance")
+        self.assertEqual(rows[1][2].count("at neck entrance"), 1)
+        for r in rows[2:]:
+            self.assertNotIn("drain campaign", r[2])
+        # Charts: travel > 0, the §2 residual, drift = Σ resid.
+        drift = 0.0
+        for d in got["series"]:
+            self.assertGreater(d["rise"], 0)
+            self.assertLess(d["H"], d["H1"])
+            drift += d["resid"]
+            self.assertAlmostEqual(d["drift"], drift, places=6)
+        self.assertEqual(len(got["series"]), len(rows) - 2)
+        self.assertAlmostEqual(got["status"]["drift"], drift, places=3)
+
+    def _drain_event(self, obj, actual):
+        return _node(
+            DRAIN_JS
+            + f"const obj = {obj}, actual = {actual};\n"
+            "const rows = drainRows(obj, actual);\n"
+            "const r = core.replayRows(rows, Object.assign({}, DRAIN_CFG, {D: 2480, Lest: 5200}), {neckEntrance: true});\n"
+            "const L = r.session.levels;\n"
+            "console.log(JSON.stringify({out: r.out, verdicts: L.map((l) => l.verdict && {cause: l.verdict.cause,"
+            " message: l.verdict.message, status: l.verdict.status}), csv: r.session.toRawCsv(),"
+            " rows: rows.map((x) => x.H)}));"
+        )
+
+    def test_drain_signs_object_and_over_record(self):
+        # Object: 150 L of solid in a band inside interval 10 (rows 10 → 11).
+        band = (
+            "(() => { const a = drainRows(); const mid = 0.5 * (a[9].H + a[10].H);"
+            " return {d: 150, a: mid - 5, b: mid + 5}; })()"
+        )
+        got = self._drain_event(band, "null")
+        alarms = [o for o in got["out"] if o["status"] == "ALARM"]
+        self.assertEqual([o["row"] for o in alarms], [11], got["out"])
+        o, v = alarms[0], got["verdicts"][10]
+        self.assertLess(o["resid"], 0, "an exposed object: the fall came too large")
+        self.assertAlmostEqual(o["resid"], -150, delta=20)
+        self.assertEqual(v["cause"], "OBJECT?")
+        self.assertIn("OBJECT? or LEAK? or the drain was under-recorded", v["message"])
+        self.assertIn("a spill at the can counts here", v["message"])
+        self.assertIn("OBJECT?", got["csv"].splitlines()[11])
+        # Over-recorded: 1200 L on the record, 1050 L really left at step 11.
+        got = self._drain_event("null", "{10: 1050}")
+        alarms = [o for o in got["out"] if o["status"] == "ALARM"]
+        self.assertEqual([o["row"] for o in alarms], [12], got["out"])
+        self.assertGreater(alarms[0]["resid"], 0, "the fall came too small")
+        self.assertAlmostEqual(alarms[0]["resid"], 150, delta=20)
+        v = got["verdicts"][11]
+        self.assertEqual(v["cause"], "RETURN?")
+        self.assertIn("RETURN? or the drain was over-recorded", v["message"])
+
+    def test_drain_pair_rule_sign(self):
+        # Row 11 (the earlier level of the pair) is misread by +5 mm, twice.
+        got = _node(
+            DRAIN_JS
+            + "const rows = drainRows(); const k = 10; const delta = 5;\n"
+            "rows[k].H += delta;\n"
+            "const r = core.replayRows(rows, Object.assign({}, DRAIN_CFG, {D: 2480, Lest: 5200}), {neckEntrance: true});\n"
+            "console.log(JSON.stringify({out: r.out, suspect: r.session.levels[k].suspect, misread: rows[k].H,"
+            " csv: r.session.toRawCsv().split('\\n')[k + 1]}));"
+        )
+        o = got["out"][11]
+        self.assertEqual(o["status"], "ALARM")
+        self.assertIsNotNone(o["pair"], got["out"][10:12])
+        self.assertAlmostEqual(o["pair"]["level"], got["misread"], places=6)
+        self.assertAlmostEqual(o["pair"]["delta"], 5.0, delta=0.7, msg="δ = recorded − true, same sign as a fill")
+        self.assertGreater(got["out"][10]["resid"], 0, "a high reading in a drain: the fall came too small")
+        self.assertLess(o["resid"], 0)
+        self.assertTrue(got["suspect"])
+        self.assertIn("suspect dip (pair pattern)", got["csv"])
+
+    def test_drain_neck_start(self):
+        got = _node(
+            DRAIN_JS
+            + "const s = new core.Session(Object.assign({}, DRAIN_CFG, {D: 2480, Lest: 5200, pourUnit: 100}));\n"
+            "const out = {first: [], states: [], dips: []};\n"
+            "const dipTwice = (H) => { const a = s.dip(H); const b = a.status === 'REDIP' ? s.dip(H) : a;"
+            " out.first.push(a.status); return b; };\n"
+            "s.start('?', B + 60, '', null, {at: 'neck'}); out.first.push(s.current().verdict.status);"
+            " out.v0 = s.dip(B + 60);\n"
+            "s.pour('50', {neck: true}); out.v1 = dipTwice(B + 25);\n"
+            "try { s.pour('50', {overflow: true}); } catch (e) { out.noOverflow = e.message; }\n"
+            "// 400 L: the last 25 L of the neck, then 375 L of shell.\n"
+            "let V = CAP - 375; s.pour('400'); out.v2 = dipTwice(core.levelFor(V, P));\n"
+            "out.anchor = s.levels[2].from;\n"
+            "try { s.pour('50', {neck: true}); } catch (e) { out.notBack = e.message; }\n"
+            "for (const st of [600, 600, 600, 600, 600]) { V -= st; s.pour(String(st)); dipTwice(core.levelFor(V, P)); }\n"
+            "out.states = s.levels.map((l) => l.state); out.dips = s.levels.map((l) => l.dips.length);\n"
+            "out.fitRows = s._fitIntervals().map((iv) => iv.row);\n"
+            "out.from3 = s.levels[3].from; out.brimStart = s.cfg.brimStart; out.priorB = s.cfg.prior.B || null;\n"
+            "out.series = s.series().map((d) => d.row);\n"
+            "out.csv = s.toRawCsv().split('\\n');\n"
+            "const f = new core.Session({D: 1800, Lest: 3000}); f.start('400', 400); f.dip(400);\n"
+            "try { f.pour('100', {neck: true}); } catch (e) { out.fillNeck = e.message; }\n"
+            "try { new core.Session({D: 1800, Lest: 3000}).start('?', 400, '', null, {at: 'entrance'}); }"
+            " catch (e) { out.fillEntrance = e.message; }\n"
+            "try { new core.Session({D: 1800, Lest: 3000, direction: 'up'}); } catch (e) { out.badDir = e.message; }\n"
+            "try { s.setCampaign({direction: 'fill'}); } catch (e) { out.fixed = e.message; }\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["v0"]["status"], "NECK")
+        self.assertEqual(got["v1"]["status"], "NECK")
+        self.assertEqual(got["v2"]["status"], "NECK", "the first shell level after the neck")
+        self.assertEqual(got["first"][:3], ["REDIP", "REDIP", "REDIP"], "two readings at each neck level")
+        self.assertEqual(got["v2"]["color"], "info")
+        self.assertIn("brim constraint Vcap − F(H) ≤ P", got["v2"]["message"])
+        self.assertIn("stays out of the running fit", got["v1"]["message"])
+        self.assertIn("vent-column height", got["v1"]["message"])
+        self.assertEqual(got["states"][:3], ["neck", "neck", "neck"])
+        self.assertEqual(got["dips"][:3], [2, 2, 2])
+        self.assertEqual(got["anchor"], 1, "the first shell level spans the neck from the last neck level")
+        self.assertEqual(got["from3"], 2, "the next level uses the first shell level as anchor")
+        self.assertNotIn("neck", got["states"][3:])
+        self.assertEqual(got["fitRows"], [3, 4, 5, 6, 7], "neck intervals stay out of the running fit")
+        self.assertEqual(got["series"], [4, 5, 6, 7, 8])
+        self.assertIsNone(got["brimStart"], "only a neck-entrance start gives B")
+        self.assertIsNone(got["priorB"])
+        self.assertIn("overflow", got["noOverflow"])
+        self.assertIn("only falls", got["notBack"])
+        self.assertTrue(got["csv"][1].split(",")[2].startswith("drain campaign; neck level"), got["csv"][1])
+        self.assertIn("neck level", got["csv"][2])
+        self.assertIn("neck interval", got["csv"][3])
+        self.assertNotIn("neck", got["csv"][4])
+        self.assertIn("drain campaign", got["fillNeck"])
+        self.assertIn("drain campaign", got["fillEntrance"])
+        self.assertIn("fill", got["badDir"])
+        self.assertIn("fixed", got["fixed"])
+
+    def test_drain_advice_and_plan(self):
+        got = _node(
+            DRAIN_JS
+            + "const r = core.replayRows(drainRows(), Object.assign({}, DRAIN_CFG, {D: 2480, Lest: 5200, pourUnit: 100}),"
+            " {neckEntrance: true});\n"
+            "const s = r.session, p = s.fit.p;\n"
+            "const adv = [];\n"
+            "for (let H = core.brim(p); H > p.h0 + 5; H -= 10) adv.push(s.advice(H));\n"
+            "const plan = s.fillPlan({size: 100, cycleSeconds: 60, settleSeconds: 300, dipSeconds: 60});\n"
+            "const V0 = core.volume(s.levels[s.lastGood()].H, p), cap = core.capacity(p);\n"
+            "s.tap(1, 100); s.tap(2, 100); const open = s.fillPlan({size: 100, cycleSeconds: 60});\n"
+            "// A fill near the brim still halves.\n"
+            "const f = new core.Session({D: 1800, Lest: 3000}); f.start('400', 400); f.dip(400);\n"
+            "console.log(JSON.stringify({adv: adv.map((a) => ({text: a.text, halve: a.halve, bottom: a.bottom,"
+            " left: a.left, toBottom: a.toBottom})), plan, V0, cap, open, fill: f.advice(1790).text, h0: p.h0}));"
+        )
+        adv = got["adv"]
+        for a in adv:
+            self.assertNotIn("halve", a["text"])
+            self.assertFalse(a["halve"])
+            self.assertIn("Next drain", a["text"])
+            self.assertIn("mm fall", a["text"])
+            self.assertIsNotNone(a["left"])
+            self.assertIsNotNone(a["toBottom"])
+        self.assertFalse(adv[len(adv) // 2]["bottom"], "no bottom warning mid-tank")
+        low = adv[-1]
+        self.assertTrue(low["bottom"])
+        self.assertIn("Near the bottom", low["text"])
+        self.assertIn("a part can is fine (N+?)", low["text"])
+        self.assertIn("halve", got["fill"], "fill advice is unchanged")
+        plan, cap, v0 = got["plan"], got["cap"], got["V0"]
+        self.assertIsNone(plan["brim"])
+        self.assertTrue(plan["half"]["done"], "the replay ends below half")
+        end = plan["end"]
+        self.assertLessEqual(end["volume"], plan["endVolume"] + 1e-6)
+        self.assertGreaterEqual(end["levels"], 1)
+        self.assertGreater(v0, plan["endVolume"], "the replay stops above the bottom zone")
+        self.assertAlmostEqual(v0 - 100 * end["cans"], end["volume"], places=6, msg="the volume counts down")
+        self.assertAlmostEqual(end["seconds"], 60 * end["cans"] + 360 * end["levels"], places=6)
+        self.assertGreaterEqual(plan["endVolume"], 0.05 * cap - 1e-6)
+        self.assertAlmostEqual(got["open"]["start"]["volume"], v0 - 200, places=6, msg="an open batch leaves the tank")
+
+    def test_drain_power_on_synthetic_campaigns(self):
+        got = _node(
+            f"const sim = require({json.dumps(SIM)});\n"
+            "const opt = {sigmaRead: 0.4, resolution: 0.5, pourRel: 0.005, pourAbs: 3, Dpm: 200, drain: true};\n"
+            "const R = sim.rng(23); let c = 0, fr = 0, h = 0, al = 0;\n"
+            "for (let j = 0; j < 25; j++) { const t = sim.run(R, opt, (j % 2 ? 1 : -1) * 5);"
+            " if (t.caught) c++; fr += t.falseRedip; h += t.honest; al += t.alarms; }\n"
+            "console.log(JSON.stringify({caught: c / 25, falseRedip: fr / h, falseAlarm: al / h}));"
+        )
+        self.assertGreaterEqual(got["caught"], 0.95)
+        self.assertLessEqual(got["falseRedip"], 0.12)
+        self.assertLessEqual(got["falseAlarm"], 0.01)
 
 
 if __name__ == "__main__":

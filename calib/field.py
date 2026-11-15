@@ -2,6 +2,10 @@
 
 The field tool must carry the adopted, constrained shell — the same presets
 that were written by the fit (§11).  It never refits.
+
+A drain campaign (``direction=-1``, §3.11) uses the same test.  The step is
+positive litres pumped out, ``pred = F(H_prev) - F(H_cur)``.  Its neck
+readings are NECK, not OVERFLOW, and it warns near the bottom, not the brim.
 """
 
 from __future__ import annotations
@@ -9,7 +13,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from .data import Interval, Row, read_raw
+from .data import DRAIN, FILL, Interval, Row, direction_sign, read_raw
 from .diagnostics import blocked_below, interval_sigma, pair_scatter, residual_meaning
 from .geometry import Shell
 
@@ -44,7 +48,9 @@ class FieldValidator:
         abs_: float = 3.0,
         bands: list[dict] | None = None,
         pour_unit: float | None = None,
+        direction: int | str = FILL,
     ):
+        self.direction = direction_sign(direction)
         self.shell = shell
         self.sigma_h = sigma_h
         self.rel = rel
@@ -69,7 +75,18 @@ class FieldValidator:
     ) -> Verdict:
         v = Verdict(row=row, step=step, h_prev=h_prev, h_cur=h_cur)
         brim = self.shell.brim()
-        if h_cur > brim:
+        drain = self.direction == DRAIN
+        if drain and max(h_prev, h_cur) > brim:
+            v.flag = "NECK"
+            v.message = (
+                f"a level above the brim {brim:.0f} mm is vent-column height, not "
+                "shell level; the drain out of the neck feeds the brim constraint "
+                "G = Vcap - F(H) <= P (§5.3a)"
+            )
+            self.history.append(v)
+            self.levels.append(h_cur)
+            return v
+        if not drain and h_cur > brim:
             v.flag = "OVERFLOW"
             v.message = (
                 f"above brim {brim:.0f} mm: the reading is vent-column height, "
@@ -80,7 +97,8 @@ class FieldValidator:
 
         pred = float(self.shell.volume(h_cur) - self.shell.volume(h_prev))
         pred -= float(blocked_below(self.bands, h_cur)) - float(blocked_below(self.bands, h_prev))
-        m = float(self.shell.slope(h_cur))
+        pred *= self.direction
+        m = float(self.shell.slope(max(h_cur, h_prev)))
         v.mm = None
 
         if step is None:
@@ -95,7 +113,8 @@ class FieldValidator:
             }
             v.flag = "UNKNOWN"
             label = f"{base:g} + {x:.1f}" if base else f"{x:.1f}"
-            v.message = f"pour unknown: back-predicted {label} ± {2 * sx:.1f} L"
+            word = "drain" if drain else "pour"
+            v.message = f"{word} unknown: back-predicted {label} ± {2 * sx:.1f} L"
             v.resid = 0.0
             v.z = 0.0
             self.n += 1
@@ -119,11 +138,18 @@ class FieldValidator:
             v.flag = "ALARM"
             v.message = (
                 f"resid {resid:+.1f} L ({mm:+.1f} mm-equiv, z={z:+.1f}): "
-                + residual_meaning(resid)
+                + residual_meaning(resid, self.direction)
             )
+            if drain:
+                cause = (
+                    "OBJECT? (solid exposed in this band) or LEAK?" if resid < 0
+                    else "DRAIN? (over-counted) or RETURN? (hose drained back)"
+                )
+            else:
+                cause = "OBJECT? (solid in this band)" if resid < 0 else "POUR? or LOSS?"
             v.advice = (
                 "stop; re-dip both endpoints. If confirmed: "
-                + ("OBJECT? (solid in this band)" if resid < 0 else "POUR? or LOSS?")
+                + cause
                 + "; run a discriminating test before believing either"
             )
         elif abs(z) >= 2.0:
@@ -149,7 +175,10 @@ class FieldValidator:
                 total = abs(prev.resid) + abs(resid)
                 net = abs(prev.resid + resid)
                 if total > 0 and net / total <= 0.15:
-                    delta = (resid - prev.resid) / (2.0 * m) if m > 0 else float("nan")
+                    delta = (
+                        self.direction * (resid - prev.resid) / (2.0 * m)
+                        if m > 0 else float("nan")
+                    )
                     v.flag = "DIP-PAIR"
                     v.message = (
                         f"shared dip {h_prev:.0f} mm likely misread by {delta:+.1f} mm "
@@ -157,9 +186,20 @@ class FieldValidator:
                     )
                     v.advice = f"re-dip that one level; corrected reading ≈ {h_prev - delta:.1f} mm"
 
-        # BRIM-WARN
+        # BRIM-WARN (fill) / BOTTOM-WARN (drain)
         gap = self.shell.capacity() - float(self.shell.volume(h_cur))
-        if gap < 0.05 * self.shell.capacity() or (brim - h_cur) < 60.0:
+        left = float(self.shell.volume(h_cur))
+        to_bottom = h_cur - self.shell.h0
+        if drain:
+            if left < 0.05 * self.shell.capacity() or to_bottom < 60.0:
+                if v.flag == "OK":
+                    v.flag = "BOTTOM-WARN"
+                text = (
+                    f"{left:.0f} L left ({to_bottom:.0f} mm to the bottom): the pump "
+                    "may lose suction; record a part can as N+?"
+                )
+                v.advice = (v.advice + "; " if v.advice else "") + text
+        elif gap < 0.05 * self.shell.capacity() or (brim - h_cur) < 60.0:
             if v.flag == "OK":
                 v.flag = "BRIM-WARN"
             brim_text = f"gap {gap:.0f} L ({brim - h_cur:.0f} mm to brim): halve the next pour"
@@ -187,7 +227,7 @@ class FieldValidator:
             for b in self.bands
             if h >= float(b["high"])
         )
-        lhs = self.heel + self.poured + blocked
+        lhs = self.heel + self.direction * self.poured + blocked
         rhs = float(self.shell.volume(h))
         return {"lhs": lhs, "rhs": rhs, "diff": lhs - rhs}
 
@@ -197,11 +237,18 @@ class FieldValidator:
         floor = 10.0 * m
         brim = self.shell.brim()
         gap = self.shell.capacity() - float(self.shell.volume(h))
-        advice = f"next pour ≈ {target:.0f} L (30 mm rise)"
+        drain = self.direction == DRAIN
+        advice = (
+            f"next drain ≈ {target:.0f} L (30 mm fall)" if drain
+            else f"next pour ≈ {target:.0f} L (30 mm rise)"
+        )
         if self.pour_unit:
             units = max(1, round(target / self.pour_unit))
             advice += f" ≈ {units} × {self.pour_unit:g} L"
-        if gap < 0.05 * self.shell.capacity():
+        if drain:
+            if float(self.shell.volume(h)) < 0.05 * self.shell.capacity():
+                advice += "; near the bottom: the pump may lose suction"
+        elif gap < 0.05 * self.shell.capacity():
             advice += "; gap small: halve it"
         return {
             "slope": m,
@@ -217,12 +264,19 @@ class FieldValidator:
             return []
         first = rows[0]
         # The books start with the first row's pour: recorded when known,
-        # back-predicted from the first level when not (§9.3).
-        self.heel = (
-            float(first.step.value)
-            if first.step.known
-            else float(self.shell.volume(first.height))
-        )
+        # back-predicted from the first level when not (§9.3).  A drain
+        # starts them at its first level in the shell: liquid above the
+        # crown is not shell volume (the neck drains are NECK, not books).
+        start = first
+        if self.direction == DRAIN:
+            brim = self.shell.brim()
+            start = next((r for r in rows if r.height <= brim), first)
+        if start is first and first.step.known:
+            self.heel = float(first.step.value)
+        else:
+            self.heel = float(self.shell.volume(start.height))
+            if self.direction == DRAIN:
+                self.heel -= float(blocked_below(self.bands, start.height))
         self.levels = [first.height]
         self.history = []
         self.drift = 0.0
@@ -244,7 +298,10 @@ class FieldValidator:
         for v in verdicts:
             if v.z is None or v.resid is None:
                 continue
-            iv = Interval(v.row, v.row, v.step, True, 0.0, v.h_prev, v.h_cur, trusted=True)
+            iv = Interval(
+                v.row, v.row, v.step, True, 0.0, v.h_prev, v.h_cur,
+                trusted=True, direction=self.direction,
+            )
             iv.resid = v.resid
             iv.z = v.z
             iv.mm_equiv = v.mm if v.mm is not None else 0.0

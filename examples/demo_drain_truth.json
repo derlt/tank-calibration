@@ -1,0 +1,24 @@
+{
+  "r": 900.0,
+  "L": 3000.0,
+  "h0": -5.0,
+  "brim": 1795.0,
+  "capacity": 7634.070148223197,
+  "object_l": 30.0,
+  "object_band_mm": [
+    990.0,
+    1000.0
+  ],
+  "neck_l": 25.0,
+  "neck_drain": 150.0,
+  "misread_row": 12,
+  "misread_mm": 4.0,
+  "misread_true_mm": 1297.1,
+  "unknown_row": 16,
+  "unknown_l": 500,
+  "part_can_l": 37.0,
+  "end_liquid_l": 56.40925706549271,
+  "sigma_h": 1.0,
+  "pour_rel": 0.003,
+  "pour_abs": 1.0
+}

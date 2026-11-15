@@ -52,7 +52,8 @@ requests. To keep the one file on a phone, use `site/calib_site.html`.
 | Reading repeatability σ | **Settings → Noise and limits**. From a repeat study (below). Default 0.4 mm. |
 | Pour noise | **Settings → Noise and limits**. From the can calibration (§3.1). Default 0.5 % + 3 L. |
 | Datum | **Settings → Noise and limits**. 0 ± 80 mm unless you sounded the bottom. |
-| First level | The heel volume (or `?`) and the first reading. |
+| Fill or drain | *Fill: pour in* (default) or *Drain: pump out*. See *Drain campaign* below. |
+| First level | The heel volume (or `?`) and the first reading. A drain also asks where the first level stands. |
 
 Every ± means "the truth is almost surely inside" (2σ).
 
@@ -70,7 +71,7 @@ The **Settings** tab holds every number the check uses, in three cards:
 | Card | Holds | When |
 |---|---|---|
 | This campaign | Tank name, D, L, pour unit and their ± | After the first level |
-| Noise and limits | Reading σ, pour noise, datum ± | Before or during a campaign |
+| Noise and limits | Reading σ, pour noise, datum ±, brim ± at the neck entrance (drain) | Before or during a campaign |
 | Timers, alarm and device | Settle and dip times, fill time per can, alarm lead, animation, sound, vibration, screen | After the first level |
 
 The noise card is also the draft for the next campaign: change it before you
@@ -280,6 +281,103 @@ level. The site's own markers, such as *pour edited on site* and *accepted
 against the check*, stay apart from the note: an edit cannot erase them, and
 the cell shows them before the note in grey.
 
+## Drain campaign (reverse strapping)
+
+A drain campaign runs the calibration from the top down. The tank is full of
+water at the start. A pump draws the water out into calibrated cans. Each
+batch of cans is one step, and the level falls from the brim (or the neck) to
+the bottom. Use it when the tank is already full, when filling from the bottom
+is not possible, or to check a fill campaign in the other direction.
+
+Choose **Drain: pump out** on the *New campaign* card. The direction is fixed
+for the whole campaign: Settings shows it but cannot change it. The step
+volumes stay positive: they are the litres pumped out. The raw file keeps the
+same three columns, and the heights fall.
+
+### Where the first level stands
+
+| Choice | When | What the page does |
+|---|---|---|
+| **At the neck entrance** (recommended) | Pump the neck down until the level just reaches the shell crown. Then dip. | The reading is the brim `B` (§5.3a). The running shell takes `2r + h0 = B ± 6 mm` (2σ) from the first level. Change the ± under **Settings → Noise and limits**. |
+| In the neck | The level is in the neck. | The reading is vent-column height, not shell level. Tick *level still in the neck* on each drain while the level stays in the neck. |
+| In the shell | The level is below the brim. | A plain start: only D, L and the datum teach the shape. |
+
+Use the neck entrance when you can. The reading is the brim itself, so the
+running shell knows the top before the first interval. In the simulation
+below this catches more slips and gives fewer false alarms than a plain shell
+start.
+
+A neck level, and the first shell level after it, have no prediction. Each
+needs two readings, and the verdict is **Neck reading recorded** or **Neck
+interval recorded** (blue). Their intervals span the neck. They feed the brim
+constraint `Vcap − F(H) ≤ P` of the final fit (§5.3a) and stay out of the
+running fit. The next level is checked against the first shell level as
+usual.
+
+The first row's step is `?`: the volume in the tank is not known. If you
+metered the prefill, enter the litres.
+
+### Rules for a drain
+
+- **Prime the pump before the start reading.** Fill the pump and the hose
+  first. Water that fills them after the first dip leaves the tank but not the
+  record.
+- **The hose rule.** The hose must be in the same state at every dip. Keep it
+  always full (a check valve at the suction end), or always drained back into
+  the tank before you dip. A hose that is full at one dip and empty at the
+  next moves its volume between the tank and the record.
+- **Fill each can to the calibrated mark.** A spill at the can is litres that
+  left the tank but are not on the record.
+- **The end.** Near the bottom the pump loses suction. The last can is then a
+  part can: tap it, and tick *pump lost suction: last can part* (`N+?`).
+  If you measure the part can, enter its litres instead. The pour advice warns
+  when the level after the advised drain is within 60 mm of the bottom, or
+  when less than 5 % of the capacity is left. A drain never halves near the
+  brim.
+- **After the drain.** Sound the bottom and record the heel. Inspect the empty
+  tank: an object seen on the bottom or on the wall explains an `OBJECT?`.
+
+### The signs in a drain
+
+The residual is still `resid = s − pred` (§2), with `pred = F(H_before) −
+F(H_after)`. The meaning of each sign changes with the direction:
+
+| Sign | Fill | Drain |
+|---|---|---|
+| `resid < 0` | the rise came too cheap: OBJECT? or an under-recorded pour | the fall came too large: OBJECT? or LEAK? or an under-recorded drain (a spill at the can counts here) |
+| `resid > 0` | the rise came too small: LOSS? or an over-recorded pour | the fall came too small: RETURN? (the hose drained back, wall film) or an over-recorded drain |
+
+A leak now gives `resid < 0`, not `resid > 0`. The pair rule keeps the meaning
+of `δ` (recorded − true): the page computes `δ = dir·(r2 − r1)/(2m)`, so a drain
+gives the same `δ` as a fill.
+
+The Now card shows the drain, for example
+`After this drain (400 L): 486.0 mm ± 8.7 mm (2σ) · −86.0 mm fall · ≈ 1663 L
+left`, and the time to half and to the bottom. The charts and the Levels table
+work for a falling level: the points run from right to left.
+
+### Simulation
+
+`node site/simulate.js --runs 200 --deltas 3,4`, then the same with `--drain`
+and with `--drain --start shell`. The drain run starts at the brim (true brim +
+reading noise) and drains the fill schedule in reverse. `--start shell` takes
+the same first reading as a plain shell start, without the brim prior. One
+reading per run is slipped by δ.
+
+| Campaign | Slip | Caught | Kept > 1.5 mm off | Extra dips at honest levels | False ALARM | mean \|Δr\| | mean \|ΔL\| |
+|---|---|---|---|---|---|---|---|
+| Fill | 3 mm | 89 % | 12 % | 4.6 % | 0.17 % | 1.9 mm | 12.2 mm |
+| Fill | 4 mm | 99 % | 2 % | 3.3 % | 0.07 % | 1.8 mm | 11.8 mm |
+| Drain | 3 mm | 93 % | 8 % | 2.1 % | 0.08 % | 1.2 mm | 8.0 mm |
+| Drain | 4 mm | 99 % | 1 % | 2.4 % | 0.03 % | 1.2 mm | 8.7 mm |
+| Drain, shell start | 3 mm | 88 % | 12 % | 2.7 % | 0.51 % | 1.3 mm | 9.1 mm |
+| Drain, shell start | 4 mm | 99 % | 2 % | 3.0 % | 0.40 % | 1.2 mm | 8.4 mm |
+
+σr 0.4 mm, pours 0.5 % + 3 L, D ± 200 mm, seed 1. The brim prior of the
+neck-entrance start catches more 3 mm slips (93 % against 88 %) and gives
+fewer false alarms (0.08 % against 0.51 %): the early checks know the top.
+The final running shell is about the same with either start.
+
 ## After the campaign
 
 1. *Files → Download raw CSV* gives `TANK_raw.csv`: one row per level with the
@@ -305,8 +403,15 @@ terminal:
 
 ```bash
 node site/replay.js examples/demo_raw.csv --D 1760 --L 2950 --unit 50 --overflow 22
+node site/replay.js TANK_raw.csv --D 2480 --L 5280 --drain --neck-entrance   # a drain
 node site/simulate.js --runs 200       # detection rate for slips of 1–10 mm
+node site/simulate.js --runs 200 --drain
 ```
+
+A drain replay takes `--drain`, `--neck ROWS` (the rows that are neck levels,
+for example `1,2`) and `--neck-entrance` (row 1 is the brim reading). Without
+`--drain`, the replay finds a drain from falling heights and says so. The
+*Replay* tab has the same options.
 
 ## Files
 

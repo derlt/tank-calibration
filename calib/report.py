@@ -119,27 +119,36 @@ def qa_agreement(
     bands: list[dict],
     books_start: float,
     estimates: list[dict] | None = None,
+    start_row: int = 0,
 ) -> dict:
     """max |books - F| over corrected rows (§11).
 
     ``books_start`` is the first row's pour (recorded or back-predicted), so
     the number is comparable across a campaign with gaps.  Unknown pours
     enter at their back-predicted value.
+
+    A drain takes each step off the books.  Its books start at row
+    ``start_row`` (the first level in the shell), as in the closure.
     """
     trusted = [iv for iv in intervals if iv.trusted]
     if not trusted:
         return {"max": float("nan"), "mean": float("nan"), "n": 0}
+    sign = trusted[0].direction
     h_last = trusted[-1].h_cur
+    last_row = trusted[-1].row
     est = {u["interval"]: u for u in (estimates or [])}
     books = float(books_start)
     diffs = []
     for iv in intervals:
-        if iv.h_cur > h_last:
+        if sign < 0:
+            if iv.row <= start_row or iv.row > last_row:
+                continue
+        elif iv.h_cur > h_last:
             continue
         if iv.known:
-            books += float(iv.s)
+            books += sign * float(iv.s)
         elif iv.idx in est:
-            books += float(est[iv.idx].get("total", est[iv.idx]["x"]))
+            books += sign * float(est[iv.idx].get("total", est[iv.idx]["x"]))
         else:
             continue
         diffs.append(abs(books + float(blocked_below(bands, iv.h_cur)) - float(shell.volume(iv.h_cur))))
@@ -214,8 +223,17 @@ def anomaly_register(
         )
     qmap = {q["interval"]: q for q in (quantized or [])}
     for iv in singles:
-        status = "OBJECT? or POUR?; not separable from one pass"
-        test = "repeat pour, pour-unit grid search, inspect, pump-out audit"
+        if iv.direction < 0:
+            # A drain: a leak now gives resid < 0 like an object (§3.11).
+            status = (
+                "OBJECT? LEAK? or DRAIN?; not separable from one pass"
+                if iv.resid < 0
+                else "RETURN? or DRAIN?; not separable from one pass"
+            )
+            test = "inspect the empty tank, a refill pass, drain-unit grid search"
+        else:
+            status = "OBJECT? or POUR?; not separable from one pass"
+            test = "repeat pour, pour-unit grid search, inspect, pump-out audit"
         q = qmap.get(iv.idx)
         if q:
             b = q["best"]
@@ -250,7 +268,7 @@ def anomaly_register(
     for u in unknowns:
         out.append(
             {
-                "kind": "unknown pour",
+                "kind": "unknown drain" if u.get("direction", 1) < 0 else "unknown pour",
                 "where_mm": f"{u['from_mm']:.0f}-{u['to_mm']:.0f}",
                 "magnitude_l": u["x"],
                 "rule": "8.1",
@@ -296,6 +314,7 @@ def shell_record(
     rmse_mm: float,
     r_sigma: float | None = None,
     l_sigma: float | None = None,
+    direction: str = "fill",
 ) -> str:
     s = fit.shell
     rs = r_sigma if r_sigma is not None else fit.param_sigma("r")
@@ -303,7 +322,9 @@ def shell_record(
     rs_text = f"{rs:.1f}" if rs is not None else "n/a"
     ls_text = f"{ls:.1f}" if ls is not None else "n/a"
     return (
-        f"{tank} — adopted shell\n"
+        f"{tank} — adopted shell"
+        + (" (drain campaign, §3.11)" if direction == "drain" else "")
+        + "\n"
         f"  r = {s.r:.1f} ± {rs_text} mm    L = {s.L:.1f} ± {ls_text} mm    "
         f"h0 = {s.h0:.1f} mm ({'fitted' if 'h0' in fit.free else 'locked'})\n"
         f"  brim reading {brim:.0f} mm    Vcap {s.capacity():.1f} L    "
@@ -313,7 +334,7 @@ def shell_record(
         f"  RMSE {fit.rmse:.3f} L/step = {rmse_mm:.2f} mm-equiv    σh = {sigma_h:.2f} mm\n"
         f"  blocked volumes: {blocked:.1f} L    corrected dips: {corrected_dips}    "
         f"watch items: {watch_count}\n"
-        f"  unknown pours: {unknown_text}\n"
+        f"  unknown {'drains' if direction == 'drain' else 'pours'}: {unknown_text}\n"
         f"  authoritative file: {authoritative}\n"
     )
 
@@ -356,7 +377,13 @@ def table_header(result: dict, *, gate: dict | None = None) -> dict:
         ("Tank", cfg.tank),
         ("Site / tag", cfg.site or "—"),
         ("Calibration date", datetime.now(timezone.utc).date().isoformat()),
-        ("Method", "Pour-and-dip difference fit, CALIBRATION_METHODOLOGY.md §5"),
+        (
+            "Method",
+            "Drain-and-dip (reverse strapping) difference fit, "
+            "CALIBRATION_METHODOLOGY.md §3.11, §5"
+            if getattr(cfg, "drain", False)
+            else "Pour-and-dip difference fit, CALIBRATION_METHODOLOGY.md §5",
+        ),
         ("Table version", cfg.table_version),
         ("Authoritative file", f"{cfg.tank}_strapping.csv"),
         ("Supersedes", cfg.supersedes),
@@ -441,6 +468,11 @@ def table_header(result: dict, *, gate: dict | None = None) -> dict:
         "Static tilt not tested." if not cfg.tilt_test else "Static tilt tested; see report.",
         "Tape scale is unidentifiable from pour and level data.",
         "Object error and pour error are not separable from one pass.",
+        *(
+            ["Drain campaign: a hose that changes state between dips biases each batch."]
+            if getattr(cfg, "drain", False)
+            else []
+        ),
         "r is an effective mean; ovality and bulging are not modelled.",
         "Bottom shape is absorbed by h0; the heel is an estimate unless sounded.",
     ]

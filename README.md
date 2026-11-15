@@ -288,9 +288,19 @@ Short version:
 | Config | What it exercises |
 |---|---|
 | `examples/demo.json` | Known truth: misread dip, object band, unknown pour, overflow. |
+| `examples/demo_drain.json` | Drain campaign (§3.11), known truth: start in the neck, object band, misread dip, unknown drain, part can at the end. |
 
-`examples/demo_truth.json` holds the truth for the synthetic campaign. The fit
-recovers it within the quoted uncertainty.
+`examples/demo_truth.json` and `examples/demo_drain_truth.json` hold the truth
+for the synthetic campaigns. The fit recovers it within the quoted uncertainty.
+
+### Drain campaigns
+
+A tank that is already full is strapped the other way: pump known volumes
+out and dip after each batch (§3.11). Set `"direction": "drain"` in the
+campaign JSON; `calib init` sets it when the heights fall. The steps stay
+positive litres. Every module (fit, constraints, pair rule, unknowns,
+closure, charts, workbook, field check, site page) follows the direction.
+See [docs/config.md](docs/config.md#drain-campaigns).
 
 ## Tests
 
@@ -322,12 +332,13 @@ uv run python -m coverage report -m
 | Command | Runs |
 |---|---|
 | `make` | `test` |
-| `make test` | the 81 tests |
+| `make test` | all tests |
 | `make site` | rebuild `site/calib_site.html` |
 | `make deploy` | publish the page as a Cloudflare Worker |
 | `make lint` | `ruff check .` |
 | `make coverage` | tests with a coverage report |
 | `make demo` | generate, fit and gate the demo |
+| `make demo-drain` | the same for the drain demo |
 | `make gate` | gate the demo workbook |
 | `make clean` | remove `out/` |
 

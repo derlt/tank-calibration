@@ -79,21 +79,27 @@ def _cmd_init(args) -> int:
     brim = args.brim
     overflow = args.overflow_pour
     heel = args.heel
+    direction = args.direction
 
     if args.interactive:
         base, _ = infer_config(
             raw, r=r, L=L, tank=tank, site=site, sigma_h=sigma_h
         )
         tank = input(f"tank name [{base['tank']}]: ").strip() or base["tank"]
+        direction = (
+            input(f"direction fill|drain [{base['direction']}]: ").strip().lower()
+            or base["direction"]
+        )
         sigma_h = _ask_float("dip sigma_h, mm", sigma_h)
         unit = _ask_float("pour unit, L (blank = inferred)", base.get("pour_unit"))
         brim = _ask_float("brim reading, mm (blank = fit refines it)", brim)
+        drain = direction == "drain"
         overflow = _ask_float(
-            "overflow pour, L (blank = inferred)",
-            base.get("brim", {}).get("overflow_pour"),
+            ("neck drain" if drain else "overflow pour") + ", L (blank = inferred)",
+            base.get("brim", {}).get("neck_drain" if drain else "overflow_pour"),
         )
         site = input(f"site [{site}]: ").strip() or site
-        heel = _ask_bool("first row is a heel", base["heel_row"])
+        heel = False if drain else _ask_bool("first row is a heel", base["heel_row"])
 
     data, warnings = infer_config(
         raw,
@@ -106,6 +112,7 @@ def _cmd_init(args) -> int:
         brim=brim,
         overflow_pour=overflow,
         heel_row=heel,
+        direction=direction,
     )
     out = Path(args.out) if args.out else raw.with_name(tank_stem(raw) + ".json")
     write_config(out, data, force=args.force, raw_path=raw)
@@ -114,6 +121,7 @@ def _cmd_init(args) -> int:
     print(f"wrote {out}")
     print(f"  tank      {cfg.tank}")
     print(f"  raw       {cfg.raw}")
+    print(f"  direction {cfg.direction}")
     print(f"  nominal   r={cfg.nominal_r:g} L={cfg.nominal_L:g} mm")
     print(f"  sigma_h   {cfg.sigma_h:g} mm")
     if cfg.pour_unit:
@@ -121,7 +129,7 @@ def _cmd_init(args) -> int:
     if cfg.brim_reading is not None:
         print(f"  brim      {cfg.brim_reading:g} mm")
     if cfg.overflow_pour is not None:
-        print(f"  overflow  {cfg.overflow_pour:g} L")
+        print(f"  {'neck drain' if cfg.drain else 'overflow  '} {cfg.overflow_pour:g} L")
     if cfg.heel_row:
         print("  heel_row  true")
     if warnings:
@@ -139,6 +147,7 @@ def _cmd_check(args) -> int:
     print(f"{args.config}")
     print(f"  tank       {cfg.tank}")
     print(f"  raw        {cfg.raw} ({report['rows']} rows)")
+    print(f"  direction  {cfg.direction}")
     print(f"  nominal    r={cfg.nominal_r:g} L={cfg.nominal_L:g} mm")
     print(f"  sigma_h    {cfg.sigma_h:g} mm")
     print(f"  pour_unit  {f'{cfg.pour_unit:g} L' if cfg.pour_unit else 'not set'}")
@@ -159,7 +168,8 @@ def _cmd_check(args) -> int:
         rows = ", ".join(str(r) for r in sorted(cfg.excluded_rows))
         print(f"excluded rows: {rows}")
     if report["unknown_pours"]:
-        print(f"unknown pours: {len(report['unknown_pours'])}")
+        word = "drains" if cfg.drain else "pours"
+        print(f"unknown {word}: {len(report['unknown_pours'])}")
         for item in report["unknown_pours"]:
             print(f"  row {item['row']:>3}  {item['raw']}")
     if report["corrections"]:
@@ -205,17 +215,19 @@ def _cmd_field(args) -> int:
         rel=float(noise.get("pour_rel", 0.005)),
         abs_=float(noise.get("pour_abs", 3.0)),
         bands=presets.get("bands", []),
+        direction=args.direction or presets.get("direction", "fill"),
     )
 
     if args.interactive:
         print(f"Field check for {presets.get('tank', 'tank')} — shell r={shell.r:.1f} L={shell.L:.1f} h0={shell.h0:.1f}")
-        print("Enter: step,height   (blank step = unknown pour).  q to quit.")
+        word = "drain" if validator.direction < 0 else "pour"
+        print(f"Enter: step,height   (blank step = unknown {word}).  q to quit.")
         h_prev = float(input("start height (mm): ").strip() or 0.0)
         validator.levels = [h_prev]
         # The tank already holds F(start); the closure counts it (§9.3).
-        validator.heel = float(validator.shell.volume(h_prev))
+        validator.heel = float(validator.shell.volume(min(h_prev, validator.shell.brim())))
         while True:
-            line = input("pour: ").strip()
+            line = input(f"{word}: ").strip()
             if line.lower() in ("q", "quit", "exit", ""):
                 break
             parsed = _parse_pour_line(line)
@@ -364,7 +376,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_init.add_argument("--brim", type=float, help="brim reading, mm")
     p_init.add_argument(
-        "--overflow-pour", type=float, dest="overflow_pour", help="overflow pour, L"
+        "--overflow-pour", "--neck-drain", type=float, dest="overflow_pour",
+        help="overflow pour (fill) or drain out of the neck (drain), L",
+    )
+    p_init.add_argument(
+        "--direction", choices=("fill", "drain"), default=None,
+        help="campaign direction (default: infer from the heights)",
     )
     p_init.add_argument(
         "--heel",
@@ -384,6 +401,10 @@ def main(argv: list[str] | None = None) -> int:
     p_field.add_argument("presets", help="*_presets.json written by fit")
     p_field.add_argument("csv", nargs="?", help="pour/level CSV")
     p_field.add_argument("--interactive", action="store_true")
+    p_field.add_argument(
+        "--direction", choices=("fill", "drain"), default=None,
+        help="campaign direction (default: from the presets)",
+    )
     p_field.add_argument("--json", action="store_true")
     p_field.set_defaults(func=_cmd_field)
 

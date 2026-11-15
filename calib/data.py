@@ -12,6 +12,7 @@ import csv
 import io
 import re
 from dataclasses import dataclass, field
+from itertools import pairwise
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -219,7 +220,37 @@ def write_corrected(path: str | Path, rows: list[Row]) -> None:
 
 # ---------------------------------------------------------------------------
 # Intervals (§2, §5.1)
+#
+# A campaign has one direction (§3.11).  FILL: pour in, the level rises.
+# DRAIN: pump out, the level falls.  The step volume is always positive
+# litres, and ``h_prev`` / ``h_cur`` stay in time order.  The predicted step
+# is the shell volume between the two levels, so the residual keeps the one
+# convention of §2 in both directions:
+#
+#     pred = direction * (F(h_cur) - F(h_prev)) = F(h_hi) - F(h_lo)
+#     resid = s - pred
 # ---------------------------------------------------------------------------
+
+FILL = 1
+DRAIN = -1
+DIRECTIONS = {"fill": FILL, "drain": DRAIN}
+
+
+def direction_sign(direction: str | int | None) -> int:
+    """+1 for a fill campaign, -1 for a drain campaign."""
+    if direction is None:
+        return FILL
+    if isinstance(direction, int) and direction in (FILL, DRAIN):
+        return direction
+    key = str(direction).strip().lower()
+    if key not in DIRECTIONS:
+        raise ValueError(f"direction must be 'fill' or 'drain', got {direction!r}")
+    return DIRECTIONS[key]
+
+
+def direction_name(sign: int) -> str:
+    return "drain" if sign == DRAIN else "fill"
+
 
 @dataclass
 class Interval:
@@ -232,6 +263,7 @@ class Interval:
     h_cur: float
     trusted: bool = True
     reason: str = ""
+    direction: int = FILL  # +1 fill (level rises), -1 drain (level falls)
     # filled by the model
     pred: float = 0.0
     resid: float = 0.0
@@ -243,12 +275,45 @@ class Interval:
     drift: float = 0.0
 
     @property
+    def travel(self) -> float:
+        """Level change in the campaign direction: the rise of a fill, the fall of a drain."""
+        return self.direction * (self.h_cur - self.h_prev)
+
+    @property
     def rise(self) -> float:
-        return self.h_cur - self.h_prev
+        """Alias of ``travel``.  For a drain it is the fall, positive."""
+        return self.travel
+
+    @property
+    def h_lo(self) -> float:
+        return min(self.h_prev, self.h_cur)
+
+    @property
+    def h_hi(self) -> float:
+        return max(self.h_prev, self.h_cur)
+
+    def predicted(self, shell) -> float:
+        """Shell volume moved by this step: ``direction * (F(h_cur) - F(h_prev))``."""
+        return self.direction * float(shell.volume(self.h_cur) - shell.volume(self.h_prev))
 
 
-def build_intervals(rows: list[Row]) -> list[Interval]:
-    """One interval per pour: from the previous dip to this dip."""
+def infer_direction(rows: list[Row]) -> int:
+    """The campaign direction the heights show: most steps rise or most fall.
+
+    A first-row note that says ``drain`` decides it when the heights do not.
+    """
+    ups = sum(1 for a, b in pairwise(rows) if b.height > a.height)
+    downs = sum(1 for a, b in pairwise(rows) if b.height < a.height)
+    if downs > ups:
+        return DRAIN
+    if ups > downs:
+        return FILL
+    return DRAIN if rows and "drain" in rows[0].note.lower() else FILL
+
+
+def build_intervals(rows: list[Row], direction: int | str = FILL) -> list[Interval]:
+    """One interval per step: from the previous dip to this dip."""
+    sign = direction_sign(direction)
     out: list[Interval] = []
     for i in range(1, len(rows)):
         step = rows[i].step
@@ -261,6 +326,7 @@ def build_intervals(rows: list[Row]) -> list[Interval]:
                 base=step.base,
                 h_prev=rows[i - 1].height,
                 h_cur=rows[i].height,
+                direction=sign,
             )
         )
     return out
@@ -275,28 +341,30 @@ def mark_trusted(
 ) -> None:
     """Apply the trusted-set rules of §5.1.
 
-    Excluded: unknown/partial pours, overflow intervals, non-positive rises,
-    declared object bands, and explicit row exclusions.
+    Excluded: unknown/partial steps, intervals that touch the neck (the
+    overflow interval of a fill, the neck interval of a drain), non-positive
+    travel, declared object bands, and explicit row exclusions.
     """
     bands = object_bands or []
     excluded_rows = excluded_rows or set()
     for iv in intervals:
         iv.trusted, iv.reason = True, ""
+        drain = iv.direction == DRAIN
         if not iv.known:
-            iv.trusted, iv.reason = False, "unknown pour"
+            iv.trusted, iv.reason = False, "unknown drain" if drain else "unknown pour"
             continue
-        if iv.h_cur > brim:
-            iv.trusted, iv.reason = False, "overflow interval"
+        if iv.h_hi > brim:
+            iv.trusted, iv.reason = False, "neck interval" if drain else "overflow interval"
             continue
-        if iv.rise <= 0:
-            iv.trusted, iv.reason = False, "non-positive rise"
+        if iv.travel <= 0:
+            iv.trusted, iv.reason = False, "non-positive fall" if drain else "non-positive rise"
             continue
         if iv.row in excluded_rows:
             iv.trusted, iv.reason = False, "excluded row"
             continue
         for band in bands:
             lo, hi = float(band["low"]), float(band["high"])
-            if iv.h_cur >= lo and iv.h_prev <= hi:
+            if iv.h_hi >= lo and iv.h_lo <= hi:
                 iv.trusted, iv.reason = False, f"object band {lo:g}-{hi:g} mm"
                 break
 

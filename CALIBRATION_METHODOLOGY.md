@@ -1,6 +1,6 @@
 # Calibration of horizontal cylindrical tanks — general methodology
 
-**Scope.** This method straps any horizontal, near-circular, flat-ended cylindrical tank from pour/level data: pour a known volume, read the level, repeat. It produces four artifacts: a strapping table, a fitted shell model, an anomaly register, and a live field protocol. It is distilled from four tank campaigns; every rule below was forced by a lesson from one of them (Appendix A).
+**Scope.** This method straps any horizontal, near-circular, flat-ended cylindrical tank from pour/level data: pour a known volume, read the level, repeat. A tank that is already full is strapped the other way: pump a known volume out, read the level, repeat (drain, §3.11). It produces four artifacts: a strapping table, a fitted shell model, an anomaly register, and a live field protocol. It is distilled from four tank campaigns; every rule below was forced by a lesson from one of them (Appendix A).
 
 **Methods used, in one line each:** pour-and-dip strapping at controlled rise increments; bound-constrained nonlinear least squares (trust-region reflective) with multi-start; robust-loss comparison (Huber); grid profiling for parameter uncertainty; constrained refit (SLSQP or penalty) for the brim and neck constraints; residual-signature analysis (pair rule, single-sided rule); adjacent-pair detector scatter with drift-shape taxonomy; quantized-pour grid search; interval blocking; telescoping block sums; back-prediction with propagated uncertainty; sensitivity battery; parametric bootstrap with per-dip covariance; closure audit; per-pour z-test validation in the field; one-step-ahead prediction from a prior-regularized running fit with a blind repeat reading (live check, before any shell is adopted); spreadsheet formula gate.
 
@@ -37,6 +37,7 @@ resid_i = s_i − pred_i          # litres; mm-equivalent = resid / m(H_i)
   - `resid < 0` → the rise came too cheap: a solid displaced liquid, or the pour was under-recorded (more liquid entered than the record claims).
   - `resid > 0` → the rise came too small: liquid went somewhere (leak, film, trapped air), or the pour was over-recorded (less entered than the record claims).
   - Read residuals in mm-equivalent first, litres second.
+  - **Drain campaigns (§3.11)** keep this convention: `s_i` is the positive litres pumped out, and `pred_i = F(H_{i−1}) − F(H_i)`. The object and record signs stay the same. A leak flips to `resid < 0`. One new cause gives `resid > 0`: liquid that comes back (hose, wall film).
 - **Dip-misread signs** (the whole pair rule in two lines): if the dip shared by two intervals is misread by `δ` (recorded − true = `δ`), then `r_first = −m·δ` and `r_second = +m·δ`. The net is exactly zero for a pure dip error.
 - **Drift:** `D_k = Σ_{i≤k} resid_i` — the running books-versus-tank disagreement (equivalently `books_k − F(H_k)` up to the heel constant). The drift remembers every past error; the residual locates it. Its shape is a diagnostic (§6.6).
 
@@ -54,6 +55,18 @@ resid_i = s_i − pred_i          # litres; mm-equivalent = resid / m(H_i)
 - **3.8** Vent open; fill slowly at the start; trapped air lies.
 - **3.9** File format: `step_volume,measured_height,note`. Unknown pours are legal cells: `?` (whole pour unknown) or `N+?` (N litres plus an unknown extra).
 - **3.10** Record the pouring unit (drum size, meter increment, can count). Pours live on that grid; when a pour is later suspect, the grid is a discriminating constraint (§6.2), not a rounding detail.
+- **3.11** Reverse strapping (drain). Use this for a tank that is already full. A pump draws the liquid out into calibrated cans. Each batch is one step, and the level falls from the top to the bottom. One file has one direction. A refill of the same tank is a new campaign.
+  - **Same mathematics, mirrored.** Write the step as positive litres. Then `pred = F(H_{i−1}) − F(H_i)` and `resid = s − pred` (§2). A drain gives the same fit, residuals and corrections as the same steps poured in the reverse order. The slope of an interval is taken at its upper level, in both directions. Drift stays `D_k = Σ resid`; for a drain that is `F(H_k) − books_k` plus a constant.
+  - **Sign changes.** There are two. A leak gives `resid < 0`, because liquid leaves another way and the fall is too large. In the pair rule, `δ = (r1 − r2)/(2m)`: the earlier interval falls too little (`r1 = +m·δ`) and the later one too much.
+  - **Leak test first.** A full tank allows a static test. Take two readings at least 15 min apart before the first drain. A falling level is a leak; find it before you start.
+  - **Start at the neck entrance (recommended).** Pump the neck down until the level reaches the shell crown. The neck is narrow, so there the level falls fast; in the shell it slows down a lot. That reading is the brim `B`: enforce `2r + h0 = B` (§5.3a) from the first level. A start in the neck is also correct: the reading is vent-column height, the drain out of the neck is the mirror of the overflow pour, and the same inequality `G = Vcap − F(H*) ≤ P` holds, with `H*` the first level in the shell.
+  - **Hose state.** This is a new error source. The hose must be in the same state at every dip: always full (with a check valve), or always drained back into the tank. If the state changes between batches, each dip carries ± the hose volume. A hose that drains back gives a positive bias per batch; the telescoping block test (§9.6) finds it.
+  - **Prime the pump before the start reading.** Priming liquid leaves the tank.
+  - **Fill each can to its calibrated mark**, never until it overflows. A spill is litres that left the tank but are not on the record (`resid < 0`).
+  - **Pour size** follows §3.4 (`≈ 30 mm` of fall). Near the crown the slope is small, so the first drains are small. The halving rule of §10 BRIM-WARN does not apply. Near the bottom the pump may lose suction: record a part can as `N+?`, or measure it.
+  - **Settling.** After pumping, wall film drains down, and the level can creep up a little. §3.5 applies.
+  - **The end.** The pump leaves a heel. Report it as the shell liquid at the last dip, and label it a shell value. Then use the empty tank: sound the bottom (this measures the datum, §12), and inspect for objects (the §6.2 discriminating test).
+  - **File.** The same three columns. The heights fall. The first row holds the volume at the first level: a number when the prefill was metered, else `?`. The config sets `direction: drain`. The drain out of the neck is `brim.neck_drain`, and a start at the neck entrance sets `brim.reading` with `neck_equality`.
 
 ## 4. Geometry model
 
@@ -90,7 +103,7 @@ Trust-region reflective least squares, bounded (e.g. `r ∈ [0.6, 1.4]×` nomina
 
 ### 5.3 Physical constraints — inside the fit, not after it
 
-- **a. Brim constraint.** If a pour of volume `P` overflowed the shell from last level `H*`, then the shell-top gap obeys `G = Vcap − F(H*) ≤ P`. A pour cannot fill a gap larger than its own volume. Tighten to `G ≤ P − V_vent` if the vent volume is known. Fit with this as an inequality constraint (SLSQP or penalty). If the constraint binds, adopt the constrained fit and report both fits. **An unconstrained fit that violates the constraint is not a result — it is a bug.** The dip taken when liquid first reaches the neck or brim reads `B` itself (neck entrance = shell crown): add the equality `2r + h0 = B` and report the free fit's agreement with it. Both directions carry information: `G ≤ P` — the pour filled the shell and continued into the vent; adopt the constrained fit. `G > P` while the field confirms the tank reached the brim — the recorded pour is nominal: treat that row's pour as an unknown (§8), back-predict `x = G`, exclude the row from the fit. **An overflow row's height is data; its pour is a claim.**
+- **a. Brim constraint.** If a pour of volume `P` overflowed the shell from last level `H*`, then the shell-top gap obeys `G = Vcap − F(H*) ≤ P`. A pour cannot fill a gap larger than its own volume. Tighten to `G ≤ P − V_vent` if the vent volume is known. Fit with this as an inequality constraint (SLSQP or penalty). If the constraint binds, adopt the constrained fit and report both fits. **An unconstrained fit that violates the constraint is not a result — it is a bug.** The dip taken when liquid first reaches the neck or brim reads `B` itself (neck entrance = shell crown): add the equality `2r + h0 = B` and report the free fit's agreement with it. Both directions carry information: `G ≤ P` — the pour filled the shell and continued into the vent; adopt the constrained fit. `G > P` while the field confirms the tank reached the brim — the recorded pour is nominal: treat that row's pour as an unknown (§8), back-predict `x = G`, exclude the row from the fit. **An overflow row's height is data; its pour is a claim.** A drain that starts in the neck uses the same constraint (§3.11): the litres pumped from the neck reading to the first level in the shell must cover `G` at that level. A drain that starts at the neck entrance has the equality and no inequality.
 - **b. Empty-start check.** Always report the first row's residual: `s_1 − F(H_1)` (empty start) or `s_1 − (F(H_1) − F(H_heel))` (heel present). A silent first interval is an unchecked assumption.
 - **c. Monotonic levels.** `H` must strictly increase. A non-positive rise is a data error: excluded and flagged.
 
@@ -141,6 +154,8 @@ Correction and bookkeeping:
 δ = (r2 − r1) / (2·m)        # m = local slope at the shared dip
 true dip = recorded − δ
 ```
+
+For a drain (§3.11) the two signs swap, so `δ = (r1 − r2) / (2·m)`. The net-balance test does not change.
 
 Apply in the corrected table; flag the row; keep the raw value in the note. If the net balance is marginal (0.15–0.25), do not correct: mark the dip suspect and decide with a re-dip or a grouped refit (§7).
 
@@ -250,6 +265,8 @@ The shipped workbook implements all seven as live charts. Consult the pair scatt
 - **DIP-PAIR:** evaluate §6.1's four conditions live; print the estimated correction with direction; re-dip that one level.
 - **DETECTOR:** after the run, plot the adjacent-pair scatter (§6.6); a point off both diagonals means superposed errors — decompose (§6.2) before correcting.
 - **BRIM-WARN:** gap < 5 % of `Vcap` or within 60 mm of brim → halve the pour.
+- **BOTTOM-WARN (drain):** liquid < 5 % of `Vcap` or within 60 mm of the bottom → the pump may lose suction; record a part can as `N+?`. No halving.
+- **NECK (drain):** a level above the brim, or the first drain out of the neck → vent-column height; record it for the brim constraint, keep it out of the test.
 - **OVERFLOW:** `H` above brim → vent mode: the reading is vent-column height, not shell level. Record it; it feeds the brim constraint.
 - **DRIFT:** `|Σ resid| > 3σ√n` → stop and audit (tilt? can size? leak?).
 - **Unknown pours:** estimated with ±2σ bands; never fitted.
@@ -341,4 +358,5 @@ Tank X — adopted shell
 - **Live check before the next pour (§10a):** replayed live, two campaigns flagged their known faults at the level where they happened: a shared-dip pair (+3.4 / −3.5 mm) at its first dip, and the superposed phantom unit + dip slip at z = −10. Both called for a re-dip of a level that was still there. The pair rule found them only after the level was gone.
 - **Learning phase (§10a.8):** the first three replayed pours missed the prediction by up to 10 mm. The datum was −30 mm and the shell did not know it yet. Confirmed early misses teach the shape; they are not anomalies.
 - **Reading σ ≠ interval σ (§10a.3):** 25 repeat dips at one level scattered 0.36 mm, while the fitted interval noise ran 0.8–1.2 mm-equivalent. Using the interval σ for the repeat test would have passed 3 mm slips as agreement.
+- **Reverse strapping (§3.11):** not yet forced by a field lesson. It is derived from the mirror symmetry and proved on synthetic campaigns: the drain fit equals the reversed fill fit to the optimizer tolerance. The hose rule comes from the physics of a pump line; take it as a rule to test on the first real drain campaign.
 - **Sign check (§2):** an over-recorded pour produced `resid > 0` in the §2 convention, exposing swapped pour labels in the draft — the exact bug class the single-convention rule exists for.

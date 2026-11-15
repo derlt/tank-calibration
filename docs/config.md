@@ -24,7 +24,10 @@ Add `--interactive` to answer the questions. The inferred fields are:
 | `raw` | A path relative to the JSON file. |
 | `pour_unit` | The largest increment that divides the known, non-overflow pours. |
 | `brim.overflow_pour` | The last row with an `overflow` note, or a dip above the nominal brim. |
-| `heel_row` | True when the first pour is far below the volume at the first dip. |
+| `heel_row` | True when the first pour is far below the volume at the first dip. Always false for a drain. |
+| `direction` | `drain` when most heights fall (or the first note says `drain`), else `fill`. `--direction` overrides it. |
+| `brim.neck_drain` | Drain only: the row with a `neck interval` note, or the first drain from above the nominal brim into the shell. |
+| `brim.reading`, `brim.neck_equality` | Drain only: the first row height, when its note says `at neck entrance`. |
 
 `brim.reading` is not inferred. Leave it out and the fit refines the brim from
 the shell. The command prints a warning for unknown pours, a height that does
@@ -106,12 +109,13 @@ exits with code 2.
 | `table_version` | string | `"v1"` | — | Table version in the certificate header. |
 | `supersedes` | string | `"none"` | — | Previous table reference in the certificate header. |
 | `raw` | string | required | path | Raw CSV. Relative to the JSON file. Read-only. |
+| `direction` | `"fill"` or `"drain"` | `"fill"` | — | Pour in (the level rises) or pump out (the level falls), §3.11. Steps are positive litres in both. |
 | `nominal` | object | required | mm | Starting values for `r` and `L`. |
 | `sigma_h` | number | `1.5` | mm | Dip reading standard deviation. Must be positive. |
 | `pour_noise` | object | `{rel: 0.005, abs: 3.0}` | L | Pour error model. |
 | `pour_unit` | number | none | L | Pour increment. Enables the quantized pour search. |
 | `h0` | object | `{mode: "fit"}` | mm | Datum policy. |
-| `heel_row` | boolean | `false` | — | The first row is a heel, not an empty start. |
+| `heel_row` | boolean | `false` | — | The first row is a heel, not an empty start. A drain refuses it. |
 | `brim` | object | `{}` | mm, L | Brim reading, overflow pour and vent volume. |
 | `object_bands` | array | `[]` | mm, L | Known internals and their displacement. |
 | `corrections` | array | `[]` | mm, L | Flagged edits to the raw rows. |
@@ -172,8 +176,9 @@ per step.
 |---|---|---|---|---|
 | `reading` | number | none | mm | Tape reading at the shell crown. If absent, the fit uses `h0 + 2r`. |
 | `overflow_pour` | number | none | L | The pour that overflowed. The fit enforces `G <= P - vent_volume`. |
+| `neck_drain` | number | none | L | Drain only, alias of `overflow_pour`: the litres pumped from a neck reading to the first level in the shell. The same inequality holds. |
 | `vent_volume` | number | `0.0` | L | Liquid that went into the vent. |
-| `neck_equality` | boolean | `false` | — | Add `2r + h0 = B` when the last dip reads the neck or brim. |
+| `neck_equality` | boolean | `false` | — | Add `2r + h0 = B` when the last dip (fill) or the first dip (drain) reads the neck entrance. Without `overflow_pour` the equality is fitted alone. |
 
 ### `object_bands[]`
 
@@ -251,3 +256,25 @@ The loader stops with a message when a rule fails:
 
 `joint` is accepted by the loader but not used by the pipeline. Use the
 `calib joint` command with several config files instead.
+
+## Drain campaigns
+
+A drain campaign (§3.11) starts full and pumps the liquid out. The file has
+the same three columns; the heights fall. The first row holds the volume at
+the first level: a number for a metered prefill, else `?`.
+
+```json
+{
+  "tank": "T7",
+  "raw": "T7_raw.csv",
+  "direction": "drain",
+  "nominal": {"r": 1240, "L": 5280},
+  "brim": {"neck_drain": 150}
+}
+```
+
+For a start at the neck entrance, replace `neck_drain` with
+`"reading": <first height>, "neck_equality": true`. `calib init` infers both
+from the notes that the site page writes (`neck level`, `neck interval`,
+`at neck entrance`). `examples/demo_drain.json` is a complete example.
+

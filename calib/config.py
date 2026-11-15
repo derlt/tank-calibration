@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .data import Correction
+from .data import DRAIN, Correction, direction_sign
 
 
 @dataclass
@@ -15,6 +15,7 @@ class Config:
     raw: str
     nominal_r: float
     nominal_L: float
+    direction: str = "fill"  # "fill" (pour in) | "drain" (pump out, §3.11)
     sigma_h: float = 1.5
     pour_rel: float = 0.005
     pour_abs: float = 3.0
@@ -42,6 +43,15 @@ class Config:
     supersedes: str = "none"
 
     @property
+    def sign(self) -> int:
+        """+1 for a fill campaign, -1 for a drain campaign."""
+        return direction_sign(self.direction)
+
+    @property
+    def drain(self) -> bool:
+        return self.sign == DRAIN
+
+    @property
     def nominal(self) -> dict:
         return {"r": self.nominal_r, "L": self.nominal_L}
 
@@ -55,6 +65,12 @@ class Config:
             raise ValueError("nominal r and L must be positive")
         if self.sigma_h <= 0:
             raise ValueError("sigma_h must be positive")
+        direction_sign(self.direction)
+        if self.drain and self.heel_row:
+            raise ValueError(
+                "heel_row is a fill setting: a drain campaign starts full; "
+                "its first row is the volume at the first level (or '?')"
+            )
         if self.h0_mode not in ("fit", "locked"):
             raise ValueError("h0 mode must be 'fit' or 'locked'")
         if self.pour_rel < 0 or self.pour_abs < 0:
@@ -125,6 +141,7 @@ def load_config(path: str | Path) -> Config:
         raw=str(raw_path),
         nominal_r=float(r_nom),
         nominal_L=float(l_nom),
+        direction=str(_get(data, "direction", default="fill")).strip().lower(),
         sigma_h=float(_get(data, "sigma_h", default=1.5)),
         pour_rel=float(_get(pour, "rel", default=0.005)),
         pour_abs=float(_get(pour, "abs", default=3.0)),
@@ -141,9 +158,11 @@ def load_config(path: str | Path) -> Config:
             if _get(brim, "reading") is not None
             else None
         ),
+        # A drain from the neck into the shell bounds the same gap as an
+        # overflow pour: G = Vcap - F(H*) <= P (§5.3a).  One field, two names.
         overflow_pour=(
-            float(_get(brim, "overflow_pour"))
-            if _get(brim, "overflow_pour") is not None
+            float(_get(brim, "overflow_pour", "neck_drain"))
+            if _get(brim, "overflow_pour", "neck_drain") is not None
             else None
         ),
         vent_volume=float(_get(brim, "vent_volume", default=0.0)),
