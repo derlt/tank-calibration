@@ -129,7 +129,12 @@ class TestSitePage(unittest.TestCase):
             "const tm3 = JSON.parse(store.get('calib-site:timer')); tm3.pour.start = Date.now() - 750;"
             " store.set('calib-site:timer', JSON.stringify(tm3));\n"
             "p = stub.boot(page, corePath, store); el = p.el;\n"
-            "out.anim2 = {tilt: el('pt-can-g').transform, can: +el('pt-can').height};\n"
+            "out.anim2 = {tilt: el('pt-can-g').transform, can: +el('pt-can').height};\n"            "// The animation is a setting: off hides the drawing, the timer still runs.\n"
+            "el('tm-anim').checked = false; el('tm-save').click();\n"
+            "out.animOff = {hidden: el('pt-anim')._classes.has('hidden'), tilt: el('pt-can-g').transform,"
+            " clock: el('pt-clock').textContent, cls: el('pt').className};\n"
+            "el('tm-anim').checked = true; el('tm-save').click();\n"
+            "out.animOn = el('pt-anim')._classes.has('hidden');\n"
             "// The pour ran out while the page was closed: a reload shows it and rings.\n"
             "tm.pour.start = Date.now() - 200000; tm.pour.dur = 90; store.set('calib-site:timer', JSON.stringify(tm));\n"
             "p = stub.boot(page, corePath, store); el = p.el;\n"
@@ -179,6 +184,11 @@ class TestSitePage(unittest.TestCase):
         self.assertIn(got["anim"]["clock"], ("1:20", "1:19"))
         self.assertRegex(got["anim2"]["tilt"], r"^rotate\((2[0-9]|3[0-5])\.?\d* 42 10\)$", "the tip takes 1.5 s")
         self.assertGreater(got["anim2"]["can"], 20)
+        self.assertTrue(got["animOff"]["hidden"], "the animation setting hides the drawing")
+        self.assertEqual(got["animOff"]["tilt"], "", "no frame is drawn with the animation off")
+        self.assertIn(got["animOff"]["clock"], ("1:50", "1:49"), "the clock keeps running")
+        self.assertEqual(got["animOff"]["cls"], "timer run")
+        self.assertFalse(got["animOn"], "the drawing comes back")
         self.assertEqual(got["done"]["cls"], "timer done")
         self.assertIn("Pour-in finished", got["done"]["status"])
         self.assertTrue(got["done"]["alarm"])

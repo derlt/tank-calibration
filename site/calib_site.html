@@ -182,7 +182,7 @@
         <div class="tally-bar"><i id="t-bar"></i></div>
         <p class="muted" id="t-target" style="margin:0"></p>
         <div class="timer" id="pt">
-          <svg class="pour-anim" viewBox="0 0 120 90" aria-hidden="true">
+          <svg class="pour-anim" id="pt-anim" viewBox="0 0 120 90" aria-hidden="true">
             <defs><clipPath id="pt-clip"><rect x="36" y="48" width="76" height="38" rx="14"/></clipPath></defs>
             <rect class="tank-bg" x="36" y="48" width="76" height="38" rx="14"/>
             <rect class="liq" id="pt-tank" clip-path="url(#pt-clip)" x="36" y="86" width="76" height="0"/>
@@ -261,6 +261,7 @@
       <p class="muted" style="margin-top:0">The time to pour one can and let it drain out into the tank. Blank = the time measured from your taps, when the page has one.</p>
       <div class="grid" id="tm-sizes"></div>
       <div class="row" style="margin-top:0.6rem">
+        <label class="check"><input type="checkbox" id="tm-anim"> pour animation</label>
         <label class="check"><input type="checkbox" id="tm-sound"> sound</label>
         <label class="check"><input type="checkbox" id="tm-vib"> vibrate</label>
         <label class="check"><input type="checkbox" id="tm-wake"> keep the screen on while the campaign is open</label>
@@ -1706,7 +1707,7 @@
   const TIMER = "calib-site:timer", PREFS = "calib-site:prefs";
   function loadJSON(k, d) { try { return JSON.parse(localStorage.getItem(k) || "null") || d; } catch (e) { return d; } }
   let T = loadJSON(TIMER, {});   // { pour: { start, dur, size, alarmed }, settled: "row@time" }
-  const P = Object.assign({ sound: true, vibrate: true, wake: true }, loadJSON(PREFS, {}));
+  const P = Object.assign({ anim: true, sound: true, vibrate: true, wake: true }, loadJSON(PREFS, {}));
   let timersSig = "", lastEta = 0;
   function saveTimer() { localStorage.setItem(TIMER, JSON.stringify(T)); }
   function clearTimers() { T = {}; localStorage.removeItem(TIMER); stopAlarm(); releaseWake(); stopPourAnim(); }
@@ -1881,6 +1882,10 @@
       }
     }
     $("pt-bar").style.width = `${100 * frac}%`;
+    // The animation is optional: with it off the panel keeps the clock, the
+    // bar and the alarm, and drops the drawing.
+    $("pt-anim").classList.toggle("hidden", !P.anim);
+    if (!P.anim) { stopPourAnim(); resetPourDraw(); return; }
     drawPour(pt ? frac : 0, now);
     if (pt && frac < 1) startPourAnim(); else stopPourAnim();
   }
@@ -1901,6 +1906,13 @@
     const frac = Math.min(1, Math.max(0, 1 - left / T.pour.dur));
     drawPour(frac, now);
     if (frac < 1) animId = raf(animatePour);
+  }
+  /** The still drawing: can full, upright, no stream. */
+  function resetPourDraw() {
+    $("pt-can-g").setAttribute("transform", "");
+    $("pt-stream").setAttribute("opacity", "0");
+    $("pt-can").setAttribute("height", "26");
+    $("pt-can").setAttribute("y", "14");
   }
   /** frac 0 = can full, 1 = can empty.  The can tips in 1.5 s, upright at the end. */
   function drawPour(frac, now) {
@@ -1981,6 +1993,7 @@
       const set = cfg.pourSeconds[String(u)], m = S.measuredPourSeconds(u);
       return `<label>${f(u, 0)} L can<input id="${sizeId(u)}" value="${set ? fmtClock(set) : ""}" placeholder="${m ? "measured " + fmtClock(m.seconds) : "1:30"}"></label>`;
     }).join("") : `<p class="muted">Enter a can size on the pour card first.</p>`;
+    $("tm-anim").checked = !!P.anim;
     $("tm-sound").checked = !!P.sound; $("tm-vib").checked = !!P.vibrate; $("tm-wake").checked = !!P.wake;
   }
   $("tm-save").addEventListener("click", guard("tm-err", () => {
@@ -1988,7 +2001,9 @@
     const o = { settleSeconds: parseDur($("tm-settle").value), dipSeconds: parseDur($("tm-dip").value), pourSeconds: {} };
     for (const u of timerSizes()) o.pourSeconds[String(u)] = parseDur($(sizeId(u)).value);
     S.setTimers(o);
+    P.anim = !!$("tm-anim").checked;
     P.sound = !!$("tm-sound").checked; P.vibrate = !!$("tm-vib").checked; P.wake = !!$("tm-wake").checked;
+    if (!P.anim) { stopPourAnim(); resetPourDraw(); }
     localStorage.setItem(PREFS, JSON.stringify(P));
     if (!P.wake) releaseWake();
     save(); timersSig = "";

@@ -140,12 +140,14 @@ minutes (`1.5` = 1:30).
 | Pour time per can size | Pour one can and let it drain into the tank | blank: the time measured from your taps |
 | Settle (idle) after a batch | Wait before the first dip (§3.5) | 5:00 |
 | One dip and its entry | Only used for the time estimate | 1:00 |
+| pour animation | The can, the stream and the tank drawing in the timer | on |
 | sound, vibrate, keep the screen on | Device settings: they stay on this phone | all on |
 
 The page warns when the settle time is less than 5 minutes.
 
 **Pour timer.** Press *Start pour timer* when you start to pour a can. The
-can tips, the stream runs, and the clock counts down. *+20 s* and *−20 s*
+can tips, the stream runs, and the clock counts down. Untick *pour animation*
+to drop the drawing: the clock, the bar and the alarm stay. *+20 s* and *−20 s*
 change this one run. When the time ends, the panel turns green, says
 *Pour-in finished*, and the alarm rings: three beeps every 2.5 s for one
 minute, with vibration. A red bar at the bottom of the screen stays until you
