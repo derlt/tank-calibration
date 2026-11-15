@@ -427,8 +427,10 @@ with the input edge in the same colour. The arrow follows the water: out of
 the underground tank is up, into it is down.
 
 Each tank keeps its own check, its own running shell and its own raw file.
-The header's **Current tank** switch names each tank with its role
-(`alpha · out`, `beta · in`). It selects the tank that the Log & charts,
+The header's tank switch takes the place of the title: its two buttons name
+the tanks, with the role as the arrow of the dip card (`↑ alpha` pumps out,
+`↓ beta` pours in). A long press or hover shows the full role, and a screen
+reader reads "Current tank: alpha, pump out". It selects the tank that the Log & charts,
 Shell and campaign cards show, and the tank that *Take another reading* and
 *Accept anyway* apply to; the Live tab marks the current tank. The switch
 hides on Replay and Help, where it changes nothing. The Log & charts tab

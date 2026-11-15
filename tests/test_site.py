@@ -1131,7 +1131,8 @@ console.log(JSON.stringify(out));
             "out.hdr = {title: el('hdr-title').textContent, phase: el('hdr-phase').textContent,"
             " seg: !el('hdr-tank')._classes.has('hidden'), a: el('hdr-tank-a').textContent,"
             " b: el('hdr-tank-b').textContent, label: el('hdr-tank-label').textContent,"
-            " labelShown: !el('hdr-tank-label')._classes.has('hidden'), now: el('now-kv').innerHTML};\n"
+            " titleHidden: el('hdr-title')._classes.has('hidden'), tipA: el('hdr-tank-a').title,"
+            " nameA: el('hdr-tank-a')['aria-label'], count: el('hdr-count').textContent, now: el('now-kv').innerHTML};\n"
             "out.dipA = {a: el('dip-label').textContent, b: el('dip-label-b').textContent,"
             " row: !el('dip-row-b')._classes.has('hidden'),"
             " two: el('dip-card')._classes.has('two'), one: !el('d-go')._classes.has('hidden'),"
@@ -1199,7 +1200,7 @@ console.log(JSON.stringify(out));
             "out.settings = {title: el('set-campaign-title').textContent, dir: el('set-dir').textContent};\n"
             "// The switch hides on a tab it cannot change.\n"
             "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'replay' } }) } });\n"
-            "out.hdrReplay = [el('hdr-tank')._classes.has('hidden'), el('hdr-tank-label')._classes.has('hidden')];\n"
+            "out.hdrReplay = [el('hdr-tank')._classes.has('hidden'), el('hdr-title')._classes.has('hidden'), el('hdr-title').textContent];\n"
             "console.log(JSON.stringify(out));"
         )
         self.assertTrue(got["setup"]["b"], "tank B's fields show")
@@ -1208,13 +1209,16 @@ console.log(JSON.stringify(out));
         self.assertIn("Tank A name", got["setup"]["a"])
         self.assertEqual(got["setup"]["dip"], "Tank A first reading, mm")
         self.assertIn("Prime the pump", got["setup"]["first"])
-        self.assertEqual(got["hdr"]["title"], "alpha → beta — transfer")
-        self.assertIn("transfer", got["hdr"]["phase"])
+        self.assertEqual(got["hdr"]["title"], "alpha → beta")
+        self.assertTrue(got["hdr"]["titleHidden"], "the switch takes the title's place: its buttons name both tanks")
+        self.assertNotIn("transfer", got["hdr"]["phase"], "the header stays one slim line")
         self.assertTrue(got["hdr"]["seg"])
-        self.assertEqual(got["hdr"]["a"], "alpha · pump out", "the switch names the tank and its role")
-        self.assertEqual(got["hdr"]["b"], "beta · pour in")
-        self.assertEqual(got["hdr"]["label"], "Current tank")
-        self.assertTrue(got["hdr"]["labelShown"], "the switch says what it selects")
+        self.assertEqual(got["hdr"]["a"], "↑ alpha", "the switch names the tank, the arrow gives its role")
+        self.assertEqual(got["hdr"]["b"], "↓ beta")
+        self.assertEqual(got["hdr"]["tipA"], "alpha · pump out", "the full role is in the tooltip")
+        self.assertEqual(got["hdr"]["nameA"], "alpha, pump out", "and in the accessible name")
+        self.assertEqual(got["hdr"]["label"], "Current tank", "the switch keeps its accessible label")
+        self.assertNotIn("extra dip", got["hdr"]["count"], "no extra dips yet: none shown")
         self.assertLess(got["hdr"]["now"].index("current"), got["hdr"]["now"].index("beta"),
                         "the current marker sits on tank A")
         self.assertNotIn("<dd></dd>", got["hdr"]["now"], "no empty cell shifts the Now grid")
@@ -1280,7 +1284,8 @@ console.log(JSON.stringify(out));
         self.assertEqual(got["logA"]["tab"], "true")
         self.assertGreater(got["log"]["now"].index("current"), got["log"]["now"].index("beta"),
                            "the current marker follows the switch to tank B")
-        self.assertEqual(got["hdrReplay"], [True, True], "the switch hides on a tab it cannot change")
+        self.assertEqual(got["hdrReplay"], [True, False, "alpha → beta"],
+                         "the switch hides on a tab it cannot change, and the title comes back")
         self.assertIn("alpha", got["shell"], "the log switch carries to the shell tab")
         self.assertIn("alpha", got["settings"]["title"])
         self.assertIn("transfer", got["settings"]["dir"])

@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Header: one slim line instead of two or three. The title is the tank name
+  only (no "— live dip check"); the phase and the count are one line of
+  small text, not two pills, and extra dips show only when there are some.
+  In a transfer, the tank switch takes the place of the title, and its
+  buttons read `↑ alpha` and `↓ beta` (the dip card's arrows); the full role
+  stays in the tooltip and the accessible name, and the "Current tank"
+  label stays for screen readers. Less padding, smaller buttons.
+
 ### Added
 
 - Live tab: a *Simple · Verbose* switch. Simple mode shows only the actions
