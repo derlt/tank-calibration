@@ -91,6 +91,12 @@
   /** Pour noise of §9.1, litres. */
   function pourSigma(s, cfg) { return cfg.pourRel * Math.abs(s) + cfg.pourAbs; }
 
+  /** The noise a scored check was made with.  A change of it makes the old z stale. */
+  function noiseOf(cfg) { return { sr: cfg.sigmaRead, rel: cfg.pourRel, abs: cfg.pourAbs }; }
+  function sameNoise(a, b) {
+    return !!a && a.sr === b.sr && a.rel === b.rel && a.abs === b.abs;
+  }
+
   /**
    * Maximum a posteriori fit of (r, L, h0): the difference fit of §5.1 plus
    * one residual per prior.  Levenberg–Marquardt with a numerical Jacobian.
@@ -319,9 +325,13 @@
     this.fit = fitShell(ivs, this.cfg.prior, this.cfg, this.fit && this.fit.p);
     // Noise scale from the earlier one-step-ahead misses: robust (median), so
     // that real anomalies do not inflate it, and shrunk toward 1 while few.
+    // Only checks made with the current noise count: an old z was formed with
+    // the old sigma, so reusing it after a change would count the change twice.
     const zs = [];
+    const noise = noiseOf(this.cfg);
     for (const L of this.levels) {
-      if (L.check && L.check.scored && L.check.zRaw != null && L.dips.length) zs.push(Math.abs(L.check.zRaw));
+      if (L.check && L.check.scored && L.check.zRaw != null && L.dips.length
+        && (!L.check.noise || sameNoise(L.check.noise, noise))) zs.push(Math.abs(L.check.zRaw));
     }
     const k = zs.length, nu = this.cfg.scalePrior;
     let s2 = 1;
@@ -588,7 +598,7 @@
       predicted: pr.H, sd: pr.sd, sdModel: pr.sdModel, sdNoise: pr.sdNoise, scale: pr.scale,
       e, resid: res.resid, mm: res.mm, z, sharp, learning,
     });
-    L.check = { predicted: pr.H, sd: pr.sd, e, z, zRaw, resid: res.resid, mm: res.mm, sharp, scored: sharp && !learning };
+    L.check = { predicted: pr.H, sd: pr.sd, e, z, zRaw, resid: res.resid, mm: res.mm, sharp, scored: sharp && !learning, noise: noiseOf(cfg) };
     const miss = Math.abs(z) >= cfg.zCheck || Math.abs(res.mm) >= cfg.mmCheck;
     const off = `Reading ${fmt(a.H, 1)} mm, predicted ${fmt(pr.H, 1)} ± ${fmt(2 * pr.sd, 1)} mm (2σ): `
       + `${fmt(Math.abs(e), 1)} mm ${e >= 0 ? "above" : "below"}. resid ${sgn(res.resid, 1)} L = ${sgn(res.mm, 1)} mm-equiv, z ${sgn(z, 1)}.`;
@@ -707,6 +717,83 @@
     delete best.score;
     return best;
   }
+
+  // ---- campaign settings.  The tank record, the priors and the noise are
+  // assumptions, not data: a change refits the running shell, and a changed
+  // sigma moves the z of every new check (§9.1).  The levels themselves never
+  // change, and an old z is not reused in the noise scale.
+
+  /**
+   * Change the campaign settings after the first level.  Only the keys given
+   * change; the running shell is refitted on the levels already accepted.
+   * `pourRel` is a fraction (0.005 = 0.5 %); `Lpm` null means ±3 % of L.
+   */
+  Session.prototype.setCampaign = function (o) {
+    const cfg = this.cfg;
+    const has = (k) => Object.prototype.hasOwnProperty.call(o, k);
+    // Validate into a copy first: a bad field must change nothing.
+    const next = {
+      tank: cfg.tank, D: cfg.D, Dpm: cfg.Dpm, Lest: cfg.Lest, Lpm: cfg.Lpm,
+      pourUnit: cfg.pourUnit, sigmaRead: cfg.sigmaRead, pourRel: cfg.pourRel,
+      pourAbs: cfg.pourAbs, h0pm: cfg.h0pm,
+    };
+    if (has("tank")) {
+      const t = String(o.tank == null ? "" : o.tank).trim();
+      if (t) next.tank = t;
+    }
+    if (has("D")) {
+      if (!(o.D > 0)) throw new Error("the diameter estimate D must be more than 0 mm");
+      next.D = o.D;
+    }
+    if (has("Dpm")) {
+      if (o.Dpm == null || o.Dpm === "") next.Dpm = 200;
+      else if (!(o.Dpm > 0)) throw new Error("the diameter limit ± must be more than 0 mm");
+      else next.Dpm = o.Dpm;
+    }
+    if (has("Lest")) {
+      if (!(o.Lest > 0)) throw new Error("the length estimate L must be more than 0 mm");
+      next.Lest = o.Lest;
+    }
+    if (has("Lpm")) {
+      if (o.Lpm == null || o.Lpm === "") next.Lpm = 0.03 * next.Lest;
+      else if (!(o.Lpm > 0)) throw new Error("the length limit ± must be more than 0 mm");
+      else next.Lpm = o.Lpm;
+    }
+    if (has("pourUnit")) {
+      if (o.pourUnit == null || o.pourUnit === "") next.pourUnit = null;
+      else if (!(o.pourUnit > 0)) throw new Error("the pour unit must be more than 0 L");
+      else next.pourUnit = o.pourUnit;
+    }
+    if (has("sigmaRead")) {
+      if (!(o.sigmaRead > 0)) throw new Error("the reading sigma must be more than 0 mm");
+      next.sigmaRead = o.sigmaRead;
+    }
+    if (has("pourRel")) {
+      if (!(o.pourRel >= 0)) throw new Error("the pour noise must be 0 % or more");
+      next.pourRel = o.pourRel;
+    }
+    if (has("pourAbs")) {
+      if (!(o.pourAbs >= 0)) throw new Error("the fixed pour noise must be 0 L or more");
+      next.pourAbs = o.pourAbs;
+    }
+    if (has("h0pm")) {
+      if (!(o.h0pm > 0)) throw new Error("the datum limit ± must be more than 0 mm");
+      next.h0pm = o.h0pm;
+    }
+    // The repeat limit follows the reading noise unless it was set by hand.
+    // "By hand" means it differs from the default made from the old sigma.
+    const oldTol = Math.max(1.0, 2.5 * Math.SQRT2 * cfg.sigmaRead);
+    const tolIsDefault = !(cfg.repeatTol > 0) || Math.abs(cfg.repeatTol - oldTol) < 1e-9;
+    Object.assign(cfg, next);
+    if (has("sigmaRead") && tolIsDefault) cfg.repeatTol = Math.max(1.0, 2.5 * Math.SQRT2 * cfg.sigmaRead);
+    cfg.prior = {
+      r: cfg.D / 2, sr: cfg.Dpm / 4,
+      L: cfg.Lest, sL: cfg.Lpm / 2,
+      h0: 0, sh0: cfg.h0pm / 2,
+    };
+    this._refit();
+    return cfg;
+  };
 
   // ---- timers and the fill estimate.  Durations are operator settings, not
   // data: they never enter the fit or the raw file.

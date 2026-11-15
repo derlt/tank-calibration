@@ -49,9 +49,9 @@ requests. To keep the one file on a phone, use `site/calib_site.html`.
 | Length estimate L | Outside length minus the end plates. |
 | L is good to ± | Leave blank for ±3 %. |
 | Pour unit | Can size or meter step, L. The pour advice rounds to it. |
-| Reading repeatability σ | From a repeat study (below). Default 0.4 mm. |
-| Pour noise | From the can calibration (§3.1). Default 0.5 % + 3 L. |
-| Datum | 0 ± 80 mm unless you sounded the bottom. |
+| Reading repeatability σ | **Settings → Noise and limits**. From a repeat study (below). Default 0.4 mm. |
+| Pour noise | **Settings → Noise and limits**. From the can calibration (§3.1). Default 0.5 % + 3 L. |
+| Datum | **Settings → Noise and limits**. 0 ± 80 mm unless you sounded the bottom. |
 | First level | The heel volume (or `?`) and the first reading. |
 
 Every ± means "the truth is almost surely inside" (2σ).
@@ -62,6 +62,33 @@ Fill the tank to one level and let it settle. Dip 20–40 times without pouring,
 and record every reading. The standard deviation is σ. A good team with a good
 tape gets 0.2–0.4 mm. Do not use the §9 interval σ (about 1–1.5 mm) here: that
 σ includes pour noise, and with it a 3 mm slip passes as "agreement".
+
+## Settings
+
+The **Settings** tab holds every number the check uses, in three cards:
+
+| Card | Holds | When |
+|---|---|---|
+| This campaign | Tank name, D, L, pour unit and their ± | After the first level |
+| Noise and limits | Reading σ, pour noise, datum ± | Before or during a campaign |
+| Timers, alarm and device | Settle and dip times, fill time per can, alarm lead, animation, sound, vibration, screen | After the first level |
+
+The noise card is also the draft for the next campaign: change it before you
+start, and *Start campaign* uses it. A change during a campaign refits the
+running shell from the levels already accepted and moves the z of every new
+check (§9.1). The levels keep their state; the next pour uses the new numbers.
+
+A change of the noise also restarts the noise scale. Each earlier z was formed
+with the old σ, so those rows keep their z but no longer set the scale; new
+rows set it again. Without this, a corrected σ would count twice.
+
+The campaign card corrects a wrong tank record after the first level: a typo
+in D or L is fixed here, not by starting again. A change refits the running
+shell; the accepted levels stay accepted. Leave *L is good to ±* blank to take
+the 3 % default from the L you enter, so a corrected L also gets a new limit.
+
+The timers and device settings are operator settings, not data: they never
+enter the raw file or the fit.
 
 ## Each pour
 
@@ -131,8 +158,8 @@ names the one that fits.
 
 ## Timers and alarm
 
-Open **Timers and alarm** at the bottom of the Live tab, enter the times, and
-press *Save timers*. Write each time as `m:ss` (`1:30`). A plain number is
+Open **Settings → Timers, alarm and device**, enter the times, and press
+*Save timers and device*. Write each time as `m:ss` (`1:30`). A plain number is
 minutes (`1.5` = 1:30).
 
 | Setting | Meaning | Default |

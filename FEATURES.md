@@ -115,6 +115,7 @@ adopted shell, so the tool cannot drift from the fit.
 | 10a.9 Record | `Session.toRawCsv` (reads back with `data.read_raw`), `Session.toJSON` |
 | 10a.10 Performance | `site/simulate.js`; `tests/test_site.py` |
 | Offline page | `site/page.html` + core → `calib site-page` → `site/calib_site.html` |
+| Settings tab | `site/page.html`; `Session.setCampaign` refits the running shell after a change of the tank record, the priors or the noise |
 
 ## §11 Deliverables
 

@@ -129,6 +129,7 @@
     <button data-tab="live" aria-pressed="true">Live</button>
     <button data-tab="log" aria-pressed="false">Log &amp; charts</button>
     <button data-tab="shell" aria-pressed="false">Shell</button>
+    <button data-tab="settings" aria-pressed="false">Settings</button>
     <button data-tab="files" aria-pressed="false">Files</button>
     <button data-tab="replay" aria-pressed="false">Replay</button>
     <button data-tab="help" aria-pressed="false">How it works</button>
@@ -145,16 +146,7 @@
       <label>L is good to ±, mm (blank = 3 %)<input id="s-Lpm" type="number" inputmode="decimal"></label>
       <label>Default can size, L<input id="s-unit" type="number" inputmode="decimal" placeholder="200"></label>
     </div>
-    <details style="margin-top:0.7rem">
-      <summary>Noise settings</summary>
-      <div class="grid" style="margin-top:0.5rem">
-        <label>Reading repeatability σ, mm<input id="s-sr" type="number" inputmode="decimal" value="0.4"></label>
-        <label>Pour noise, % of pour<input id="s-rel" type="number" inputmode="decimal" value="0.5"></label>
-        <label>Pour noise, fixed L<input id="s-abs" type="number" inputmode="decimal" value="3"></label>
-        <label>Datum: 0 ± mm<input id="s-h0" type="number" inputmode="decimal" value="80"></label>
-      </div>
-      <p class="muted">The repeatability σ comes from a repeat study: many dips at one level, without pouring. Your study at 501 mm and 1033 mm gave 0.2–0.4 mm. Every ± here means "the truth is almost surely inside" (2σ).</p>
-    </details>
+    <p class="muted" id="s-noise"></p>
     <h2 style="margin-top:0.9rem">First level</h2>
     <div class="grid">
       <label>Liquid before the first dip, L (? = unknown heel)<input id="s-step" value="?"></label>
@@ -261,29 +253,6 @@
       <button class="secondary small" id="a-override">Accept anyway</button>
       <button class="danger small" id="a-undo">Undo last entry</button>
     </div>
-
-    <details class="card" id="timers" style="margin-top:0.8rem">
-      <summary><b>Timers and alarm</b></summary>
-      <div class="grid" style="margin-top:0.6rem">
-        <label>Settle (idle) after a batch, m:ss<input id="tm-settle" placeholder="5:00"></label>
-        <label>One dip and its entry, m:ss<input id="tm-dip" placeholder="1:00"></label>
-        <label>Alarm lead before full, s<input id="tm-lead" type="number" inputmode="numeric" placeholder="15"></label>
-      </div>
-      <h2 style="margin-top:0.9rem">Fill (pump) time per can, m:ss</h2>
-      <p class="muted" style="margin-top:0">The time the pump needs to fill one can. The alarm rings this time minus the lead, so the valve is closed when the can is full. The timer needs this number: a tap gap cannot give it, because the gap also holds the carry and the drain.</p>
-      <div class="grid" id="tm-sizes"></div>
-      <div class="row" style="margin-top:0.6rem">
-        <label class="check"><input type="checkbox" id="tm-anim"> pour animation</label>
-        <label class="check"><input type="checkbox" id="tm-sound"> sound</label>
-        <label class="check"><input type="checkbox" id="tm-vib"> vibrate</label>
-        <label class="check"><input type="checkbox" id="tm-wake"> keep the screen on while the campaign is open</label>
-      </div>
-      <div class="row" style="margin-top:0.6rem"><button id="tm-save">Save timers</button><button class="secondary" id="tm-test">Test alarm</button></div>
-      <p id="tm-msg" class="muted"></p>
-      <p id="tm-err" class="error"></p>
-      <p class="muted" id="tm-wake-state"></p>
-      <p class="muted">A locked phone stops the page and its alarm. If the screen still turns off, set the phone's own screen timeout longer (see How it works).</p>
-    </details>
   </section>
 
   <!-- ===================================================== log -->
@@ -308,6 +277,63 @@
     <h2>Running shell</h2>
     <div class="kv" id="shell-kv"></div>
     <p class="muted">The running shell is a tool for the live check. It is not the adopted shell. After the campaign, run <span class="mono">calib init</span> and <span class="mono">calib fit</span> on the exported raw file: the full fit (brim constraint, pair rule, block test, bootstrap) makes the deliverable.</p>
+  </section>
+
+  <!-- ===================================================== settings -->
+  <section id="settings" class="hidden">
+    <div class="card" id="set-campaign">
+      <h2>This campaign</h2>
+      <div class="grid">
+        <label>Tank name<input id="set-tank"></label>
+        <label>Diameter estimate D, mm<input id="set-D" type="number" inputmode="decimal"></label>
+        <label>D is good to ±, mm<input id="set-Dpm" type="number" inputmode="decimal"></label>
+        <label>Length estimate L, mm<input id="set-L" type="number" inputmode="decimal"></label>
+        <label>L is good to ±, mm (blank = 3 %)<input id="set-Lpm" type="number" inputmode="decimal"></label>
+        <label>Pour unit, L<input id="set-unit" type="number" inputmode="decimal"></label>
+      </div>
+      <div class="row" style="margin-top:0.6rem"><button id="set-save">Save campaign settings</button></div>
+      <p class="muted">A change refits the running shell from the levels already accepted. The levels keep their state; the next check uses the new values.</p>
+      <p id="set-msg" class="muted"></p>
+      <p id="set-err" class="error"></p>
+    </div>
+
+    <div class="card" id="set-noise" style="margin-top:0.8rem">
+      <h2>Noise and limits</h2>
+      <div class="grid">
+        <label>Reading repeatability σ, mm<input id="set-sr" type="number" inputmode="decimal"></label>
+        <label>Pour noise, % of pour<input id="set-rel" type="number" inputmode="decimal"></label>
+        <label>Pour noise, fixed L<input id="set-abs" type="number" inputmode="decimal"></label>
+        <label>Datum: 0 ± mm<input id="set-h0" type="number" inputmode="decimal"></label>
+      </div>
+      <div class="row" style="margin-top:0.6rem"><button id="set-noise-save">Save noise settings</button></div>
+      <p class="muted" id="set-noise-note"></p>
+      <p id="set-noise-msg" class="muted"></p>
+      <p id="set-noise-err" class="error"></p>
+      <p class="muted">The repeatability σ comes from a repeat study: many dips at one level, without pouring. Your study at 501 mm and 1033 mm gave 0.2–0.4 mm. Every ± here means "the truth is almost surely inside" (2σ).</p>
+    </div>
+
+    <details class="card" id="timers" style="margin-top:0.8rem">
+      <summary><b>Timers, alarm and device</b></summary>
+      <div class="grid" style="margin-top:0.6rem">
+        <label>Settle (idle) after a batch, m:ss<input id="tm-settle" placeholder="5:00"></label>
+        <label>One dip and its entry, m:ss<input id="tm-dip" placeholder="1:00"></label>
+        <label>Alarm lead before full, s<input id="tm-lead" type="number" inputmode="numeric" placeholder="15"></label>
+      </div>
+      <h2 style="margin-top:0.9rem">Fill (pump) time per can, m:ss</h2>
+      <p class="muted" style="margin-top:0">The time the pump needs to fill one can. The alarm rings this time minus the lead, so the valve is closed when the can is full. The timer needs this number: a tap gap cannot give it, because the gap also holds the carry and the drain.</p>
+      <div class="grid" id="tm-sizes"></div>
+      <div class="row" style="margin-top:0.6rem">
+        <label class="check"><input type="checkbox" id="tm-anim"> pour animation</label>
+        <label class="check"><input type="checkbox" id="tm-sound"> sound</label>
+        <label class="check"><input type="checkbox" id="tm-vib"> vibrate</label>
+        <label class="check"><input type="checkbox" id="tm-wake"> keep the screen on while the campaign is open</label>
+      </div>
+      <div class="row" style="margin-top:0.6rem"><button id="tm-save">Save timers and device</button><button class="secondary" id="tm-test">Test alarm</button></div>
+      <p id="tm-msg" class="muted"></p>
+      <p id="tm-err" class="error"></p>
+      <p class="muted" id="tm-wake-state"></p>
+      <p class="muted">A locked phone stops the page and its alarm. If the screen still turns off, set the phone's own screen timeout longer (see How it works).</p>
+    </details>
   </section>
 
   <!-- ===================================================== files -->
@@ -420,12 +446,12 @@
 
   // ------------------------------------------------------------ setup
   $("s-go").addEventListener("click", guard("s-err", () => {
+    const n = readNoise();
     const cfg = {
       tank: $("s-tank").value.trim() || "tank",
       D: num("s-D"), Dpm: num("s-Dpm") || 200, Lest: num("s-L"), Lpm: num("s-Lpm"),
-      pourUnit: num("s-unit"), sigmaRead: num("s-sr") || 0.4,
-      pourRel: (num("s-rel") == null ? 0.5 : num("s-rel")) / 100, pourAbs: num("s-abs") == null ? 3 : num("s-abs"),
-      h0pm: num("s-h0") || 80,
+      pourUnit: num("s-unit"), sigmaRead: n.sigmaRead,
+      pourRel: n.pourRel, pourAbs: n.pourAbs, h0pm: n.h0pm,
     };
     if (!(cfg.D > 0)) throw new Error("Enter the diameter estimate D.");
     if (!(cfg.Lest > 0)) throw new Error("Enter the length estimate L.");
@@ -436,6 +462,9 @@
     s.start($("s-step").value.trim() || "?", dip, "", Date.now());
     s.levels[0].pourTime = null;
     S = s; save(); tab = "live";
+    // The noise card is the draft: keep the next campaign in step with it.
+    P.noise = n;
+    localStorage.setItem(PREFS, JSON.stringify(P));
   }));
 
   // ------------------------------------------------------------ pour
@@ -595,12 +624,14 @@
     for (const b of $("tabs").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.tab === tab));
     const has = !!S;
     $("setup").classList.toggle("hidden", has || tab !== "live");
-    for (const id of ["live", "log", "shell", "files", "replay", "help"]) {
-      const need = id === "replay" || id === "help" || id === "files" ? true : has;
+    for (const id of ["live", "log", "shell", "settings", "files", "replay", "help"]) {
+      const need = id === "replay" || id === "help" || id === "files" || id === "settings" ? true : has;
       $(id).classList.toggle("hidden", tab !== id || !need);
     }
     for (const id of ["f-csv", "f-json", "f-show", "f-new"]) $(id).disabled = !has;
     renderArchive();
+    renderSetupNoise();
+    renderSettings();
     if (!has) { $("hdr-phase").textContent = "no session"; $("hdr-count").textContent = ""; $("hdr-title").textContent = "calib site — live dip check"; return; }
     const st = S.status();
     $("hdr-title").textContent = `${S.cfg.tank} — live dip check`;
@@ -638,7 +669,6 @@
       $("dip-label").textContent = n === 0 ? `Reading after ${pend.step.text} L, mm` : "Next reading, mm — earlier readings hidden";
     }
     tickSettle(Date.now());
-    renderTimers();
     tickEta(Date.now());
 
     // verdict
@@ -677,6 +707,7 @@
     delete $("t-unit").dataset.set;
     clearTimers();
     timersSig = "";
+    settingsSig = "";
   }
 
   function renderTally(adv) {
@@ -729,6 +760,87 @@
     tickPour(Date.now());
   }
 
+  // ------------------------------------------------------------ settings
+  // One place for the numbers the check uses.  The campaign card and the
+  // timers need a session; the noise card also sets the next campaign.
+  let settingsSig = "";
+  function noiseDraft() {
+    return Object.assign({ sigmaRead: 0.4, pourRel: 0.005, pourAbs: 3, h0pm: 80 }, P.noise || {});
+  }
+  function pct(x) { return String(Math.round(x * 1000) / 1000); }
+  function renderSetupNoise() {
+    const n = noiseDraft();
+    $("s-noise").textContent = `Noise and limits: reading σ ${f(n.sigmaRead, 2)} mm, pour ${f(100 * n.pourRel, 2)} % + ${f(n.pourAbs, 1)} L, datum ±${f(n.h0pm, 0)} mm. Change them in Settings; they apply to the next campaign.`;
+  }
+  function settingsSignature() {
+    const has = !!S;
+    const n = has ? S.cfg : noiseDraft();
+    return JSON.stringify([has,
+      has ? [S.cfg.tank, S.cfg.D, S.cfg.Dpm, S.cfg.Lest, S.cfg.Lpm, S.cfg.pourUnit] : null,
+      n.sigmaRead, n.pourRel, n.pourAbs, n.h0pm]);
+  }
+  function renderSettings() {
+    const has = !!S;
+    $("set-campaign").classList.toggle("hidden", !has);
+    $("timers").classList.toggle("hidden", !has);
+    const n = has ? S.cfg : noiseDraft();
+    const sig = settingsSignature();
+    if (sig !== settingsSig) {
+      settingsSig = sig;
+      if (has) {
+        $("set-tank").value = S.cfg.tank;
+        $("set-D").value = String(S.cfg.D);
+        $("set-Dpm").value = String(S.cfg.Dpm);
+        $("set-L").value = String(S.cfg.Lest);
+        // Blank means the 3 % default, so a corrected L takes a new default.
+        $("set-Lpm").value = Math.abs(S.cfg.Lpm - 0.03 * S.cfg.Lest) < 1e-9 ? "" : String(S.cfg.Lpm);
+        $("set-unit").value = S.cfg.pourUnit == null ? "" : String(S.cfg.pourUnit);
+      }
+      $("set-sr").value = String(n.sigmaRead);
+      $("set-rel").value = pct(100 * n.pourRel);
+      $("set-abs").value = String(n.pourAbs);
+      $("set-h0").value = String(n.h0pm);
+    }
+    $("set-noise-note").textContent = has
+      ? "These are the numbers the check uses, one set everywhere (§9.1). A change refits the running shell and restarts the noise scale; earlier rows keep the z from their dip."
+      : "These apply to the next campaign. They stay on this device.";
+    if (has) renderTimers();
+  }
+  function readNoise() {
+    const sr = num("set-sr"), rel = num("set-rel"), abs = num("set-abs"), h0 = num("set-h0");
+    if (!(sr > 0)) throw new Error("Enter the reading repeatability σ, more than 0 mm.");
+    if (rel == null || !(rel >= 0)) throw new Error("Enter the pour noise in %, 0 or more.");
+    if (abs == null || !(abs >= 0)) throw new Error("Enter the fixed pour noise in L, 0 or more.");
+    if (!(h0 > 0)) throw new Error("Enter the datum limit ±, more than 0 mm.");
+    return { sigmaRead: sr, pourRel: rel / 100, pourAbs: abs, h0pm: h0 };
+  }
+  $("set-noise-save").addEventListener("click", guard("set-noise-err", () => {
+    $("set-noise-msg").textContent = "";
+    const o = readNoise();
+    if (S) {
+      S.setCampaign(o); save();
+      P.noise = o;
+      localStorage.setItem(PREFS, JSON.stringify(P));
+      $("set-noise-msg").textContent = "Saved. The running shell is refitted and the noise scale restarts; new checks use the new noise.";
+    } else {
+      P.noise = o;
+      localStorage.setItem(PREFS, JSON.stringify(P));
+      $("set-noise-msg").textContent = "Saved for the next campaign.";
+    }
+    settingsSig = settingsSignature();
+  }));
+  $("set-save").addEventListener("click", guard("set-err", () => {
+    $("set-msg").textContent = "";
+    if (!S) throw new Error("Start a campaign first.");
+    S.setCampaign({
+      tank: $("set-tank").value.trim(),
+      D: num("set-D"), Dpm: num("set-Dpm"),
+      Lest: num("set-L"), Lpm: num("set-Lpm"), pourUnit: num("set-unit"),
+    });
+    save(); settingsSig = settingsSignature();
+    $("set-msg").textContent = "Saved. The running shell is refitted from the accepted levels.";
+  }));
+
   // ------------------------------------------------------------ timers and alarm
   // Pour timer: one can, from "start" to "the can has drained".  Settle timer:
   // from the end of a batch to the dip.  Both keep absolute times in storage,
@@ -737,6 +849,7 @@
   function loadJSON(k, d) { try { return JSON.parse(localStorage.getItem(k) || "null") || d; } catch (e) { return d; } }
   let T = loadJSON(TIMER, {});   // { pour: { start, dur, size, alarmed }, settled: "row@time" }
   const P = Object.assign({ anim: true, sound: true, vibrate: true, wake: true }, loadJSON(PREFS, {}));
+  P.noise = Object.assign({ sigmaRead: 0.4, pourRel: 0.005, pourAbs: 3, h0pm: 80 }, P.noise || {});
   let timersSig = "", lastEta = 0;
   function saveTimer() { localStorage.setItem(TIMER, JSON.stringify(T)); }
   function clearTimers() { T = {}; localStorage.removeItem(TIMER); stopAlarm(); releaseWake(); stopPourAnim(); }
@@ -861,7 +974,12 @@
     const u = activeUnit();
     if (!(u > 0)) throw new Error("Enter the can size in litres.");
     const d = fillTimeFor(u);
-    if (!d) { $("timers").open = true; throw new Error(`Set the fill time for ${f(u, 0)} L cans under Timers and alarm.`); }
+    if (!d) {
+      tab = "settings"; $("timers").open = true; render();
+      $("tm-err").textContent = `Set the fill time for ${f(u, 0)} L cans here, then press Save timers and device.`;
+      if ($("timers").scrollIntoView) $("timers").scrollIntoView({ block: "start" });
+      return;
+    }
     stopAlarm(); unlockAudio();
     T.pour = { start: Date.now(), dur: d.seconds, size: u, lead: S.cfg.alarmLead, preAlarmed: false, fullAlarmed: false };
     saveTimer(); keepAwake();
@@ -1024,8 +1142,10 @@
     return out.sort((a, b) => b - a);
   }
   function renderTimers() {
+    if (!S) return;
     const sizes = timerSizes(), cfg = S.cfg;
-    const sig = JSON.stringify([sizes, cfg.settleSeconds, cfg.dipSeconds, cfg.alarmLead, cfg.fillSeconds, P]);
+    const sig = JSON.stringify([sizes, cfg.settleSeconds, cfg.dipSeconds, cfg.alarmLead, cfg.fillSeconds,
+      P.anim, P.sound, P.vibrate, P.wake]);
     if (sig === timersSig) return;
     timersSig = sig;
     $("tm-settle").value = fmtClock(cfg.settleSeconds);

@@ -49,7 +49,7 @@ function boot(pagePath, corePath, store) {
 
   const els = new Map();
   const el = (id) => { if (!els.has(id)) els.set(id, makeElement(id)); return els.get(id); };
-  const tabs = ["live", "log", "shell", "files", "replay", "help"].map((t) => {
+  const tabs = ["live", "log", "shell", "settings", "files", "replay", "help"].map((t) => {
     const b = makeElement("tab-" + t); b.dataset.tab = t; return b;
   });
   el("tabs").querySelectorAll = (sel) => (sel === "button" ? tabs : []);

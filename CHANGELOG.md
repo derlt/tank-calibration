@@ -38,6 +38,14 @@ All notable changes to this project are documented here. The format follows
   cycle time measured between taps, or the fill time when there is none.
   The drawing is a setting: *pour animation* off keeps the clock, the bar and
   the alarm.
+- A **Settings** tab on the page collects every number the check uses: the
+  tank record and priors (correctable after the first level), the noise and
+  the datum, and the timers, alarm and device settings. The noise card is
+  also the draft for the next campaign. `Session.setCampaign` refits the
+  running shell on the accepted levels; a changed σ moves the z of every new
+  check (§9.1) and restarts the noise scale, so an old z is not counted twice.
+  The repeat limit follows σ unless it was set by hand. The timers and the
+  noise fields left the Live and setup cards.
 - The page shows four charts on the **Log & charts** tab: Miss, Slope profile,
   Drift with its ±3σ√n band, and z-score alarm (§6.6). A row of buttons or a
   swipe changes the chart. `Session.series()` in `site_core.js` supplies the

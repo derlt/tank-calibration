@@ -96,6 +96,87 @@ class TestSitePage(unittest.TestCase):
         self.assertEqual(got["reloadedCount"], "2 cans · 300 L")
 
     @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_settings_tab(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "let p = stub.boot(page, corePath, store), el = p.el;\n"
+            "// Before a campaign: the noise card sets the next campaign.\n"
+            "out.noSession = {campaign: el('set-campaign')._classes.has('hidden'),"
+            " timers: el('timers')._classes.has('hidden'), sr: el('set-sr').value};\n"
+            "out.setup = el('s-noise').textContent;\n"
+            "el('set-sr').value = '0.7'; el('set-rel').value = '0.4';"
+            " el('set-abs').value = '2.5'; el('set-h0').value = '60';\n"
+            "el('set-noise-save').click(); out.draftMsg = el('set-noise-msg').textContent;\n"
+            "p = stub.boot(page, corePath, store); el = p.el;\n"
+            "out.draft = [el('set-sr').value, el('set-rel').value, el('set-abs').value, el('set-h0').value];\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';"
+            " el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "out.started = {campaign: el('set-campaign')._classes.has('hidden'),"
+            " timers: el('timers')._classes.has('hidden'), tank: el('set-tank').value,"
+            " D: el('set-D').value, L: el('set-L').value, Lpm: el('set-Lpm').value, unit: el('set-unit').value};\n"
+            "out.cfg0 = JSON.parse(store.get('calib-site:active')).config;\n"
+            "// A change of the noise refits and moves the repeat limit, and it does"
+            " not throw away an unsaved edit in the campaign card.\n"
+            "el('set-tank').value = 'unsaved';\n"
+            "el('set-sr').value = '0.6'; el('set-rel').value = '0.3'; el('set-noise-save').click();\n"
+            "out.keep = el('set-tank').value;\n"
+            "const c1 = JSON.parse(store.get('calib-site:active')).config;\n"
+            "out.noise = {sr: c1.sigmaRead, rel: c1.pourRel, tol: c1.repeatTol, msg: el('set-noise-msg').textContent};\n"
+            "el('set-sr').value = '0'; el('set-noise-save').click(); out.badNoise = el('set-noise-err').textContent;\n"
+            "// The campaign record is editable after the first level.\n"
+            "el('set-tank').value = 't2'; el('set-D').value = '1900'; el('set-L').value = '3100';"
+            " el('set-unit').value = '100'; el('set-save').click();\n"
+            "const c2 = JSON.parse(store.get('calib-site:active')).config;\n"
+            "out.campaign = {tank: c2.tank, D: c2.D, L: c2.Lest, Lpm: c2.Lpm,"
+            " LpmField: el('set-Lpm').value, unit: c2.pourUnit, msg: el('set-msg').textContent};\n"
+            "el('set-D').value = '0'; el('set-save').click(); out.badD = el('set-err').textContent;\n"
+            "// A missing fill time sends the operator to the settings tab.\n"
+            "el('pt-start').click();\n"
+            "out.jump = {settings: !el('settings')._classes.has('hidden'), open: el('timers').open,"
+            " err: el('tm-err').textContent, live: el('p-err').textContent};\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertTrue(got["noSession"]["campaign"], "no campaign card before the first level")
+        self.assertTrue(got["noSession"]["timers"], "no timers before the first level")
+        self.assertEqual(got["noSession"]["sr"], "0.4", "the noise card shows the defaults")
+        self.assertIn("Change them in Settings", got["setup"])
+        self.assertIn("next campaign", got["draftMsg"])
+        self.assertEqual(got["draft"], ["0.7", "0.4", "2.5", "60"], "the draft survives a reload")
+        self.assertFalse(got["started"]["campaign"])
+        self.assertFalse(got["started"]["timers"])
+        self.assertEqual(got["started"]["tank"], "t1")
+        self.assertEqual(got["started"]["D"], "1800")
+        self.assertEqual(got["started"]["L"], "3000")
+        self.assertEqual(got["started"]["Lpm"], "", "the 3 % default shows blank")
+        self.assertEqual(got["started"]["unit"], "200")
+        self.assertEqual(got["cfg0"]["sigmaRead"], 0.7, "the next campaign uses the saved noise")
+        self.assertEqual(got["cfg0"]["pourRel"], 0.004)
+        self.assertAlmostEqual(got["cfg0"]["repeatTol"], 2.5 * 2**0.5 * 0.7, places=6)
+        self.assertEqual(got["keep"], "unsaved", "saving the noise card keeps an unsaved campaign edit")
+        self.assertEqual(got["noise"]["sr"], 0.6)
+        self.assertEqual(got["noise"]["rel"], 0.003)
+        self.assertAlmostEqual(got["noise"]["tol"], 2.5 * 2**0.5 * 0.6, places=6)
+        self.assertIn("noise scale restarts", got["noise"]["msg"])
+        self.assertIn("more than 0 mm", got["badNoise"])
+        self.assertEqual(got["campaign"]["tank"], "t2")
+        self.assertEqual(got["campaign"]["D"], 1900)
+        self.assertEqual(got["campaign"]["L"], 3100)
+        self.assertAlmostEqual(got["campaign"]["Lpm"], 93, places=6, msg="a blank L ± follows the corrected L")
+        self.assertEqual(got["campaign"]["LpmField"], "", "the 3 % default still shows blank")
+        self.assertEqual(got["campaign"]["unit"], 100)
+        self.assertIn("refitted", got["campaign"]["msg"])
+        self.assertIn("must be more than 0 mm", got["badD"])
+        self.assertTrue(got["jump"]["settings"], "a missing fill time opens the settings tab")
+        self.assertTrue(got["jump"]["open"])
+        self.assertIn("Set the fill time", got["jump"]["err"])
+        self.assertEqual(got["jump"]["live"], "", "the message is not left on the hidden Live tab")
+
+    @unittest.skipUnless(NODE, "node is not installed")
     def test_page_pour_and_settle_timers(self):
         stub = (HERE / "tests" / "page_stub.js").as_posix()
         got = _node(
@@ -108,7 +189,8 @@ class TestSitePage(unittest.TestCase):
             "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
             "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
             "out.etaBefore = el('now-eta').innerHTML;\n"
-            "el('pt-start').click(); out.noTime = el('p-err').textContent; out.opened = el('timers').open;\n"
+            "el('pt-start').click(); out.noTime = el('tm-err').textContent; out.opened = el('timers').open;"
+            " out.liveErr = el('p-err').textContent;\n"
             "el('tm-settle').value = '4:30'; el('tm-dip').value = '0.5'; el('tm-fill-200').value = '1:30';\n"
             "el('tm-lead').value = '15';\n"
             "el('tm-save').click();\n"
@@ -169,6 +251,7 @@ class TestSitePage(unittest.TestCase):
         )
         self.assertIn("Set the fill time for 200 L", got["etaBefore"])
         self.assertIn("Set the fill time for 200 L", got["noTime"])
+        self.assertEqual(got["liveErr"], "", "the message is not left on the hidden Live tab")
         self.assertTrue(got["opened"], "a missing fill time opens the timer settings")
         self.assertEqual(got["err"], "")
         self.assertIn("below the 5-minute minimum", got["msg"])
@@ -375,6 +458,83 @@ class TestSiteCore(unittest.TestCase):
         self.assertEqual(got["alarm"], {"status": "ALARM", "cause": "OBJECT?"})
         self.assertIn(got["afterRecount"], ("ACCEPT", "WATCH"))
         self.assertTrue(got["roundTrip"])
+
+    def test_set_campaign_refits_and_validates(self):
+        got = _node(
+            "const p = {r: 900, L: 3000, h0: 0};\n"
+            "const s = new core.Session({D: 1800, Dpm: 100, Lest: 3000, pourUnit: 200});\n"
+            "const out = {};\n"
+            "let V = 400;\n"
+            "s.start('400', core.levelFor(V, p)); s.dip(core.levelFor(V, p));\n"
+            "for (let i = 0; i < 4; i++) { s.pour('400'); V += 400; let v = s.dip(core.levelFor(V, p));"
+            " if (v.status === 'REDIP') s.dip(core.levelFor(V, p)); }\n"
+            "out.dims = [s.cfg.D, s.cfg.prior.r, s.cfg.Lest, s.cfg.prior.L];\n"
+            "s.setCampaign({D: 1900, Dpm: '', Lest: 3100, Lpm: '', pourUnit: ''});\n"
+            "out.new = [s.cfg.D, s.cfg.Dpm, s.cfg.prior.r, s.cfg.Lest, s.cfg.Lpm, s.cfg.prior.L, s.cfg.pourUnit];\n"
+            "out.fitR = s.fit.p.r;\n"
+            "s.setCampaign({sigmaRead: 0.6});\n"
+            "out.noise = [s.cfg.sigmaRead, s.cfg.repeatTol];\n"
+            "s.setCampaign({tank: 't1'}); s.setCampaign({tank: '  '}); out.tank = s.cfg.tank;\n"
+            "out.bad = [];\n"
+            "for (const o of [{D: 0}, {Dpm: 0}, {Lest: -1}, {Lpm: -1}, {pourUnit: -1},"
+            " {sigmaRead: 0}, {pourRel: -0.1}, {pourAbs: -1}, {h0pm: 0}]) {"
+            " try { s.setCampaign(o); out.bad.push('ok'); } catch (e) { out.bad.push(e.message); } }\n"
+            "try { s.setCampaign({D: 1950, Lest: -1}); } catch (e) {}\n"
+            "out.atomic = s.cfg.D;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["dims"], [1800, 900, 3000, 3000])
+        self.assertEqual(got["new"][0:2], [1900, 200], "a blank D ± falls back to 200 mm")
+        self.assertAlmostEqual(got["new"][2], 950)
+        self.assertEqual(got["new"][3], 3100)
+        self.assertAlmostEqual(got["new"][4], 93, places=6, msg="a blank L ± is 3 %")
+        self.assertAlmostEqual(got["new"][5], 3100)
+        self.assertIsNone(got["new"][6])
+        self.assertLess(abs(got["fitR"] - 900.0), 50.0, "the refit follows the data and the new prior")
+        self.assertAlmostEqual(got["noise"][0], 0.6)
+        self.assertAlmostEqual(got["noise"][1], 2.5 * 2**0.5 * 0.6, places=6)
+        self.assertEqual(got["tank"], "t1", "a blank tank name keeps the old one")
+        self.assertEqual(len(got["bad"]), 9)
+        for msg in got["bad"]:
+            self.assertNotEqual(msg, "ok")
+        self.assertEqual(got["atomic"], 1900, "a bad field changes nothing")
+
+    def test_set_campaign_noise_scale_and_repeat_tol(self):
+        got = _node(
+            "const p = {r: 900, L: 3000, h0: 0};\n"
+            "const out = {};\n"
+            "// A custom repeat limit set by hand survives a sigma change.\n"
+            "const a = new core.Session({D: 1800, Lest: 3000, repeatTol: 5});\n"
+            "a.setCampaign({sigmaRead: 0.5}); out.kept = a.cfg.repeatTol;\n"
+            "const b = new core.Session({D: 1800, Lest: 3000});\n"
+            "b.setCampaign({sigmaRead: 0.5}); out.followed = b.cfg.repeatTol;\n"
+            "// Old z values were formed with the old sigma: they must not set the\n"
+            "// scale after a noise change, or the change counts twice.\n"
+            "let seed = 7; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };\n"
+            "const g = () => { let u = 0; for (let i = 0; i < 12; i++) u += rnd(); return u - 6; };\n"
+            "const s = new core.Session({D: 1800, Lest: 3000, pourUnit: 200, sigmaRead: 0.2});\n"
+            "let V = 400; s.start('400', core.levelFor(V, p)); s.dip(core.levelFor(V, p) + 0.8 * g());\n"
+            "for (let i = 0; i < 12; i++) {\n"
+            "  s.pour('200'); V += 200 + 3 * g();\n"
+            "  s.dip(core.levelFor(V, p) + 0.8 * g());\n"
+            "  for (let k = 0; k < 4 && s.current().state === 'pending'; k++) s.dip(core.levelFor(V, p) + 0.8 * g());\n"
+            "}\n"
+            "out.scale0 = s.scale; out.scored0 = s.levels.filter((L) => L.check && L.check.scored).length;\n"
+            "s.setCampaign({sigmaRead: 0.8});\n"
+            "out.scale1 = s.scale; out.scored1 = s.levels.filter((L) => L.check && L.check.scored).length;\n"
+            "// A row dipped after the change counts again.\n"
+            "s.pour('200'); V += 200; s.dip(core.levelFor(V, p));\n"
+            "for (let k = 0; k < 4 && s.current().state === 'pending'; k++) s.dip(core.levelFor(V, p));\n"
+            "out.scale2 = s.scale; out.scored2 = s.levels.filter((L) => L.check && L.check.scored).length;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["kept"], 5, "a repeat limit set by hand is kept")
+        self.assertAlmostEqual(got["followed"], 2.5 * 2**0.5 * 0.5, places=6, msg="a default repeat limit follows sigma")
+        self.assertGreater(got["scale0"], 1.2, "the old sigma inflated the scale")
+        self.assertGreater(got["scored0"], 0)
+        self.assertEqual(got["scale1"], 1, "a noise change drops the stale z values from the scale")
+        self.assertEqual(got["scored1"], got["scored0"], "the rows keep their z")
+        self.assertGreater(got["scored2"], 0, "a new row is scored under the new noise")
 
     def test_batch_can_tally(self):
         # Truth shell r 900, L 3000, h0 0.  Batches of 200 L cans, one dip each.
