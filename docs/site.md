@@ -137,39 +137,52 @@ minutes (`1.5` = 1:30).
 
 | Setting | Meaning | Default |
 |---|---|---|
-| Pour time per can size | Pour one can and let it drain into the tank | blank: the time measured from your taps |
+| Fill (pump) time per can size | The time the pump needs to fill one can | blank: no timer for that size |
+| Alarm lead before full | The alarm rings this long before the can is full | 15 s |
 | Settle (idle) after a batch | Wait before the first dip (§3.5) | 5:00 |
 | One dip and its entry | Only used for the time estimate | 1:00 |
-| pour animation | The can, the stream and the tank drawing in the timer | on |
+| pour animation | The hose, the can and the tank drawing in the timer | on |
 | sound, vibrate, keep the screen on | Device settings: they stay on this phone | all on |
 
 The page warns when the settle time is less than 5 minutes.
 
-**Pour timer.** Press *Start pour timer* when you start to pour a can. The
-can tips, the stream runs, and the clock counts down. Untick *pour animation*
-to drop the drawing: the clock, the bar and the alarm stay. *+20 s* and *−20 s*
-change this one run. When the time ends, the panel turns green, says
-*Pour-in finished*, and the alarm rings: three beeps every 2.5 s for one
-minute, with vibration. A red bar at the bottom of the screen stays until you
-press *Stop alarm*. The timer does not count the can. Tap *+1 can poured*
-when the can is empty. That tap is the record, and it also stops the timer
-and the alarm.
+**Fill timer.** The timer is for the pump, not for the drain. Press *Start
+fill timer* when you start the pump. The hose fills the can and the clock
+counts down. *+20 s* and *−20 s* change this one run. Untick *pour animation*
+to drop the drawing: the clock, the bar and the alarm stay.
+
+| Time left | Panel | Alarm | Do |
+|---|---|---|---|
+| more than the lead | blue, *Filling a 200 L can* | — | watch the can |
+| the lead or less | amber, *15 s to full: close the valve now* | two beeps | close the valve |
+| 0:00 | green, *Can full: the pump must be off* | three beeps every 2.5 s for 3 min | pump off, tap *+1 can poured* |
+
+The lead is the time from the alarm to the closed valve, not a safety margin.
+If you close faster than the lead, every can is short by that difference, and
+the calibration reads it as a loss at every interval. Time yourself once:
+alarm to valve closed. 15 s of a 90 s fill is 33 L of a 200 L can, so the lead
+must be right.
+
+The timer does not count the can. Tap *+1 can poured* when the can is full.
+That tap is the record, and it also stops the timer and the alarm. Emptying
+the can into the tank has no timer.
 
 **Settle timer.** *Batch done* starts the settle timer from the last can.
 The dip card counts down and rings once when the level is ready to dip.
 
 **Time to half and to the brim.** The Now card shows how long it takes to
 reach half of the capacity and the brim, the clock time when you will be
-done, and the levels and cans that are left. The estimate uses the can size
-on the pour card, its pour time, the settle time and the dip time. Each level
-takes the advised number of cans for a rise of about 30 mm, so near the brim
-the levels get smaller. A milestone is done when the first level at or above
-it is dipped. The estimate follows the running shell and has no time for
-extra dips, so early in the campaign it can be off by several levels.
+done, and the levels and cans that are left. Each level takes the advised
+number of cans for a rise of about 30 mm, so near the brim the levels get
+smaller. A milestone is done when the first level at or above it is dipped.
+The estimate follows the running shell and has no time for extra dips, so
+early in the campaign it can be off by several levels.
 
-**Measured pour time.** With no pour time set for a size, the page uses the
-median gap between two taps of that size in one batch. That gap includes the
-change of can.
+**Cycle time from the taps.** The gap between two taps of the same size in
+one batch holds the fill, the carry and the drain. The page takes the median
+of those gaps and uses it for the estimate, because that is the time one can
+costs the campaign. It cannot give the fill time alone, so it never feeds the
+timer.
 
 Sound starts only after a tap on the page. *Test alarm* checks the volume.
 The timers never go into the raw file or the fit.

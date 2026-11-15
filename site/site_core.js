@@ -199,7 +199,8 @@
     tapGap: 20,                 // s: a faster second tap is asked "same can?"
     settleSeconds: 300,         // s: idle time after a batch before the dip (§3.5)
     dipSeconds: 60,             // s: one dip and its entry, for the time estimate
-    pourSeconds: null,          // { "200": 90, … }: pour one can and let it drain, s
+    fillSeconds: null,          // { "200": 90, … }: fill one can by the pump, s
+    alarmLead: 15,              // s before the can is full: close the valve
     learnN: 3,                  // intervals before a confirmed miss is an anomaly
     scalePrior: 4,              // pseudo-count for the noise scale estimate
   };
@@ -210,7 +211,10 @@
     if (!(cfg.Lest > 0)) throw new Error("length estimate L is required");
     if (!(cfg.Lpm > 0)) cfg.Lpm = 0.03 * cfg.Lest;
     if (!(cfg.repeatTol > 0)) cfg.repeatTol = Math.max(1.0, 2.5 * Math.SQRT2 * cfg.sigmaRead);
-    cfg.pourSeconds = Object.assign({}, cfg.pourSeconds || {});
+    // Older sessions kept the fill time under "pourSeconds".
+    if (cfg.pourSeconds && !cfg.fillSeconds) cfg.fillSeconds = cfg.pourSeconds;
+    delete cfg.pourSeconds;
+    cfg.fillSeconds = Object.assign({}, cfg.fillSeconds || {});
     cfg.prior = {
       r: cfg.D / 2, sr: cfg.Dpm / 4,
       L: cfg.Lest, sL: cfg.Lpm / 2,
@@ -707,7 +711,7 @@
   // ---- timers and the fill estimate.  Durations are operator settings, not
   // data: they never enter the fit or the raw file.
 
-  /** Set the timer durations.  pourSeconds merges per can size; null clears one size. */
+  /** Set the timer durations.  fillSeconds merges per can size; null clears one size. */
   Session.prototype.setTimers = function (o) {
     const cfg = this.cfg;
     if (o.settleSeconds != null) {
@@ -718,19 +722,24 @@
       if (!(o.dipSeconds >= 0)) throw new Error("the dip time must be 0 s or more");
       cfg.dipSeconds = o.dipSeconds;
     }
-    for (const k of Object.keys(o.pourSeconds || {})) {
-      const v = o.pourSeconds[k];
-      if (v == null || v === "") { delete cfg.pourSeconds[sizeKey(k)]; continue; }
-      if (!(v > 0)) throw new Error("a pour time must be more than 0 s");
-      cfg.pourSeconds[sizeKey(k)] = v;
+    if (o.alarmLead != null) {
+      if (!(o.alarmLead >= 0 && o.alarmLead <= 120)) throw new Error("the alarm lead must be 0 to 120 s");
+      cfg.alarmLead = o.alarmLead;
+    }
+    for (const k of Object.keys(o.fillSeconds || {})) {
+      const v = o.fillSeconds[k];
+      if (v == null || v === "") { delete cfg.fillSeconds[sizeKey(k)]; continue; }
+      if (!(v > 0)) throw new Error("a fill time must be more than 0 s");
+      cfg.fillSeconds[sizeKey(k)] = v;
     }
     return cfg;
   };
 
   /**
-   * Time per can measured from the taps: the median gap between two taps of
-   * the same size in one batch.  The gap holds the pour, the drain and the
-   * change of can, which is what the estimate needs.
+   * Cycle time per can, measured from the taps: the median gap between two
+   * taps of the same size in one batch.  The gap holds the fill by the pump,
+   * the carry and the drain, which is what the estimate needs.  It cannot
+   * give the fill time alone, so it never feeds the timer.
    */
   Session.prototype.measuredPourSeconds = function (size) {
     const gaps = [];
@@ -749,12 +758,18 @@
     return { seconds: k % 2 ? gaps[(k - 1) / 2] : 0.5 * (gaps[k / 2 - 1] + gaps[k / 2]), n: k };
   };
 
-  /** Pour time of one can: the setting, else the measured median, else null. */
-  Session.prototype.pourSecondsFor = function (size) {
-    const set = this.cfg.pourSeconds[sizeKey(size)];
-    if (set > 0) return { seconds: set, source: "set" };
+  /** Fill time of one can by the pump: the setting only.  The timer needs it. */
+  Session.prototype.fillSecondsFor = function (size) {
+    const set = this.cfg.fillSeconds[sizeKey(size)];
+    return set > 0 ? { seconds: set, source: "set" } : null;
+  };
+
+  /** Time one can costs the campaign: the measured cycle, else the fill time. */
+  Session.prototype.cycleSecondsFor = function (size) {
     const m = this.measuredPourSeconds(size);
-    return m ? { seconds: m.seconds, source: "measured", n: m.n } : null;
+    if (m) return { seconds: m.seconds, source: "measured", n: m.n };
+    const f = this.fillSecondsFor(size);
+    return f ? { seconds: f.seconds, source: "fill" } : null;
   };
 
   /**
@@ -765,13 +780,14 @@
    * first level at or above it is dipped.  The last step to the brim takes
    * only the cans the gap needs (the planned overflow pour, §3.7).
    *
-   * o = { size, pourSeconds, settleSeconds, dipSeconds, now, pourElapsed }
-   *   now          ms, for the settle time already spent at a pending level
-   *   pourElapsed  s spent on the can that is pouring now (pour timer)
+   * o = { size, cycleSeconds, settleSeconds, dipSeconds, now, pourElapsed }
+   *   cycleSeconds  time one can costs: fill, carry and drain
+   *   now           ms, for the settle time already spent at a pending level
+   *   pourElapsed   s spent on the can that is filling now (fill timer)
    */
   Session.prototype.fillPlan = function (o) {
     const cfg = this.cfg, p = this.fit.p, size = o && o.size;
-    const pourS = o && o.pourSeconds, settle = o.settleSeconds != null ? o.settleSeconds : cfg.settleSeconds;
+    const pourS = o && o.cycleSeconds, settle = o.settleSeconds != null ? o.settleSeconds : cfg.settleSeconds;
     const dipS = o.dipSeconds != null ? o.dipSeconds : cfg.dipSeconds;
     if (!(size > 0) || !(pourS > 0)) return null;
     const gi = this.lastGood();
@@ -809,7 +825,7 @@
       if (!atHalf && V >= half) atHalf = mark(levels, cans);
       if (V >= cap - 1e-6) atBrim = mark(levels, cans);
     }
-    return { size, pourSeconds: pourS, settleSeconds: settle, dipSeconds: dipS, start, half: atHalf, brim: atBrim, capacity: cap };
+    return { size, cycleSeconds: pourS, settleSeconds: settle, dipSeconds: dipS, start, half: atHalf, brim: atBrim, capacity: cap };
   };
 
   /** Pour advisor and brim watch (§3.4, §10). */

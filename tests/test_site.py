@@ -109,30 +109,36 @@ class TestSitePage(unittest.TestCase):
             "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
             "out.etaBefore = el('now-eta').innerHTML;\n"
             "el('pt-start').click(); out.noTime = el('p-err').textContent; out.opened = el('timers').open;\n"
-            "el('tm-settle').value = '4:30'; el('tm-dip').value = '0.5'; el('tm-pour-200').value = '1:30';\n"
+            "el('tm-settle').value = '4:30'; el('tm-dip').value = '0.5'; el('tm-fill-200').value = '1:30';\n"
+            "el('tm-lead').value = '15';\n"
             "el('tm-save').click();\n"
             "out.msg = el('tm-msg').textContent; out.err = el('tm-err').textContent;\n"
             "out.cfg = JSON.parse(store.get('calib-site:active')).config;\n"
+            "out.cfgKeys = Object.keys(out.cfg).filter((k) => /Seconds|Lead/.test(k)).sort();\n"
             "out.eta = el('now-eta').innerHTML;\n"
             "el('pt-start').click();\n"
             "const tm = JSON.parse(store.get('calib-site:timer'));\n"
-            "out.timer = {dur: tm.pour.dur, size: tm.pour.size, alarmed: tm.pour.alarmed};\n"
+            "out.timer = {dur: tm.pour.dur, size: tm.pour.size, lead: tm.pour.lead, pre: tm.pour.preAlarmed, full: tm.pour.fullAlarmed};\n"
             "out.running = {cls: el('pt').className, start: el('pt-start')._classes.has('hidden'),"
             " stop: el('pt-stop')._classes.has('hidden'), clock: el('pt-clock').textContent};\n"
             "el('pt-more').click(); out.more = JSON.parse(store.get('calib-site:timer')).pour.dur;\n"
-            "// The animation is drawn in JS: the can tips, the stream runs, the can empties.\n"
+            "// The drawing: the hose fills the can, the stream runs while the pump is on.\n"
             "const tm2 = JSON.parse(store.get('calib-site:timer')); tm2.pour.start = Date.now() - 30000;"
             " store.set('calib-site:timer', JSON.stringify(tm2));\n"
             "p = stub.boot(page, corePath, store); el = p.el;\n"
-            "out.anim = {tilt: el('pt-can-g').transform, stream: el('pt-stream').opacity,"
-            " can: +el('pt-can').height, clock: el('pt-clock').textContent};\n"
-            "const tm3 = JSON.parse(store.get('calib-site:timer')); tm3.pour.start = Date.now() - 750;"
-            " store.set('calib-site:timer', JSON.stringify(tm3));\n"
+            "out.anim = {stream: el('pt-stream').opacity, can: +el('pt-can').height,"
+            " y: +el('pt-can').y, clock: el('pt-clock').textContent, cls: el('pt').className};\n"
+            "// 15 s before the end the pre-alarm rings: close the valve.\n"
+            "const tm4 = JSON.parse(store.get('calib-site:timer')); tm4.pour.start = Date.now() - 96000;"
+            " store.set('calib-site:timer', JSON.stringify(tm4));\n"
             "p = stub.boot(page, corePath, store); el = p.el;\n"
-            "out.anim2 = {tilt: el('pt-can-g').transform, can: +el('pt-can').height};\n"            "// The animation is a setting: off hides the drawing, the timer still runs.\n"
+            "out.pre = {cls: el('pt').className, status: el('pt-status').textContent,"
+            " alarm: el('alarm-text').textContent, shown: !el('alarm')._classes.has('hidden'),"
+            " stream: el('pt-stream').opacity, flagged: JSON.parse(store.get('calib-site:timer')).pour.preAlarmed};\n"
+            "// The animation is a setting: off hides the drawing, the timer still runs.\n"
             "el('tm-anim').checked = false; el('tm-save').click();\n"
-            "out.animOff = {hidden: el('pt-anim')._classes.has('hidden'), tilt: el('pt-can-g').transform,"
-            " clock: el('pt-clock').textContent, cls: el('pt').className};\n"
+            "out.animOff = {hidden: el('pt-anim')._classes.has('hidden'), stream: el('pt-stream').opacity,"
+            " can: el('pt-can').height, clock: el('pt-clock').textContent, cls: el('pt').className};\n"
             "el('tm-anim').checked = true; el('tm-save').click();\n"
             "out.animOn = el('pt-anim')._classes.has('hidden');\n"
             "// The pour ran out while the page was closed: a reload shows it and rings.\n"
@@ -141,7 +147,7 @@ class TestSitePage(unittest.TestCase):
             "out.done = {cls: el('pt').className, status: el('pt-status').textContent,"
             " alarm: !el('alarm')._classes.has('hidden'), text: el('alarm-text').textContent,"
             " pulse: el('t-plus')._classes.has('pulse')};\n"
-            "out.alarmedSaved = JSON.parse(store.get('calib-site:timer')).pour.alarmed;\n"
+            "out.alarmedSaved = JSON.parse(store.get('calib-site:timer')).pour.fullAlarmed;\n"
             "// A second reload does not ring again.\n"
             "p = stub.boot(page, corePath, store); el = p.el;\n"
             "out.again = el('alarm-text').textContent;\n"
@@ -161,38 +167,47 @@ class TestSitePage(unittest.TestCase):
             "el('tm-settle').value = 'abc'; el('tm-save').click(); out.bad = el('tm-err').textContent;\n"
             "console.log(JSON.stringify(out));"
         )
-        self.assertIn("Set the pour time for 200 L", got["etaBefore"])
-        self.assertIn("Set the pour time for 200 L", got["noTime"])
-        self.assertTrue(got["opened"], "a missing pour time opens the timer settings")
+        self.assertIn("Set the fill time for 200 L", got["etaBefore"])
+        self.assertIn("Set the fill time for 200 L", got["noTime"])
+        self.assertTrue(got["opened"], "a missing fill time opens the timer settings")
         self.assertEqual(got["err"], "")
         self.assertIn("below the 5-minute minimum", got["msg"])
         self.assertEqual(got["cfg"]["settleSeconds"], 270)
         self.assertEqual(got["cfg"]["dipSeconds"], 30, "a plain number is minutes")
-        self.assertEqual(got["cfg"]["pourSeconds"], {"200": 90})
+        self.assertEqual(got["cfg"]["fillSeconds"], {"200": 90})
+        self.assertEqual(got["cfg"]["alarmLead"], 15)
+        self.assertNotIn("pourSeconds", got["cfg"], "the old key is gone")
+        self.assertEqual(got["cfgKeys"], ["alarmLead", "dipSeconds", "fillSeconds", "settleSeconds"])
         self.assertIn("To half", got["eta"])
         self.assertIn("To brim", got["eta"])
         self.assertIn("× 200 L", got["eta"])
-        self.assertEqual(got["timer"], {"dur": 90, "size": 200, "alarmed": False})
+        self.assertEqual(got["timer"], {"dur": 90, "size": 200, "lead": 15, "pre": False, "full": False})
         self.assertEqual(got["running"]["cls"], "timer run")
         self.assertTrue(got["running"]["start"], "the start button hides while the timer runs")
         self.assertFalse(got["running"]["stop"])
         self.assertIn(got["running"]["clock"], ("1:30", "1:29"))
         self.assertEqual(got["more"], 110, "the step is 20 s: 90 + 20")
-        self.assertRegex(got["anim"]["tilt"], r"^rotate\(5[0-5]\.?\d* 42 10\)$", "the can tips")
-        self.assertEqual(got["anim"]["stream"], "1", "the stream shows")
-        self.assertAlmostEqual(got["anim"]["can"], 26 * (1 - 30 / 110), delta=0.2)
+        self.assertEqual(got["anim"]["stream"], "1", "the stream shows while the pump is on")
+        self.assertAlmostEqual(got["anim"]["can"], 44 * (30 / 110), delta=0.3)
+        self.assertAlmostEqual(got["anim"]["y"], 74 - 44 * (30 / 110), delta=0.3)
         self.assertIn(got["anim"]["clock"], ("1:20", "1:19"))
-        self.assertRegex(got["anim2"]["tilt"], r"^rotate\((2[0-9]|3[0-5])\.?\d* 42 10\)$", "the tip takes 1.5 s")
-        self.assertGreater(got["anim2"]["can"], 20)
+        self.assertEqual(got["anim"]["cls"], "timer run")
+        self.assertEqual(got["pre"]["cls"], "timer pre", "the last 15 s is the pre-alarm")
+        self.assertIn("to full: close the valve now", got["pre"]["status"])
+        self.assertIn("Close the valve", got["pre"]["alarm"])
+        self.assertTrue(got["pre"]["shown"])
+        self.assertEqual(got["pre"]["stream"], "1", "the pump is still on at the pre-alarm")
+        self.assertTrue(got["pre"]["flagged"], "one pre-alarm per pour")
         self.assertTrue(got["animOff"]["hidden"], "the animation setting hides the drawing")
-        self.assertEqual(got["animOff"]["tilt"], "", "no frame is drawn with the animation off")
-        self.assertIn(got["animOff"]["clock"], ("1:50", "1:49"), "the clock keeps running")
-        self.assertEqual(got["animOff"]["cls"], "timer run")
+        self.assertEqual(got["animOff"]["stream"], "0", "no frame is drawn with the animation off")
+        self.assertEqual(got["animOff"]["can"], "0")
+        self.assertRegex(got["animOff"]["clock"], r"^0:1[0-5]$", "the clock keeps running")
+        self.assertEqual(got["animOff"]["cls"], "timer pre")
         self.assertFalse(got["animOn"], "the drawing comes back")
         self.assertEqual(got["done"]["cls"], "timer done")
-        self.assertIn("Pour-in finished", got["done"]["status"])
+        self.assertIn("Can full", got["done"]["status"])
         self.assertTrue(got["done"]["alarm"])
-        self.assertIn("Pour-in finished: 200 L can", got["done"]["text"])
+        self.assertIn("Can full: pump off (200 L)", got["done"]["text"])
         self.assertTrue(got["done"]["pulse"], "the count button asks for the tap")
         self.assertTrue(got["alarmedSaved"])
         self.assertEqual(got["again"], "", "one alarm per timer: a second reload does not ring")
@@ -516,31 +531,35 @@ class TestSiteCore(unittest.TestCase):
         got = _node(
             "const s = new core.Session({D: 1800, Lest: 3000, pourUnit: 200});\n"
             "const out = {};\n"
-            "out.defaults = JSON.parse(JSON.stringify([s.cfg.settleSeconds, s.cfg.dipSeconds, s.cfg.pourSeconds]));\n"
+            "out.defaults = JSON.parse(JSON.stringify([s.cfg.settleSeconds, s.cfg.dipSeconds, s.cfg.fillSeconds, s.cfg.alarmLead]));\n"
             "s.start('400', 400); s.dip(400);\n"
-            "out.none = s.pourSecondsFor(200);\n"
+            "out.none = s.fillSecondsFor(200);\n"
             "// Taps 100 s, 120 s, 110 s apart; one 100 L can between them breaks a pair.\n"
             "s.tap(0, 200); s.tap(100000, 200); s.tap(220000, 200); s.tap(330000, 200); s.tap(400000, 100);\n"
-            "out.measured = s.pourSecondsFor(200); out.other = s.pourSecondsFor(100);\n"
-            "s.setTimers({settleSeconds: 420, dipSeconds: 45, pourSeconds: {200: 95, '100.0': 50}});\n"
-            "out.set = [s.pourSecondsFor(200), s.pourSecondsFor(100), s.cfg.settleSeconds, s.cfg.dipSeconds];\n"
+            "out.measured = s.cycleSecondsFor(200); out.other = s.cycleSecondsFor(100);\n"
+            "out.noFill = s.fillSecondsFor(200);\n"
+            "s.setTimers({settleSeconds: 420, dipSeconds: 45, alarmLead: 12, fillSeconds: {200: 95, '100.0': 50}});\n"
+            "out.set = [s.fillSecondsFor(200), s.fillSecondsFor(100), s.cfg.settleSeconds, s.cfg.dipSeconds, s.cfg.alarmLead];\n"
+            "out.cycle = s.cycleSecondsFor(200);\n"
             "const back = core.Session.fromJSON(JSON.parse(JSON.stringify(s.toJSON())));\n"
-            "out.saved = [back.cfg.settleSeconds, back.cfg.pourSeconds];\n"
-            "s.setTimers({pourSeconds: {200: null}}); out.cleared = s.pourSecondsFor(200);\n"
-            "for (const bad of [{settleSeconds: -1}, {pourSeconds: {200: 0}}]) {\n"
+            "out.saved = [back.cfg.settleSeconds, back.cfg.fillSeconds, back.cfg.alarmLead];\n"
+            "s.setTimers({fillSeconds: {200: null}}); out.cleared = s.fillSecondsFor(200);\n"
+            "for (const bad of [{settleSeconds: -1}, {fillSeconds: {200: 0}}, {alarmLead: 121}, {alarmLead: -1}]) {\n"
             "  try { s.setTimers(bad); out.bad = (out.bad || 0) + 1000; } catch (e) { out.bad = (out.bad || 0) + 1; } }\n"
             "console.log(JSON.stringify(out));"
         )
-        self.assertEqual(got["defaults"], [300, 60, {}])
-        self.assertIsNone(got["none"])
+        self.assertEqual(got["defaults"], [300, 60, {}, 15])
+        self.assertIsNone(got["none"], "the timer needs a set fill time")
         self.assertEqual(got["measured"], {"seconds": 110, "source": "measured", "n": 3})
         self.assertIsNone(got["other"], "one 100 L can has no gap of its own size")
+        self.assertIsNone(got["noFill"], "a tap gap never gives the fill time")
         self.assertEqual(got["set"][0], {"seconds": 95, "source": "set"})
         self.assertEqual(got["set"][1], {"seconds": 50, "source": "set"}, "100.0 and 100 are one size")
-        self.assertEqual(got["set"][2:], [420, 45])
-        self.assertEqual(got["saved"], [420, {"200": 95, "100": 50}])
-        self.assertEqual(got["cleared"]["source"], "measured", "a cleared setting falls back to the taps")
-        self.assertEqual(got["bad"], 2)
+        self.assertEqual(got["set"][2:], [420, 45, 12])
+        self.assertEqual(got["cycle"]["source"], "measured", "the estimate prefers the measured cycle")
+        self.assertEqual(got["saved"], [420, {"200": 95, "100": 50}, 12])
+        self.assertEqual(got["cleared"], None, "a cleared fill time leaves the timer without one")
+        self.assertEqual(got["bad"], 4)
 
     def test_fill_plan(self):
         got = _node(
@@ -551,9 +570,9 @@ class TestSiteCore(unittest.TestCase):
             "for (let i = 0; i < 4; i++) { s.pour('400'); V += 400; let v = s.dip(core.levelFor(V, p));"
             " if (v.status === 'REDIP') s.dip(core.levelFor(V, p)); }\n"
             "const cap = core.capacity(s.fit.p), V0 = core.volume(s.levels[s.lastGood()].H, s.fit.p);\n"
-            "const o = {size: 200, pourSeconds: 90, settleSeconds: 300, dipSeconds: 60};\n"
+            "const o = {size: 200, cycleSeconds: 90, settleSeconds: 300, dipSeconds: 60};\n"
             "const out = {cap, V0, a: s.fillPlan(o)};\n"
-            "out.big = s.fillPlan(Object.assign({}, o, {size: 400, pourSeconds: 150}));\n"
+            "out.big = s.fillPlan(Object.assign({}, o, {size: 400, cycleSeconds: 150}));\n"
             "out.elapsed = s.fillPlan(Object.assign({}, o, {pourElapsed: 30}));\n"
             "out.noTime = s.fillPlan({size: 200});\n"
             "s.tap(1, 200); s.tap(2, 200); out.open = s.fillPlan(o);\n"
@@ -562,7 +581,7 @@ class TestSiteCore(unittest.TestCase):
             "console.log(JSON.stringify(out));"
         )
         a, cap, v0 = got["a"], got["cap"], got["V0"]
-        self.assertIsNone(got["noTime"], "no pour time, no estimate")
+        self.assertIsNone(got["noTime"], "no cycle time, no estimate")
         for m in (a["half"], a["brim"]):
             # Every level: its cans, one settle and one dip.
             self.assertAlmostEqual(m["seconds"], 90 * m["cans"] + 360 * m["levels"], places=6)

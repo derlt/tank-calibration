@@ -87,6 +87,8 @@
   .sizes button[aria-pressed=true] { background: var(--brand); color: #fff; }
   .timer { border: 1px solid var(--line); border-radius: 10px; padding: 0.6rem; margin: 0.7rem 0 0.2rem; display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 0.8rem; align-items: center; }
   .timer.run { border-color: var(--info); background: var(--info-bg); }
+  .timer.pre { border-color: var(--warn); background: var(--warn-bg); }
+  .timer.pre .clock { color: var(--warn); }
   .timer.done { border-color: var(--ok); background: var(--ok-bg); }
   .timer .clock { font: 650 2.3rem/1.05 var(--mono); }
   .timer.done .clock { color: var(--ok); }
@@ -98,6 +100,8 @@
   .pour-anim .liq { fill: var(--info); }
   .pour-anim .can { fill: #dfe6ec; stroke: var(--brand); stroke-width: 1.5; }
   .pour-anim .stream { fill: none; stroke: var(--info); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 5 4; }
+  .pour-anim .hose { fill: none; stroke: var(--brand); stroke-width: 3; }
+  .pour-anim .nozzle { fill: #dfe6ec; stroke: var(--brand); stroke-width: 1.5; }
   button.pulse { animation: pulse 1s ease-in-out infinite; }
   @keyframes pulse { 50% { box-shadow: 0 0 0 7px rgba(29, 122, 62, 0.35); } }
   .alarm { position: fixed; left: 0.6rem; right: 0.6rem; bottom: calc(0.6rem + env(safe-area-inset-bottom)); z-index: 20; background: var(--bad); color: #fff; border-radius: 12px; padding: 0.8rem 1rem; display: flex; gap: 0.6rem; align-items: center; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25); max-width: 740px; margin: 0 auto; }
@@ -183,12 +187,19 @@
         <p class="muted" id="t-target" style="margin:0"></p>
         <div class="timer" id="pt">
           <svg class="pour-anim" id="pt-anim" viewBox="0 0 120 90" aria-hidden="true">
-            <defs><clipPath id="pt-clip"><rect x="36" y="48" width="76" height="38" rx="14"/></clipPath></defs>
-            <rect class="tank-bg" x="36" y="48" width="76" height="38" rx="14"/>
-            <rect class="liq" id="pt-tank" clip-path="url(#pt-clip)" x="36" y="86" width="76" height="0"/>
-            <rect class="tank" x="36" y="48" width="76" height="38" rx="14"/>
-            <path class="stream" id="pt-stream" d="M43 12 C 52 14, 56 30, 58 50" opacity="0"/>
-            <g class="can-g" id="pt-can-g"><rect class="can" x="18" y="10" width="24" height="32" rx="3"/><rect class="liq" id="pt-can" x="20" y="14" width="20" height="26"/></g>
+            <defs>
+              <clipPath id="pt-clip"><rect x="10" y="30" width="30" height="44" rx="3"/></clipPath>
+              <clipPath id="pt-tank-clip"><rect x="52" y="40" width="60" height="42" rx="14"/></clipPath>
+            </defs>
+            <path class="hose" d="M0 8 H18"/>
+            <rect class="nozzle" x="18" y="4" width="10" height="8" rx="2"/>
+            <path class="stream" id="pt-stream" d="M23 12 V30" opacity="0"/>
+            <rect class="tank-bg" x="10" y="30" width="30" height="44" rx="3"/>
+            <rect class="liq" id="pt-can" clip-path="url(#pt-clip)" x="10" y="74" width="30" height="0"/>
+            <rect class="tank" x="10" y="30" width="30" height="44" rx="3"/>
+            <rect class="tank-bg" x="52" y="40" width="60" height="42" rx="14"/>
+            <rect class="liq" id="pt-tank" clip-path="url(#pt-tank-clip)" x="52" y="82" width="60" height="0"/>
+            <rect class="tank" x="52" y="40" width="60" height="42" rx="14"/>
           </svg>
           <div>
             <div class="clock" id="pt-clock">—:—</div>
@@ -196,7 +207,7 @@
             <div class="tally-bar"><i id="pt-bar"></i></div>
           </div>
           <div class="acts">
-            <button class="secondary" id="pt-start">▶ Start pour timer</button>
+            <button class="secondary" id="pt-start">▶ Start fill timer</button>
             <button class="secondary small hidden" id="pt-less">−20 s</button>
             <button class="secondary small hidden" id="pt-more">+20 s</button>
             <button class="danger small hidden" id="pt-stop">Stop timer</button>
@@ -208,7 +219,7 @@
           <button class="secondary small" id="t-undo">Undo last can</button>
           <label class="check"><input type="checkbox" id="t-part"> last can not fully poured</label>
         </div>
-        <p class="muted">Start the timer when you start to pour a can. Tap <b>+1 can poured</b> when the can is empty. Each can keeps the size shown above, so one batch can mix sizes. The count is saved after each tap. One dip follows the batch.</p>
+        <p class="muted">Start the fill timer when you start the pump. The alarm rings before the can is full: close the valve. Tap <b>+1 can poured</b> when the can is full. Emptying the can into the tank has no timer. Each can keeps the size shown above, so one batch can mix sizes. The count is saved after each tap. One dip follows the batch.</p>
       </div>
       <details id="p-manual">
         <summary>Enter litres instead (meter, odd can, unknown pour)</summary>
@@ -256,9 +267,10 @@
       <div class="grid" style="margin-top:0.6rem">
         <label>Settle (idle) after a batch, m:ss<input id="tm-settle" placeholder="5:00"></label>
         <label>One dip and its entry, m:ss<input id="tm-dip" placeholder="1:00"></label>
+        <label>Alarm lead before full, s<input id="tm-lead" type="number" inputmode="numeric" placeholder="15"></label>
       </div>
-      <h2 style="margin-top:0.9rem">Pour time per can, m:ss</h2>
-      <p class="muted" style="margin-top:0">The time to pour one can and let it drain out into the tank. Blank = the time measured from your taps, when the page has one.</p>
+      <h2 style="margin-top:0.9rem">Fill (pump) time per can, m:ss</h2>
+      <p class="muted" style="margin-top:0">The time the pump needs to fill one can. The alarm rings this time minus the lead, so the valve is closed when the can is full. The timer needs this number: a tap gap cannot give it, because the gap also holds the carry and the drain.</p>
       <div class="grid" id="tm-sizes"></div>
       <div class="row" style="margin-top:0.6rem">
         <label class="check"><input type="checkbox" id="tm-anim"> pour animation</label>
@@ -558,7 +570,8 @@
     tapGap: 20,                 // s: a faster second tap is asked "same can?"
     settleSeconds: 300,         // s: idle time after a batch before the dip (§3.5)
     dipSeconds: 60,             // s: one dip and its entry, for the time estimate
-    pourSeconds: null,          // { "200": 90, … }: pour one can and let it drain, s
+    fillSeconds: null,          // { "200": 90, … }: fill one can by the pump, s
+    alarmLead: 15,              // s before the can is full: close the valve
     learnN: 3,                  // intervals before a confirmed miss is an anomaly
     scalePrior: 4,              // pseudo-count for the noise scale estimate
   };
@@ -569,7 +582,10 @@
     if (!(cfg.Lest > 0)) throw new Error("length estimate L is required");
     if (!(cfg.Lpm > 0)) cfg.Lpm = 0.03 * cfg.Lest;
     if (!(cfg.repeatTol > 0)) cfg.repeatTol = Math.max(1.0, 2.5 * Math.SQRT2 * cfg.sigmaRead);
-    cfg.pourSeconds = Object.assign({}, cfg.pourSeconds || {});
+    // Older sessions kept the fill time under "pourSeconds".
+    if (cfg.pourSeconds && !cfg.fillSeconds) cfg.fillSeconds = cfg.pourSeconds;
+    delete cfg.pourSeconds;
+    cfg.fillSeconds = Object.assign({}, cfg.fillSeconds || {});
     cfg.prior = {
       r: cfg.D / 2, sr: cfg.Dpm / 4,
       L: cfg.Lest, sL: cfg.Lpm / 2,
@@ -1066,7 +1082,7 @@
   // ---- timers and the fill estimate.  Durations are operator settings, not
   // data: they never enter the fit or the raw file.
 
-  /** Set the timer durations.  pourSeconds merges per can size; null clears one size. */
+  /** Set the timer durations.  fillSeconds merges per can size; null clears one size. */
   Session.prototype.setTimers = function (o) {
     const cfg = this.cfg;
     if (o.settleSeconds != null) {
@@ -1077,19 +1093,24 @@
       if (!(o.dipSeconds >= 0)) throw new Error("the dip time must be 0 s or more");
       cfg.dipSeconds = o.dipSeconds;
     }
-    for (const k of Object.keys(o.pourSeconds || {})) {
-      const v = o.pourSeconds[k];
-      if (v == null || v === "") { delete cfg.pourSeconds[sizeKey(k)]; continue; }
-      if (!(v > 0)) throw new Error("a pour time must be more than 0 s");
-      cfg.pourSeconds[sizeKey(k)] = v;
+    if (o.alarmLead != null) {
+      if (!(o.alarmLead >= 0 && o.alarmLead <= 120)) throw new Error("the alarm lead must be 0 to 120 s");
+      cfg.alarmLead = o.alarmLead;
+    }
+    for (const k of Object.keys(o.fillSeconds || {})) {
+      const v = o.fillSeconds[k];
+      if (v == null || v === "") { delete cfg.fillSeconds[sizeKey(k)]; continue; }
+      if (!(v > 0)) throw new Error("a fill time must be more than 0 s");
+      cfg.fillSeconds[sizeKey(k)] = v;
     }
     return cfg;
   };
 
   /**
-   * Time per can measured from the taps: the median gap between two taps of
-   * the same size in one batch.  The gap holds the pour, the drain and the
-   * change of can, which is what the estimate needs.
+   * Cycle time per can, measured from the taps: the median gap between two
+   * taps of the same size in one batch.  The gap holds the fill by the pump,
+   * the carry and the drain, which is what the estimate needs.  It cannot
+   * give the fill time alone, so it never feeds the timer.
    */
   Session.prototype.measuredPourSeconds = function (size) {
     const gaps = [];
@@ -1108,12 +1129,18 @@
     return { seconds: k % 2 ? gaps[(k - 1) / 2] : 0.5 * (gaps[k / 2 - 1] + gaps[k / 2]), n: k };
   };
 
-  /** Pour time of one can: the setting, else the measured median, else null. */
-  Session.prototype.pourSecondsFor = function (size) {
-    const set = this.cfg.pourSeconds[sizeKey(size)];
-    if (set > 0) return { seconds: set, source: "set" };
+  /** Fill time of one can by the pump: the setting only.  The timer needs it. */
+  Session.prototype.fillSecondsFor = function (size) {
+    const set = this.cfg.fillSeconds[sizeKey(size)];
+    return set > 0 ? { seconds: set, source: "set" } : null;
+  };
+
+  /** Time one can costs the campaign: the measured cycle, else the fill time. */
+  Session.prototype.cycleSecondsFor = function (size) {
     const m = this.measuredPourSeconds(size);
-    return m ? { seconds: m.seconds, source: "measured", n: m.n } : null;
+    if (m) return { seconds: m.seconds, source: "measured", n: m.n };
+    const f = this.fillSecondsFor(size);
+    return f ? { seconds: f.seconds, source: "fill" } : null;
   };
 
   /**
@@ -1124,13 +1151,14 @@
    * first level at or above it is dipped.  The last step to the brim takes
    * only the cans the gap needs (the planned overflow pour, §3.7).
    *
-   * o = { size, pourSeconds, settleSeconds, dipSeconds, now, pourElapsed }
-   *   now          ms, for the settle time already spent at a pending level
-   *   pourElapsed  s spent on the can that is pouring now (pour timer)
+   * o = { size, cycleSeconds, settleSeconds, dipSeconds, now, pourElapsed }
+   *   cycleSeconds  time one can costs: fill, carry and drain
+   *   now           ms, for the settle time already spent at a pending level
+   *   pourElapsed   s spent on the can that is filling now (fill timer)
    */
   Session.prototype.fillPlan = function (o) {
     const cfg = this.cfg, p = this.fit.p, size = o && o.size;
-    const pourS = o && o.pourSeconds, settle = o.settleSeconds != null ? o.settleSeconds : cfg.settleSeconds;
+    const pourS = o && o.cycleSeconds, settle = o.settleSeconds != null ? o.settleSeconds : cfg.settleSeconds;
     const dipS = o.dipSeconds != null ? o.dipSeconds : cfg.dipSeconds;
     if (!(size > 0) || !(pourS > 0)) return null;
     const gi = this.lastGood();
@@ -1168,7 +1196,7 @@
       if (!atHalf && V >= half) atHalf = mark(levels, cans);
       if (V >= cap - 1e-6) atBrim = mark(levels, cans);
     }
-    return { size, pourSeconds: pourS, settleSeconds: settle, dipSeconds: dipS, start, half: atHalf, brim: atBrim, capacity: cap };
+    return { size, cycleSeconds: pourS, settleSeconds: settle, dipSeconds: dipS, start, half: atHalf, brim: atBrim, capacity: cap };
   };
 
   /** Pour advisor and brim watch (§3.4, §10). */
@@ -1740,11 +1768,12 @@
     const days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 864e5);
     return days === 0 ? s : days === 1 ? `tomorrow ${s}` : `${s} (+${days} days)`;
   }
-  function pourTimeFor(u) { return S && u > 0 ? S.pourSecondsFor(u) : null; }
-  function sizeId(u) { return "tm-pour-" + String(u).replace(/[^0-9]/g, "_"); }
+  function fillTimeFor(u) { return S && u > 0 ? S.fillSecondsFor(u) : null; }
+  function cycleFor(u) { return S && u > 0 ? S.cycleSecondsFor(u) : null; }
+  function sizeId(u) { return "tm-fill-" + String(u).replace(/[^0-9]/g, "_"); }
 
   // ---- sound, vibration, screen
-  let actx = null, alarmOn = false, alarmUntil = 0, lastRing = 0, wake = null;
+  let actx = null, alarmOn = false, alarmUntil = 0, lastRing = 0, alarmBeeps = 3, wake = null;
   const TITLE = document.title;
   function unlockAudio() {
     // Browsers start sound only from a tap: make the audio ready on each tap.
@@ -1755,7 +1784,7 @@
   function ring() {
     if (!P.sound || !actx) return;
     const t0 = actx.currentTime;
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < alarmBeeps; i++) {
       const o = actx.createOscillator(), g = actx.createGain(), a = t0 + i * 0.3;
       o.type = "square"; o.frequency.value = i === 2 ? 1320 : 880;
       g.gain.setValueAtTime(0.0001, a);
@@ -1765,8 +1794,9 @@
       o.start(a); o.stop(a + 0.27);
     }
   }
-  function alarm(text) {
-    alarmOn = true; alarmUntil = Date.now() + 60000; lastRing = 0;
+  function alarm(text, seconds, beeps) {
+    alarmOn = true; alarmUntil = Date.now() + 1000 * (seconds || 60); lastRing = 0;
+    alarmBeeps = beeps || 3;
     $("alarm-text").textContent = text;
     $("alarm").classList.remove("hidden");
     document.title = "⏰ " + text;
@@ -1823,62 +1853,78 @@
     $("tm-wake-state").textContent = msg;
   }
 
-  // ---- pour timer
+  // ---- fill timer: the pump fills one can.  The alarm rings `lead` seconds
+  // before the can is full, so the valve is closed when it is full.  Emptying
+  // the can into the tank has no timer.
   $("pt-start").addEventListener("click", guard("p-err", () => {
     const u = activeUnit();
     if (!(u > 0)) throw new Error("Enter the can size in litres.");
-    const d = pourTimeFor(u);
-    if (!d) { $("timers").open = true; throw new Error(`Set the pour time for ${f(u, 0)} L cans under Timers and alarm.`); }
+    const d = fillTimeFor(u);
+    if (!d) { $("timers").open = true; throw new Error(`Set the fill time for ${f(u, 0)} L cans under Timers and alarm.`); }
     stopAlarm(); unlockAudio();
-    T.pour = { start: Date.now(), dur: d.seconds, size: u, alarmed: false };
+    T.pour = { start: Date.now(), dur: d.seconds, size: u, lead: S.cfg.alarmLead, preAlarmed: false, fullAlarmed: false };
     saveTimer(); keepAwake();
   }));
   $("pt-stop").addEventListener("click", () => { delete T.pour; saveTimer(); stopAlarm(); render(); });
   $("pt-more").addEventListener("click", () => {
     if (!T.pour) return;
     T.pour.dur += 20;
-    if (T.pour.dur - (Date.now() - T.pour.start) / 1000 > 0) { T.pour.alarmed = false; stopAlarm(); }
-    saveTimer(); render();
+    T.pour.preAlarmed = false; T.pour.fullAlarmed = false;
+    stopAlarm(); saveTimer(); render();
   });
   $("pt-less").addEventListener("click", () => {
     if (!T.pour) return;
     T.pour.dur = Math.max(5, T.pour.dur - 20);
+    T.pour.preAlarmed = false; T.pour.fullAlarmed = false;
     saveTimer(); render();
   });
 
   function tickPour(now) {
     if (!S) return;
-    const pt = T.pour, u = activeUnit(), d = pourTimeFor(u), box = $("pt");
+    const pt = T.pour, u = activeUnit(), d = fillTimeFor(u), box = $("pt");
     const run = !!pt;
     for (const id of ["pt-less", "pt-more", "pt-stop"]) $(id).classList.toggle("hidden", !run);
     $("pt-start").classList.toggle("hidden", run);
     const gi = S.lastGood(), p = S.fit.p;
     const tankFrac = gi >= 0 ? Math.min(1, (C.volume(S.levels[gi].H, p) + S.batchVolume()) / C.capacity(p)) : 0;
-    $("pt-tank").setAttribute("y", String(86 - 38 * tankFrac));
-    $("pt-tank").setAttribute("height", String(38 * tankFrac));
+    $("pt-tank").setAttribute("y", String(82 - 42 * tankFrac));
+    $("pt-tank").setAttribute("height", String(42 * tankFrac));
     let frac = 0;
     if (!pt) {
       box.className = "timer";
       $("pt-clock").textContent = d ? fmtClock(d.seconds) : "—:—";
       $("pt-status").textContent = !(u > 0) ? "Enter the can size to use the timer."
-        : d ? `Pour time of one ${f(u, 0)} L can` + (d.source === "measured" ? ` (measured from ${d.n} tap gap${d.n > 1 ? "s" : ""}).` : ".")
-          : `Set the pour time for ${f(u, 0)} L cans under Timers and alarm.`;
-      $("pt-start").textContent = d ? `▶ Start pour timer (${fmtClock(d.seconds)})` : "▶ Start pour timer";
+        : d ? `Fill time of one ${f(u, 0)} L can. The alarm rings ${fmtClock(S.cfg.alarmLead)} before it is full.`
+          : `Set the fill time for ${f(u, 0)} L cans under Timers and alarm.`;
+      $("pt-start").textContent = d ? `▶ Start fill timer (${fmtClock(d.seconds)})` : "▶ Start fill timer";
       $("t-plus").classList.remove("pulse");
     } else {
       const left = pt.dur - (now - pt.start) / 1000;
+      const lead = Math.min(pt.lead, pt.dur - 1);
       frac = Math.min(1, Math.max(0, 1 - left / pt.dur));
-      if (left > 0) {
+      if (left > lead) {
         box.className = "timer run";
         $("pt-clock").textContent = fmtClock(Math.ceil(left));
-        $("pt-status").textContent = `Pouring a ${f(pt.size, 0)} L can: ${fmtClock(Math.ceil(left))} left of ${fmtClock(pt.dur)}.`;
+        $("pt-status").textContent = `Filling a ${f(pt.size, 0)} L can: ${fmtClock(Math.ceil(left))} left of ${fmtClock(pt.dur)}. The alarm rings at ${fmtClock(lead)} left.`;
         $("t-plus").classList.remove("pulse");
+      } else if (left > 0) {
+        box.className = "timer pre";
+        $("pt-clock").textContent = fmtClock(Math.ceil(left));
+        $("pt-status").textContent = `${fmtClock(Math.ceil(left))} to full: close the valve now.`;
+        $("t-plus").classList.remove("pulse");
+        if (!pt.preAlarmed) {
+          pt.preAlarmed = true; saveTimer();
+          alarm(`Close the valve: ${fmtClock(Math.ceil(left))} to full`, 30, 2);
+        }
       } else {
         box.className = "timer done";
         $("pt-clock").textContent = "0:00";
-        $("pt-status").textContent = `Pour-in finished (${f(pt.size, 0)} L, ${fmtClock(pt.dur)}). When the can is empty, tap +1 can poured.`;
+        $("pt-status").textContent = `Can full (${f(pt.size, 0)} L): the pump must be off. Tap +1 can poured.`;
         $("t-plus").classList.add("pulse");
-        if (!pt.alarmed) { pt.alarmed = true; saveTimer(); alarm(`Pour-in finished: ${f(pt.size, 0)} L can`); }
+        if (!pt.fullAlarmed) {
+          pt.fullAlarmed = true; saveTimer();
+          alarm(`Can full: pump off (${f(pt.size, 0)} L)`, 180, 3);
+        }
       }
     }
     $("pt-bar").style.width = `${100 * frac}%`;
@@ -1890,10 +1936,10 @@
     if (pt && frac < 1) startPourAnim(); else stopPourAnim();
   }
 
-  // The pour animation is drawn from JavaScript, not CSS: CSS transforms on
-  // an SVG group and CSS keyframes are not reliable on every phone browser,
-  // and a reduced-motion setting turns them off.  Here the can tips, the
-  // stream runs and the can empties, frame by frame.
+  // The drawing is made from JavaScript, not CSS: CSS transforms on an SVG
+  // group and CSS keyframes are not reliable on every phone browser, and a
+  // reduced-motion setting turns them off.  Here the hose fills the can,
+  // frame by frame, and the stream runs while the pump is on.
   const raf = window.requestAnimationFrame ? (fn) => window.requestAnimationFrame(fn) : (fn) => setTimeout(fn, 40);
   const caf = window.cancelAnimationFrame ? (id) => window.cancelAnimationFrame(id) : (id) => clearTimeout(id);
   let animId = null;
@@ -1907,25 +1953,19 @@
     drawPour(frac, now);
     if (frac < 1) animId = raf(animatePour);
   }
-  /** The still drawing: can full, upright, no stream. */
+  /** The still drawing: can empty, no stream. */
   function resetPourDraw() {
-    $("pt-can-g").setAttribute("transform", "");
     $("pt-stream").setAttribute("opacity", "0");
-    $("pt-can").setAttribute("height", "26");
-    $("pt-can").setAttribute("y", "14");
+    $("pt-can").setAttribute("height", "0");
+    $("pt-can").setAttribute("y", "74");
   }
-  /** frac 0 = can full, 1 = can empty.  The can tips in 1.5 s, upright at the end. */
+  /** frac 0 = can empty, 1 = can full.  The stream runs while the pump is on. */
   function drawPour(frac, now) {
-    const pt = T.pour;
-    const spent = pt ? (now - pt.start) / 1000 : 0;
-    const left = pt ? pt.dur - spent : 0;
-    const flowing = !!pt && spent > 0 && left > 0;
-    const tilt = flowing ? 55 * Math.min(1, spent / 1.5) * Math.min(1, left / 1) : 0;
-    $("pt-can-g").setAttribute("transform", tilt ? `rotate(${tilt.toFixed(1)} 42 10)` : "");
+    const flowing = frac > 0 && frac < 1;
     $("pt-stream").setAttribute("opacity", flowing ? "1" : "0");
     if (flowing) $("pt-stream").setAttribute("stroke-dashoffset", String(-((now / 45) % 9)));
-    $("pt-can").setAttribute("height", String(26 * (1 - frac)));
-    $("pt-can").setAttribute("y", String(14 + 26 * frac));
+    $("pt-can").setAttribute("height", String(44 * frac));
+    $("pt-can").setAttribute("y", String(74 - 44 * frac));
   }
 
   // ---- settle timer (dip card)
@@ -1960,17 +2000,17 @@
     const box = $("now-eta");
     if (!S || S.lastGood() < 0) { box.innerHTML = ""; return; }
     const list = S.canList(), last = list.length ? list[list.length - 1].u : null;
-    const u = activeUnit() || last, d = pourTimeFor(u);
+    const u = activeUnit() || last, d = cycleFor(u);
     if (!(u > 0)) { box.innerHTML = ""; return; }
-    if (!d) { box.innerHTML = `<div class="muted">Set the pour time for ${f(u, 0)} L cans (Timers and alarm, below) to see the time to half and to the brim.</div>`; return; }
+    if (!d) { box.innerHTML = `<div class="muted">Set the fill time for ${f(u, 0)} L cans (Timers and alarm, below) to see the time to half and to the brim.</div>`; return; }
     const pe = T.pour && T.pour.size === u ? (now - T.pour.start) / 1000 : 0;
-    const plan = S.fillPlan({ size: u, pourSeconds: d.seconds, now, pourElapsed: pe });
+    const plan = S.fillPlan({ size: u, cycleSeconds: d.seconds, now, pourElapsed: pe });
     if (!plan) { box.innerHTML = ""; return; }
     const line = (name, m, V) => !m ? `<div><b>${name}</b>: —</div>`
       : m.done ? `<div><b>${name}</b> (${f(V, 0)} L): reached</div>`
         : `<div><b>${name}</b> (${f(V, 0)} L): ≈ ${fmtSpan(m.seconds)} · done ≈ <b>${hhmm(now + 1000 * m.seconds)}</b> · ${m.levels} level${m.levels > 1 ? "s" : ""} · ${m.cans} × ${f(u, 0)} L</div>`;
     box.innerHTML = line("To half", plan.half, plan.capacity / 2) + line("To brim", plan.brim, plan.capacity)
-      + `<div class="muted">${fmtClock(d.seconds)} per can${d.source === "measured" ? " (measured)" : ""}, settle ${fmtClock(plan.settleSeconds)}, dip ${fmtClock(plan.dipSeconds)} per level. From the running shell and the pour advice, without extra dips.</div>`;
+      + `<div class="muted">${fmtClock(d.seconds)} per can${d.source === "measured" ? " (measured cycle: fill, carry, drain)" : " (fill time only: a floor)"}, settle ${fmtClock(plan.settleSeconds)}, dip ${fmtClock(plan.dipSeconds)} per level. From the running shell and the pour advice, without extra dips.</div>`;
   }
 
   // ---- settings
@@ -1979,27 +2019,33 @@
     add(unit()); add(activeUnit());
     for (const c of S.canList()) add(c.u);
     for (const L of S.levels) if (L.cans) for (const u of (L.cans.units || [L.cans.unit])) add(u);
-    for (const k of Object.keys(S.cfg.pourSeconds)) add(k);
+    for (const k of Object.keys(S.cfg.fillSeconds)) add(k);
     return out.sort((a, b) => b - a);
   }
   function renderTimers() {
     const sizes = timerSizes(), cfg = S.cfg;
-    const sig = JSON.stringify([sizes, cfg.settleSeconds, cfg.dipSeconds, cfg.pourSeconds, P]);
+    const sig = JSON.stringify([sizes, cfg.settleSeconds, cfg.dipSeconds, cfg.alarmLead, cfg.fillSeconds, P]);
     if (sig === timersSig) return;
     timersSig = sig;
     $("tm-settle").value = fmtClock(cfg.settleSeconds);
     $("tm-dip").value = fmtClock(cfg.dipSeconds);
+    $("tm-lead").value = String(cfg.alarmLead);
     $("tm-sizes").innerHTML = sizes.length ? sizes.map((u) => {
-      const set = cfg.pourSeconds[String(u)], m = S.measuredPourSeconds(u);
-      return `<label>${f(u, 0)} L can<input id="${sizeId(u)}" value="${set ? fmtClock(set) : ""}" placeholder="${m ? "measured " + fmtClock(m.seconds) : "1:30"}"></label>`;
+      const set = cfg.fillSeconds[String(u)], m = S.measuredPourSeconds(u);
+      return `<label>${f(u, 0)} L can<input id="${sizeId(u)}" value="${set ? fmtClock(set) : ""}" placeholder="${m ? "cycle " + fmtClock(m.seconds) : "1:30"}"></label>`;
     }).join("") : `<p class="muted">Enter a can size on the pour card first.</p>`;
     $("tm-anim").checked = !!P.anim;
     $("tm-sound").checked = !!P.sound; $("tm-vib").checked = !!P.vibrate; $("tm-wake").checked = !!P.wake;
   }
   $("tm-save").addEventListener("click", guard("tm-err", () => {
     $("tm-msg").textContent = "";
-    const o = { settleSeconds: parseDur($("tm-settle").value), dipSeconds: parseDur($("tm-dip").value), pourSeconds: {} };
-    for (const u of timerSizes()) o.pourSeconds[String(u)] = parseDur($(sizeId(u)).value);
+    const lead = $("tm-lead").value.trim();
+    const o = {
+      settleSeconds: parseDur($("tm-settle").value), dipSeconds: parseDur($("tm-dip").value),
+      alarmLead: lead === "" ? 15 : Number(lead), fillSeconds: {},
+    };
+    if (!(o.alarmLead >= 0 && o.alarmLead <= 120)) throw new Error("The alarm lead must be 0 to 120 s.");
+    for (const u of timerSizes()) o.fillSeconds[String(u)] = parseDur($(sizeId(u)).value);
     S.setTimers(o);
     P.anim = !!$("tm-anim").checked;
     P.sound = !!$("tm-sound").checked; P.vibrate = !!$("tm-vib").checked; P.wake = !!$("tm-wake").checked;

@@ -28,13 +28,14 @@ All notable changes to this project are documented here. The format follows
 - Each can carries its own size, so one batch can mix cans (2 × 200 L then
   4 × 100 L). The default can size is optional. The count-error hint tests
   every size in the batch.
-- Timers on the page: a pour timer for each can with a small animation, a
-  countdown, ±20 s, and a sound and vibration alarm when the pour-in ends;
-  a settle timer after each batch that rings when the level is ready to dip.
-  The pour time per can size, the settle time and the dip time are settings.
-  The Now card estimates the time to half and to the brim from the running
-  shell and the pour advice (`Session.fillPlan`). With no pour time set, the
-  page uses the time measured between taps.
+- Timers on the page: a fill (pump) timer for each can with a small
+  animation, a countdown and ±20 s. The alarm rings 15 s before the can is
+  full, so the valve can be closed in time, and rings again at full; a
+  settle timer after each batch rings when the level is ready to dip. The
+  fill time per can size, the alarm lead, the settle time and the dip time
+  are settings. The Now card estimates the time to half and to the brim from
+  the running shell and the pour advice (`Session.fillPlan`); it uses the
+  cycle time measured between taps, or the fill time when there is none.
   The drawing is a setting: *pour animation* off keeps the clock, the bar and
   the alarm.
 - The page shows four charts on the **Log & charts** tab: Miss, Slope profile,
