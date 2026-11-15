@@ -559,6 +559,63 @@ class TestSitePage(unittest.TestCase):
         self.assertIn("row 1 has no mark in this chart", got["noMark"])
 
     @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_simple_mode(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "const mode = (m) => el('mode')._listeners.click[0]({ target: { closest: () => ({ dataset: { mode: m } }) } });\n"
+            "const grab = () => ({ kv: el('now-kv').innerHTML, advice: el('now-advice').textContent,"
+            " target: el('t-target').textContent, verdict: el('verdict').innerHTML,"
+            " expect: el('dip-expect-a').textContent, drift: el('now-drift').textContent });\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "out.verbose = grab();\n"
+            "mode('simple');\n"
+            "out.simple = grab();\n"
+            "out.saved = JSON.parse(store.get('calib-site:prefs')).mode;\n"
+            "el('t-plus').click(); el('t-plus').click(); el('p-go').click();\n"
+            "out.dip = grab();\n"
+            "// A reload keeps the mode.\n"
+            "const p2 = stub.boot(page, corePath, store);\n"
+            "out.reloaded = p2.el('dip-expect-a').textContent;\n"
+            "mode('verbose');\n"
+            "out.back = grab();\n"
+            "// A transfer renders in simple mode too.\n"
+            "const s3 = new Map([['calib-site:prefs', JSON.stringify({ mode: 'simple' })]]);\n"
+            "const q = stub.boot(page, corePath, s3), e3 = q.el;\n"
+            "e3('s-dir-transfer').click();\n"
+            "e3('s-tank').value = 'alpha'; e3('s-D').value = '1800'; e3('s-L').value = '3000';\n"
+            "e3('sB-tank').value = 'beta'; e3('sB-D').value = '2480'; e3('sB-L').value = '5200';\n"
+            "e3('s-dip').value = '1800'; e3('sB-dip').value = '400'; e3('s-unit').value = '200';\n"
+            "e3('s-go').click();\n"
+            "e3('d-val').value = '1800'; e3('d-val-b').value = '400'; e3('d-go-a').click(); e3('d-go-b').click();\n"
+            "out.transfer = { kv: e3('now-kv').innerHTML, advice: e3('now-advice').textContent };\n"
+            "console.log(JSON.stringify(out));"
+        )
+        v, s = got["verbose"], got["simple"]
+        self.assertIn("liquid (running shell)", v["kv"])
+        self.assertNotIn("liquid (running shell)", s["kv"], "simple mode shows the level only")
+        self.assertIn("<dt>level</dt>", s["kv"])
+        self.assertRegex(s["advice"], r"^Next: \d+ × 200 L → expect \d+(\.\d)? ± \d+(\.\d)? mm$")
+        self.assertLess(len(s["advice"]), len(v["advice"]))
+        self.assertRegex(s["target"], r"^Target: \d+ × 200 L$")
+        self.assertNotIn("<p>", s["verdict"], "simple mode drops the verdict message")
+        self.assertIn("<h3>", s["verdict"])
+        self.assertEqual(got["saved"], "simple")
+        self.assertRegex(got["dip"]["expect"], r"^Expect \d+(\.\d)? ± \d+(\.\d)? mm$")
+        self.assertRegex(got["reloaded"], r"^Expect ")
+        self.assertIn("liquid (running shell)", got["back"]["kv"], "verbose mode comes back in full")
+        self.assertRegex(got["back"]["expect"], r"^Expected level: ")
+        self.assertIn("<dt>level</dt>", got["transfer"]["kv"])
+        self.assertNotIn("liquid", got["transfer"]["kv"])
+        self.assertRegex(got["transfer"]["advice"], r"^(.*\. )?Next: .* → A .* · B .*")
+
+    @unittest.skipUnless(NODE, "node is not installed")
     def test_core_exports_the_times_in_the_note(self):
         got = _node(
             "const s = new core.Session({ D: 1800, Lest: 3000 });\n"

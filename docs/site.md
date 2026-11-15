@@ -93,6 +93,22 @@ enter the raw file or the fit.
 
 ## Each pour
 
+The Live tab has two modes. Use the *Simple · Verbose* switch at the top of
+the tab; the device keeps your choice. **Verbose** (the default) shows every
+explanation. **Simple** shows only what to do and the numbers to read:
+
+- the level, and the next pour with the level to expect:
+  `Next: 2 × 200 L → expect 531.4 ± 2.3 mm`;
+- the can target (`Target: 2 × 200 L`) and every warning (brim, bottom,
+  overflow, drift alarm);
+- a short settle line (`Settling: 3:20 left.`, `Settled: dip now.`) and the
+  expected level in the dip panel (`Expect 572.8 ± 3.3 mm`);
+- each verdict as its title and its action, without the numbers behind it.
+
+Simple mode hides the help paragraphs, the shell figures (liquid, brim,
+slope), the time-to-brim block and the drift line until it alarms. The check
+is the same in both modes: only the text changes.
+
 1. **Pour.** Tap *+1 can poured* each time a can is empty, then press
    *Batch done* (see *A batch of cans* below). For a meter or an unknown pour,
    open *Enter litres instead*. Tick *whole pour unknown* for `?`, or *plus an

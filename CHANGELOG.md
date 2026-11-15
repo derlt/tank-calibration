@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Live tab: a *Simple · Verbose* switch. Simple mode shows only the actions
+  and the numbers to read: the level, `Next: 2 × 200 L → expect H ± 2σ mm`,
+  the can target, warnings, a short settle line, the expected level in the
+  dip panel, and each verdict's title and action. It hides the help
+  paragraphs, the shell figures, the time-to-brim block and the drift line
+  until it alarms. Verbose is the former Live tab, unchanged, and the
+  default. The choice is saved on the device; transfer campaigns follow it.
 - Log & charts: the Levels table and the chart select one level together.
   A tap on a row rings its mark in the chart and draws a vertical guide at
   its level; a tap on a mark highlights its row and scrolls the table to

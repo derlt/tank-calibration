@@ -155,6 +155,11 @@
   header .seg { margin: 0; }
   header .seg button { min-height: 2.2rem; padding: 0.2rem 0.8rem; font-size: 0.85rem; }
   details summary { cursor: pointer; color: var(--muted); }
+  /* Simple mode: the Live tab keeps the actions and the numbers to read. */
+  .mode-seg { width: max-content; margin: 0 0 0.5rem auto; }
+  .mode-seg button { min-height: 2rem; padding: 0.15rem 0.8rem; font-size: 0.85rem; }
+  body.simple #live .vb { display: none !important; }
+  body.simple #now-advice { font-size: 1.1rem; }
 </style>
 </head>
 <body>
@@ -230,12 +235,16 @@
 
   <!-- ===================================================== live -->
   <section id="live" class="hidden">
+    <nav class="seg mode-seg" id="mode" aria-label="How much text the Live tab shows">
+      <button data-mode="simple" aria-pressed="false">Simple</button>
+      <button data-mode="verbose" aria-pressed="true">Verbose</button>
+    </nav>
     <div class="card" id="now-card">
       <h2>Now</h2>
       <div class="kv" id="now-kv"></div>
       <p id="now-pred" class="pred"></p>
       <p id="now-advice" style="margin:0.6rem 0 0;font-weight:650"></p>
-      <div id="now-eta" class="eta"></div>
+      <div id="now-eta" class="eta vb"></div>
       <p id="now-drift" class="muted" style="margin:0.3rem 0 0"></p>
     </div>
 
@@ -283,7 +292,7 @@
           <button class="secondary small" id="t-undo">Undo last can</button>
           <label class="check"><input type="checkbox" id="t-part"> <span id="t-part-text">last can not fully poured</span></label>
         </div>
-        <p class="muted" id="t-help">Start the fill timer when you start the pump. The alarm rings before the can is full: close the valve. Tap <b>+1 can poured</b> when the can is full. Emptying the can into the tank has no timer. Each can keeps the size shown above, so one batch can mix sizes. The count is saved after each tap. One dip follows the batch.</p>
+        <p class="muted vb" id="t-help">Start the fill timer when you start the pump. The alarm rings before the can is full: close the valve. Tap <b>+1 can poured</b> when the can is full. Emptying the can into the tank has no timer. Each can keeps the size shown above, so one batch can mix sizes. The count is saved after each tap. One dip follows the batch.</p>
       </div>
       <details id="p-manual">
         <summary id="p-manual-text">Enter litres instead (meter, odd can, unknown pour)</summary>
@@ -314,7 +323,7 @@
       <p id="dip-settle" class="muted" style="margin-top:0"></p>
       <div class="tally-bar hidden" id="dip-bar-wrap"><i id="dip-bar"></i></div>
       <div class="batch hidden" id="dip-batch"><span class="same">Same batch</span><span id="dip-batch-text"></span></div>
-      <p class="dip-legend hidden" id="dip-legend">↑ pump out = A · ↓ pour in = B</p>
+      <p class="dip-legend vb hidden" id="dip-legend">↑ pump out = A · ↓ pour in = B</p>
 
       <div class="dipfield" id="dip-row-a">
         <div class="dipfield-h">
@@ -970,7 +979,53 @@
     renderLive(st); renderLog(); renderShell(st);
   }
 
+  // ------------------------------------------------------------ simple mode
+  // Simple mode keeps the Live tab to the actions and the numbers to read:
+  // the level, the next pour with its expected level, warnings, the settle
+  // state, and each verdict's title and action.  Verbose is the full text.
+  function simple() { return P.mode === "simple"; }
+  function renderMode() {
+    const on = simple();
+    if (document.body && document.body.classList) document.body.classList.toggle("simple", on);
+    for (const b of $("mode").querySelectorAll("button")) b.setAttribute("aria-pressed", String((b.dataset.mode === "simple") === on));
+  }
+  $("mode").addEventListener("click", (ev) => {
+    const b = ev.target && ev.target.closest ? ev.target.closest("button[data-mode]") : null;
+    if (!b) return;
+    P.mode = b.dataset.mode === "simple" ? "simple" : "verbose";
+    localStorage.setItem(PREFS, JSON.stringify(P));
+    render();
+  });
+
+  /** The expected level in few words: "125.1 ± 1.9 mm", or why there is none. */
+  function shortExpect(pr, dir) {
+    if (!pr) return "no level (neck)";
+    if (dir > 0 && pr.overflow) return "reaches the neck";
+    if (dir < 0 && pr.empty) return "runs dry";
+    return `${f(pr.H)} ± ${f(2 * pr.sd)} mm`;
+  }
+  /** The litres of an advice: "2 × 100 L" with a can size, else "≈ 200 L". */
+  function shortLitres(target, units, u) { return units ? `${units} × ${f(u, 0)} L` : `≈ ${f(target, 0)} L`; }
+
+  /** The Now line in simple mode: warnings first, then what to pour and where it lands. */
+  function shortAdvice(adv, G) {
+    if (G && G.neck) return "In the neck: drain on.";
+    const warn = adv.halve ? "Near the brim: half pour. " : adv.bottom ? "Near the bottom: a part can is fine. " : "";
+    return `${warn}Next: ${shortLitres(adv.target, adv.units, S.cfg.pourUnit)} → expect ${shortExpect(adv.expect, S.cfg.dir)}`;
+  }
+  function shortAdviceBatch(adv) {
+    const warn = (adv.in.halve ? "B near the brim: small batches. " : "") + (adv.bottom ? "A near the bottom: a part can is fine. " : "");
+    return `${warn}Next: ${shortLitres(adv.target, adv.units, S.out.cfg.pourUnit)} → A ${shortExpect(adv.expect.out, -1)} · B ${shortExpect(adv.expect.in, 1)}`;
+  }
+
+  /** One verdict in simple mode: the title and the action, plus an unknown pour's estimate. */
+  function shortVerdict(v, name, pend) {
+    const x = v.unknown && !pend ? `<p class="mono">x = ${f(v.unknown.x)} ± ${f(2 * v.unknown.sigma)} L</p>` : "";
+    return `<h3>${name ? esc(name) + ": " : ""}${esc(v.title)}</h3>${x}${v.advice ? `<p class="advice">${esc(v.advice)}</p>` : ""}`;
+  }
+
   function renderLive(st) {
+    renderMode();
     if (isTransfer()) { renderLiveTransfer(); return; }
     $("dip-card").classList.remove("two");
     $("dip-row-b").classList.add("hidden");
@@ -1000,7 +1055,9 @@
     // The advice carries the level the next dip must find (§10a.2).
     const adv = G ? (G.neck ? S.advice(G.H) : S.adviceNext(G.H, G.n)) : null;
     const drain = isDrain();
-    $("now-kv").innerHTML = G ? [
+    const sm = simple();
+    $("now-kv").innerHTML = G && sm ? `<dt>level</dt><dd>${f(G.H)} mm${G.neck ? " · in the neck" : ""}</dd>`
+      : G ? [
       ["level", `${f(G.H)} mm (row ${G.row}, ${G.n > 1 ? "2 readings" : "1 reading"})${G.neck ? " · in the neck" : ""}`],
       ["liquid (running shell)", `${f(C.volume(G.H, p), 0)} L of ${f(st.capacity, 0)} L`],
       drain ? ["brim", `≈ ${f(adv.brim, 0)} ± ${f(2 * adv.brimSd, 0)} mm${S.cfg.brimStart != null ? " (neck-entrance reading " + f(S.cfg.brimStart) + " mm)" : ""}`]
@@ -1009,11 +1066,13 @@
       ["slope", `${f(adv.slope, 2)} L/mm`],
     ].filter(Boolean).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("") : "";
     $("now-advice").textContent = adv && !pend
-      ? (G.neck ? "The level is in the neck. Drain until the level is back in the shell. Tick 'level still in the neck' while it stays in the neck." : adv.text)
+      ? (sm ? shortAdvice(adv, G)
+        : G.neck ? "The level is in the neck. Drain until the level is back in the shell. Tick 'level still in the neck' while it stays in the neck." : adv.text)
       : "";
-    $("now-drift").textContent = st.intervals > 2
-      ? `Running books − shell: ${sg(st.drift)} L (alarm beyond ±${f(st.driftLimit, 0)} L)${st.driftAlarm ? " — DRIFT: stop and audit (tilt? can size? leak?)" : ""}`
-      : "";
+    $("now-drift").textContent = sm ? (st.driftAlarm ? `DRIFT ${sg(st.drift)} L: stop and audit.` : "")
+      : st.intervals > 2
+        ? `Running books − shell: ${sg(st.drift)} L (alarm beyond ±${f(st.driftLimit, 0)} L)${st.driftAlarm ? " — DRIFT: stop and audit (tilt? can size? leak?)" : ""}`
+        : "";
     $("now-drift").className = st.driftAlarm ? "error" : "muted";
 
     // pour and dip cards
@@ -1037,7 +1096,8 @@
     else {
       box.classList.remove("hidden");
       box.className = `verdict v-${v.color || "info"}`;
-      if (pend && (v.hidden || v.status === "REDIP")) {
+      if (sm) box.innerHTML = shortVerdict(v, "", !!pend);
+      else if (pend && (v.hidden || v.status === "REDIP")) {
         box.innerHTML = `<h3>${esc(v.title)}</h3><p>${esc(v.message)}</p><p class="advice">${esc(v.advice)}</p>`
           + `<p class="muted">${pend.dips.length} reading(s) recorded. The page shows them after the next reading.</p>`;
       } else {
@@ -1058,6 +1118,7 @@
   /** One tank's block in the transfer Now card. */
   function tankKv(G, adv, st, role) {
     if (!G || !adv) return "";
+    if (simple()) return `<dt>level</dt><dd>${f(G.H)} mm${G.neck ? " · in the neck" : ""}</dd>`;
     const p = st.fit.p;
     const rows = [
       ["level", `${f(G.H)} mm (row ${G.row}, ${G.n > 1 ? "2 readings" : "1 reading"})${G.neck ? " · in the neck" : ""}`],
@@ -1074,6 +1135,7 @@
   function verdictBox(L, v, name) {
     if (!v) return "";
     const pend = L && L.state === "pending";
+    if (simple()) return `<div class="verdict v-${v.color || "info"}" style="margin-bottom:0.6rem">${shortVerdict(v, name, pend)}</div>`;
     if (pend && (v.hidden || v.status === "REDIP")) {
       return `<div class="verdict v-${v.color || "info"}" style="margin-bottom:0.6rem"><h3>${esc(name)}: ${esc(v.title)}</h3><p>${esc(v.message)}</p><p class="advice">${esc(v.advice)}</p>`
         + `<p class="muted">${L.dips.length} reading(s) recorded. The page shows them after the next reading.</p></div>`;
@@ -1101,11 +1163,12 @@
     // below shift one row and the right column rides high.
     $("now-kv").innerHTML = `<dt class="hd">${esc(nameO)} — pump out${cur("out")}</dt>` + tankKv(GO, adv && adv.out, stO, "pump out")
       + `<dt class="hd">${esc(nameI)} — pour in${cur("in")}</dt>` + tankKv(GI, adv && adv.in, stI, "pour in");
-    $("now-advice").textContent = adv && !pend ? adv.text : "";
+    $("now-advice").textContent = adv && !pend ? (simple() ? shortAdviceBatch(adv) : adv.text) : "";
     const drifts = [];
     if (stO.intervals > 2) drifts.push(`${nameO} ${sg(stO.drift)} L (alarm beyond ±${f(stO.driftLimit, 0)} L)`);
     if (stI.intervals > 2) drifts.push(`${nameI} ${sg(stI.drift)} L (alarm beyond ±${f(stI.driftLimit, 0)} L)`);
-    $("now-drift").textContent = drifts.join(" · ") + ((stO.driftAlarm || stI.driftAlarm) ? " — DRIFT: stop and audit (tilt? can size? leak?)" : "");
+    $("now-drift").textContent = simple() ? ((stO.driftAlarm || stI.driftAlarm) ? "DRIFT: stop and audit." : "")
+      : drifts.join(" · ") + ((stO.driftAlarm || stI.driftAlarm) ? " — DRIFT: stop and audit (tilt? can size? leak?)" : "");
     $("now-drift").className = stO.driftAlarm || stI.driftAlarm ? "error" : "muted";
 
     $("pour-card").classList.toggle("hidden", !!pend);
@@ -1137,7 +1200,8 @@
     $("d-val").disabled = !pendO;
     $("d-val-b").disabled = !pendI;
     const dipLabel = (name, L, open) => {
-      if (!open) return `${name}: decided at ${f(L.H)} mm — take another reading to re-open`;
+      if (!open) return simple() ? `${name}: decided at ${f(L.H)} mm` : `${name}: decided at ${f(L.H)} mm — take another reading to re-open`;
+      if (simple()) return `${name}, mm`;
       if (L.start) return L.dips.length === 0 ? `${name}: first reading, mm`
         : `${name}: next reading, mm — earlier readings hidden`;
       return L.dips.length === 0 ? `${name}: reading after the ${L.step.text} L batch, mm`
@@ -1153,7 +1217,7 @@
     const stepText = curO && curO.step ? curO.step.text : "";
     $("dip-batch-text").textContent = curO && curO.start
       ? "Both start levels, before the first batch"
-      : `${stepText === "?" ? "unknown litres" : stepText + " L"} pumped from A into B · both readings belong to this batch`;
+      : `${stepText === "?" ? "unknown litres" : stepText + " L"}${simple() ? " batch" : " pumped from A into B · both readings belong to this batch"}`;
     const hOf = (sess, L) => (L && L.H != null ? L.H : (sess.lastGood() >= 0 ? sess.levels[sess.lastGood()].H : null));
     const fill = (sess, L) => {
       const H = hOf(sess, L);
@@ -1185,7 +1249,7 @@
       box.className = "";
       let pair = "";
       if (S.pair) {
-        pair = `<div class="verdict v-${S.pair.color}" style="margin-bottom:0.6rem"><h3>Both tanks — ${esc(S.pair.title)}</h3><p>${esc(S.pair.message)}</p><p class="advice">${esc(S.pair.advice)}</p></div>`;
+        pair = `<div class="verdict v-${S.pair.color}" style="margin-bottom:0.6rem"><h3>Both tanks — ${esc(S.pair.title)}</h3>${simple() ? "" : `<p>${esc(S.pair.message)}</p>`}<p class="advice">${esc(S.pair.advice)}</p></div>`;
       }
       box.innerHTML = verdictBox(LO, vO, nameO) + verdictBox(LI, vI, nameI) + pair;
     }
@@ -1212,18 +1276,19 @@
     const e = sess.expectPending();
     if (!e) { el.textContent = ""; el.className = "pred"; return; }
     if (e.why) {
-      el.textContent = `Expected level: none (${e.why}). Take two readings.`;
+      el.textContent = simple() ? "No expected level: take two readings." : `Expected level: none (${e.why}). Take two readings.`;
       el.className = "pred muted";
       return;
     }
     if (L.dips.length > 0) {
-      el.textContent = "Expected level hidden for the repeat reading (blind repeat).";
+      el.textContent = simple() ? "Blind repeat: no expected level." : "Expected level hidden for the repeat reading (blind repeat).";
       el.className = "pred muted";
       return;
     }
     const sharp = 2 * e.pr.sd <= sess.cfg.sharpMm;
-    el.textContent = `Expected level: ${f(e.pr.H)} mm ± ${f(2 * e.pr.sd)} mm (2σ)`
-      + (sharp ? "" : " · too wide to judge: expect two readings");
+    el.textContent = simple() ? `Expect ${f(e.pr.H)} ± ${f(2 * e.pr.sd)} mm`
+      : `Expected level: ${f(e.pr.H)} mm ± ${f(2 * e.pr.sd)} mm (2σ)`
+        + (sharp ? "" : " · too wide to judge: expect two readings");
     el.className = "pred";
   }
 
@@ -1276,6 +1341,7 @@
       return;
     }
     const sharp = 2 * pr.sd <= S.cfg.sharpMm;
+    if (simple()) { box.textContent = `After ${f(q.s, 0)} L: ${f(pr.H)} ± ${f(2 * pr.sd)} mm`; box.className = "pred"; return; }
     box.textContent = `After this pour (${f(q.s, 0)} L): ${f(pr.H)} mm ± ${f(2 * pr.sd)} mm (2σ)`
       + ` · ${sg(pr.H - G.H)} mm rise · ≈ ${f(C.volume(pr.H, S.fit.p), 0)} L`
       + (sharp ? " · sharp: one reading may do" : " · too wide to judge: expect two readings");
@@ -1299,6 +1365,7 @@
       return;
     }
     const sharp = 2 * pr.sd <= S.cfg.sharpMm;
+    if (simple()) { box.textContent = `After ${f(q.s, 0)} L: ${f(pr.H)} ± ${f(2 * pr.sd)} mm`; box.className = "pred"; return; }
     box.textContent = `After this drain (${f(q.s, 0)} L): ${f(pr.H)} mm ± ${f(2 * pr.sd)} mm (2σ)`
       + ` · ${sg(pr.H - G.H)} mm fall · ≈ ${f(C.volume(pr.H, S.fit.p), 0)} L left`
       + (sharp ? " · sharp: one reading may do" : " · too wide to judge: expect two readings");
@@ -1326,6 +1393,11 @@
     const bTxt = overB ? `B overflows (${f(q.s, 0)} L > gap ≈ ${f(adv.in.gap, 0)} L): the final batch — tick "tank B reached the neck"`
       : `B ${f(prI.H)} ± ${f(2 * prI.sd)} mm (+${f(prI.H - GI.H, 1)} mm rise)`;
     const sharp = 2 * Math.max(prO.sd, prI.sd) <= S.cfg.sharpMm;
+    if (simple() && !neckA && !overB && !prO.empty) {
+      box.textContent = `After ${f(q.s, 0)} L: A ${f(prO.H)} ± ${f(2 * prO.sd)} mm · B ${f(prI.H)} ± ${f(2 * prI.sd)} mm`;
+      box.className = "pred";
+      return;
+    }
     box.textContent = `After this batch (${f(q.s, 0)} L): ${aTxt} · ${bTxt}`
       + (sharp ? " · sharp: one reading per tank may do" : " · too wide to judge: expect two readings per tank");
     box.className = "pred" + (!neckA && !overB && (prO.empty || prI.overflow) ? " error" : "");
@@ -1393,6 +1465,10 @@
       if (vol > adv.gap) { note = `${f(vol, 0)} L is more than the shell gap (≈ ${f(adv.gap, 0)} L): expect an overflow.`; warn = true; }
       else if (adv.halve) { note = "Near the brim: small batches. " + note; warn = true; }
       else if (cans && n > cans) note += ` ${n - cans} more than the advice.`;
+    }
+    if (simple() && !warn) {
+      const tgt = adv ? adv.target : null;
+      note = tgt ? `Target: ${cans ? `${cans} × ${f(act, 0)} L` : `≈ ${f(tgt, 0)} L`}` : "";
     }
     $("t-target").textContent = note;
     $("t-target").className = warn ? "error" : "muted";
@@ -1799,17 +1875,20 @@
     const el = (now - t0) / 1000, settle = S.cfg.settleSeconds;
     if (n > 0) {
       wrap.classList.add("hidden");
-      $("dip-settle").textContent = `${fmtClock(el)} since the last reading. A misread needs only a fresh reading; a moving level needs ${fmtClock(settle)}.`;
+      $("dip-settle").textContent = simple() ? `${fmtClock(el)} since the last reading.`
+        : `${fmtClock(el)} since the last reading. A misread needs only a fresh reading; a moving level needs ${fmtClock(settle)}.`;
       return;
     }
     wrap.classList.toggle("hidden", !(settle > 0));
     $("dip-bar").style.width = `${settle > 0 ? Math.min(100, 100 * el / settle) : 100}%`;
     if (settle > 0 && el < settle) {
-      $("dip-settle").textContent = `Settling: ${fmtClock(Math.ceil(settle - el))} left of ${fmtClock(settle)}. Dip when the timer ends (§3.5).`;
+      $("dip-settle").textContent = simple() ? `Settling: ${fmtClock(Math.ceil(settle - el))} left.`
+        : `Settling: ${fmtClock(Math.ceil(settle - el))} left of ${fmtClock(settle)}. Dip when the timer ends (§3.5).`;
       $("dip-settle").className = "muted";
       return;
     }
-    $("dip-settle").textContent = `Settled: ${fmtClock(el)} since the ${isTransfer() ? "batch" : "pour"}. Dip now.`;
+    $("dip-settle").textContent = simple() ? "Settled: dip now."
+      : `Settled: ${fmtClock(el)} since the ${isTransfer() ? "batch" : "pour"}. Dip now.`;
     $("dip-settle").className = "";
     // One batch, one alarm: both tanks share the pour time, so the second
     // tank's first reading must not ring again.
