@@ -110,6 +110,8 @@
   .alarm button { background: #fff; color: var(--bad); border-color: #fff; }
   .eta { margin: 0.6rem 0 0; font-size: 0.93rem; }
   .eta div { margin: 0.15rem 0; }
+  .pred { margin: 0.45rem 0 0; font-size: 0.93rem; font-weight: 650; }
+  .pred.muted { font-weight: 400; }
   @media (prefers-reduced-motion: reduce) { button.pulse { animation: none; } }
   .legend { display: flex; flex-wrap: wrap; gap: 0.2rem 0.9rem; font-size: 0.8rem; color: var(--muted); margin: 0.2rem 0 0.4rem; }
   .legend i { display: inline-block; width: 0.65rem; height: 0.65rem; border-radius: 50%; margin-right: 0.3rem; vertical-align: -0.05rem; }
@@ -163,6 +165,7 @@
     <div class="card" id="now-card">
       <h2>Now</h2>
       <div class="kv" id="now-kv"></div>
+      <p id="now-pred" class="pred"></p>
       <p id="now-advice" style="margin:0.6rem 0 0;font-weight:650"></p>
       <div id="now-eta" class="eta"></div>
       <p id="now-drift" class="muted" style="margin:0.3rem 0 0"></p>
@@ -472,11 +475,19 @@
 
   // ------------------------------------------------------------ pour
   function unit() { return S && S.cfg.pourUnit ? S.cfg.pourUnit : null; }
-  $("p-advice").addEventListener("click", () => { const L = S && S.current(); if (L && L.verdict && L.verdict.next) $("p-vol").value = Math.round(L.verdict.next.target); else if (S) $("p-vol").value = Math.round(S.advice(S.levels[S.lastGood()].H).target); });
-  $("p-plus").addEventListener("click", () => { const u = unit() || 50; $("p-vol").value = (num("p-vol") || 0) + u; });
-  $("p-minus").addEventListener("click", () => { const u = unit() || 50; $("p-vol").value = Math.max(u, (num("p-vol") || u) - u); });
-  $("p-unknown").addEventListener("change", () => { if ($("p-unknown").checked) $("p-extra").checked = false; });
-  $("p-extra").addEventListener("change", () => { if ($("p-extra").checked) $("p-unknown").checked = false; });
+  function refreshPour() { if (tab === "live" && S) render(); }
+  $("p-advice").addEventListener("click", () => {
+    const L = S && S.current();
+    if (L && L.verdict && L.verdict.next) $("p-vol").value = String(Math.round(L.verdict.next.target));
+    else if (S) $("p-vol").value = String(Math.round(S.advice(S.levels[S.lastGood()].H).target));
+    refreshPour();
+  });
+  $("p-plus").addEventListener("click", () => { const u = unit() || 50; $("p-vol").value = String((num("p-vol") || 0) + u); refreshPour(); });
+  $("p-minus").addEventListener("click", () => { const u = unit() || 50; $("p-vol").value = String(Math.max(u, (num("p-vol") || u) - u)); refreshPour(); });
+  $("p-vol").addEventListener("input", refreshPour);
+  $("p-unknown").addEventListener("change", () => { if ($("p-unknown").checked) $("p-extra").checked = false; refreshPour(); });
+  $("p-extra").addEventListener("change", () => { if ($("p-extra").checked) $("p-unknown").checked = false; refreshPour(); });
+  $("p-over").addEventListener("change", refreshPour);
   $("t-plus").addEventListener("click", guard("p-err", () => {
     const now = Date.now(), u = activeUnit();
     if (!(u > 0)) throw new Error("Enter the can size in litres.");
@@ -504,7 +515,7 @@
       L.pourTime = ts.length ? ts[ts.length - 1] : Date.now();
       if (T.pour) { delete T.pour; saveTimer(); }
       stopAlarm(); unlockAudio();
-      $("p-note").value = ""; $("t-part").checked = false; $("p-over").checked = false;
+      $("p-note").value = ""; $("p-vol").value = ""; $("t-part").checked = false; $("p-over").checked = false;
       save();
       setTimeout(() => $("d-val").focus(), 50);
       return;
@@ -520,7 +531,7 @@
     L.pourTime = Date.now();
     if (T.pour) { delete T.pour; saveTimer(); }
     stopAlarm(); unlockAudio();
-    $("p-note").value = ""; $("p-unknown").checked = false; $("p-extra").checked = false; $("p-over").checked = false;
+    $("p-note").value = ""; $("p-vol").value = ""; $("p-unknown").checked = false; $("p-extra").checked = false; $("p-over").checked = false;
     save();
     setTimeout(() => $("d-val").focus(), 50);
   }));
@@ -666,6 +677,7 @@
     $("pour-card").classList.toggle("hidden", !!pend);
     $("dip-card").classList.toggle("hidden", !pend);
     renderTally(adv);
+    renderNowPrediction(adv);
     if (pend) {
       const n = pend.dips.length;
       $("dip-title").textContent = n === 0 ? "2 · Dip" : `2 · Dip again (reading ${n + 1})`;
@@ -697,6 +709,58 @@
     $("a-edit").disabled = !L || L.start;
     $("a-override").disabled = !L || !(L.state === "pending" && L.dips.length >= 2);
     $("a-undo").disabled = !L;
+  }
+
+  /** The pour now in the pour panel: a known volume, or why it has none. */
+  function pourInput() {
+    const n = S.cans();
+    if (n) {
+      if ($("t-part").checked) return { unknown: "the last can is a part can" };
+      const s = S.batchVolume();
+      return s > 0 ? { s } : null;
+    }
+    if ($("p-unknown").checked) return { unknown: "the pour is unknown" };
+    const v = num("p-vol");
+    if (!(v > 0)) return null;
+    if ($("p-extra").checked) return { unknown: "the pour has an unknown extra" };
+    return { s: v };
+  }
+
+  /**
+   * The Now card shows where the pour now in the pour panel must land
+   * (§10a.2).  It is a planning aid for the pour size, and it does show the
+   * expected level before the dip: that weakens the blind repeat (§10a.6).
+   * The page hides the check's own prediction while a level is pending, but
+   * it cannot hide a number already read.  An operator who wants the dip
+   * blind must not read this line before dipping.
+   */
+  function renderNowPrediction(adv) {
+    const box = $("now-pred");
+    const gi = S.lastGood();
+    const q = !pending() && gi >= 0 ? pourInput() : null;
+    if (!q) { box.textContent = ""; box.className = "pred"; return; }
+    if (q.unknown) {
+      box.textContent = `After this pour: no prediction (${q.unknown}).`;
+      box.className = "pred muted";
+      return;
+    }
+    if ($("p-over").checked) {
+      box.textContent = "After this pour: overflow (the liquid reached the neck).";
+      box.className = "pred error";
+      return;
+    }
+    const G = S.levels[gi];
+    const pr = S.preview(G.H, q.s, G.n);
+    if (pr.overflow) {
+      box.textContent = `After this pour: overflow. ${f(q.s, 0)} L is more than the gap (≈ ${f(adv.gap, 0)} L).`;
+      box.className = "pred error";
+      return;
+    }
+    const sharp = 2 * pr.sd <= S.cfg.sharpMm;
+    box.textContent = `After this pour (${f(q.s, 0)} L): ${f(pr.H)} mm ± ${f(2 * pr.sd)} mm (2σ)`
+      + ` · ${sg(pr.H - G.H)} mm rise · ≈ ${f(C.volume(pr.H, S.fit.p), 0)} L`
+      + (sharp ? " · sharp: one reading may do" : " · too wide to judge: expect two readings");
+    box.className = "pred";
   }
 
   function activeUnit() {

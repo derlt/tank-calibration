@@ -107,9 +107,9 @@ adopted shell, so the tool cannot drift from the fit.
 | Rule | Implementation |
 |---|---|
 | 10a.1 Running shell with priors | `site_core.js` `fitShell` (Levenberg–Marquardt, one residual per prior); `Session._refit` on accepted intervals only |
-| 10a.2 Prediction and its σ | `predictLevel`, `Session._predict`; noise scale in `Session._refit` |
+| 10a.2 Prediction and its σ | `predictLevel`, `Session.preview` (shared by `Session._predict` and the Now line); noise scale in `Session._refit` |
 | 10a.4–10a.5 First-reading decision, sharpness | `Session._evaluate` |
-| 10a.6 Blind repeat | `verdict.hidden`; the page hides earlier readings and the prediction while a level is pending |
+| 10a.6 Blind repeat | `verdict.hidden`; the page hides earlier readings and the check's prediction while a level is pending. The Now line shows the expected level before the dip, so the operator must not read it before dipping |
 | 10a.7 Repeat test, creep | `adopt`, `UNSETTLED` in `Session._evaluate` |
 | 10a.8 LEARNING, WATCH, ALARM, pair pattern | `Session._evaluate` |
 | 10a.9 Record | `Session.toRawCsv` (reads back with `data.read_raw`), `Session.toJSON` |

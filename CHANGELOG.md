@@ -54,6 +54,12 @@ All notable changes to this project are documented here. The format follows
   *Edit* opens the note, *Save* keeps it and *Cancel* leaves it. The note goes
   into the raw CSV with its level. The site's own markers, such as *pour edited
   on site*, stay apart from the note and an edit cannot erase them.
+- The Now card previews the level that the pour now in the pour panel must
+  give, with its ±2σ band, the rise, the litres and whether one reading will
+  do (`Session.preview`). The line follows the can tally and the litres field,
+  and it hides while a level waits for its dip. It shows the expected level
+  before the dip, which weakens the blind repeat (§10a.6): the page hides the
+  check's prediction, not a number already read.
 - The page is also published as a Cloudflare Worker with static assets
   (`wrangler.jsonc`, `make deploy`). The addresses are kept in `.env`.
 

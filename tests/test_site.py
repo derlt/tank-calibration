@@ -177,6 +177,128 @@ class TestSitePage(unittest.TestCase):
         self.assertEqual(got["jump"]["live"], "", "the message is not left on the hidden Live tab")
 
     @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_now_previews_the_pour_input(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "out.pending = el('now-pred').textContent;\n"
+            "el('d-val').value = '400'; el('d-go').click();\n"
+            "out.empty = el('now-pred').textContent;\n"
+            "// The manual field: a known pour, an unknown pour, an unknown extra.\n"
+            "el('p-vol').value = '250'; el('p-vol')._listeners.input[0]({target: el('p-vol')});\n"
+            "out.manual = el('now-pred').textContent;\n"
+            "el('p-unknown').checked = true; el('p-unknown')._listeners.change[0]({target: el('p-unknown')});\n"
+            "out.unknown = el('now-pred').textContent;\n"
+            "el('p-unknown').checked = false; el('p-unknown')._listeners.change[0]({target: el('p-unknown')});\n"
+            "el('p-extra').checked = true; el('p-extra')._listeners.change[0]({target: el('p-extra')});\n"
+            "out.extra = el('now-pred').textContent;\n"
+            "el('p-extra').checked = false; el('p-extra')._listeners.change[0]({target: el('p-extra')});\n"
+            "el('p-over').checked = true; el('p-over')._listeners.change[0]({target: el('p-over')});\n"
+            "out.over = el('now-pred').textContent;\n"
+            "el('p-over').checked = false; el('p-over')._listeners.change[0]({target: el('p-over')});\n"
+            "// A pour larger than the gap: the computed overflow, not the operator's tick.\n"
+            "el('p-vol').value = '99999'; el('p-vol')._listeners.input[0]({target: el('p-vol')});\n"
+            "out.overflow = el('now-pred').textContent;\n"
+            "// The can tally follows each tap, and a part can has no prediction.\n"
+            "el('p-vol').value = ''; el('p-vol')._listeners.input[0]({target: el('p-vol')});\n"
+            "el('t-plus').click();\n"
+            "out.can = el('now-pred').textContent;\n"
+            "el('t-part').checked = true; el('t-part')._listeners.change[0]({target: el('t-part')});\n"
+            "out.part = el('now-pred').textContent;\n"
+            "el('t-part').checked = false; el('t-part')._listeners.change[0]({target: el('t-part')});\n"
+            "el('p-go').click();\n"
+            "out.closed = el('now-pred').textContent;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["pending"], "", "the first level has no prediction")
+        self.assertEqual(got["empty"], "", "no pour input, no line")
+        self.assertTrue(got["manual"].startswith("After this pour (250 L):"), got["manual"])
+        self.assertIn("mm ±", got["manual"])
+        self.assertIn("(2σ)", got["manual"])
+        self.assertIn("mm rise", got["manual"])
+        self.assertTrue(
+            "one reading may do" in got["manual"]
+            or "expect two readings" in got["manual"],
+            got["manual"],
+        )
+        self.assertIn("too wide to judge", got["manual"], "an early wide band must say so")
+        self.assertIn("no prediction", got["unknown"])
+        self.assertIn("unknown extra", got["extra"])
+        self.assertIn("overflow", got["over"])
+        self.assertIn("is more than the gap", got["overflow"])
+        self.assertTrue(got["can"].startswith("After this pour (200 L):"), got["can"])
+        self.assertIn("part can", got["part"])
+        self.assertEqual(got["closed"], "", "the line hides while the level waits for its dip")
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_now_line_agrees_with_the_check(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "const P = {r: 900, L: 3000, h0: 0};\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click();\n"
+            "let V = 400;\n"
+            "const dipAt = (v) => { el('d-val').value = String(core.levelFor(v, P)); el('d-go').click(); };\n"
+            "dipAt(V);\n"
+            "// Five 400 L pours at the true level: the fit and the band settle.\n"
+            "for (let i = 0; i < 5; i++) {\n"
+            "  el('p-vol').value = '400'; el('p-vol')._listeners.input[0]({target: el('p-vol')});\n"
+            "  el('p-go').click();\n"
+            "  V += 400; dipAt(V); dipAt(V);\n"
+            "}\n"
+            "// The line for the next pour, then the check's own prediction for it.\n"
+            "el('p-vol').value = '250'; el('p-vol')._listeners.input[0]({target: el('p-vol')});\n"
+            "out.page = el('now-pred').textContent;\n"
+            "out.before = store.get('calib-site:active');\n"
+            "el('p-go').click();\n"
+            "V += 250; dipAt(V); dipAt(V);\n"
+            "out.verdict = el('verdict').innerHTML;\n"
+            "const S1 = core.Session.fromJSON(JSON.parse(out.before));\n"
+            "const g1 = S1.lastGood();\n"
+            "const pr = S1.preview(S1.levels[g1].H, 250, S1.levels[g1].n);\n"
+            "out.prH = pr.H; out.sd = pr.sd; out.sharpMm = S1.cfg.sharpMm;\n"
+            "// The advice and unit buttons drive the same line.\n"
+            "el('p-advice').click();\n"
+            "out.advice = el('p-vol').value; out.adviceLine = el('now-pred').textContent;\n"
+            "el('p-plus').click(); out.plus = el('p-vol').value;\n"
+            "el('p-minus').click(); out.minus = el('p-vol').value;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        page_level = got["page"].split("): ")[1].split(" mm")[0]
+        self.assertIn(
+            f"predicted {page_level} ±",
+            got["verdict"],
+            "the check must predict the level the line showed",
+        )
+        self.assertAlmostEqual(
+            float(page_level), got["prH"], delta=1.0, msg="the line must start from the last good level"
+        )
+        sharp = 2 * got["sd"] <= got["sharpMm"]
+        self.assertTrue(sharp, "the settled band should be sharp in this fixture")
+        self.assertEqual(
+            "sharp: one reading may do" in got["page"], sharp, got["page"]
+        )
+        self.assertTrue(
+            got["adviceLine"].startswith(f"After this pour ({got['advice']} L):"),
+            got["adviceLine"],
+        )
+        self.assertEqual(got["plus"], str(int(got["advice"]) + 200))
+        self.assertEqual(got["minus"], got["advice"])
+
+    @unittest.skipUnless(NODE, "node is not installed")
     def test_page_pour_and_settle_timers(self):
         stub = (HERE / "tests" / "page_stub.js").as_posix()
         got = _node(
@@ -647,6 +769,30 @@ class TestSiteCore(unittest.TestCase):
         self.assertEqual(got["overrideTags"], ["pour edited on site", "accepted against the check: looks right"])
         self.assertIn("accepted against the check: looks right", got["overrideKept"],
                       "the override marker survives a cleared note")
+
+    def test_preview_matches_the_check_prediction(self):
+        got = _node(
+            "const p = {r: 900, L: 3000, h0: 0};\n"
+            "const s = new core.Session({D: 1800, Dpm: 100, Lest: 3000, pourUnit: 200});\n"
+            "let V = 400;\n"
+            "s.start('400', core.levelFor(V, p)); s.dip(core.levelFor(V, p));\n"
+            "for (let i = 0; i < 5; i++) {\n"
+            "  V += 400; s.pour('400');\n"
+            "  let v = s.dip(core.levelFor(V, p));\n"
+            "  if (v.status === 'REDIP') v = s.dip(core.levelFor(V, p));\n"
+            "}\n"
+            "const gi = s.lastGood(), G = s.levels[gi];\n"
+            "const pv = s.preview(G.H, 400, G.n);\n"
+            "s.pour('400');\n"
+            "const chk = s._predict(s.current(), 1);\n"
+            "console.log(JSON.stringify({pv, chk, anchor: G.H, n: G.n}));"
+        )
+        pv, chk = got["pv"], got["chk"]
+        self.assertAlmostEqual(pv["H"], chk["H"], places=9)
+        self.assertAlmostEqual(pv["sd"], chk["sd"], places=9)
+        self.assertEqual(pv["overflow"], chk["overflow"])
+        self.assertGreater(pv["sd"], 0)
+        self.assertGreater(pv["H"], got["anchor"])
 
     def test_batch_can_tally(self):
         # Truth shell r 900, L 3000, h0 0.  Batches of 200 L cans, one dip each.
