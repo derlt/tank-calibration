@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Transfer verdict titles join the tank name with " — " instead of ": "
+  (`alpha — Reading confirmed`), like the pair box (`Both tanks — …`).
 - Header: one slim line instead of two or three. The title is the tank name
   only (no "— live dip check"); the phase and the count are one line of
   small text, not two pills, and extra dips show only when there are some.
@@ -18,6 +20,17 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- The on-site page speaks Vietnamese. Choose the language in **Settings →
+  Language** (English or Tiếng Việt); the device keeps the choice, and a
+  phone set to Vietnamese starts in Vietnamese. Every text the page shows is
+  translated: the tabs, the Live tab in both modes, the verdicts and the pair
+  view of the core, the charts, the timers, errors, dialogs and the help.
+  The exported raw CSV and session JSON stay in English (they are the record
+  for `calib`), as do the register codes (`OBJECT?`, `LOSS?`) and what the
+  operator types. The translator (`site/i18n.js`, inlined by `calib
+  site-page`) translates the page's text as the page writes it, so the rules
+  and the render code stay in one language. `tests/test_i18n.py` fails on
+  any English text with no Vietnamese key.
 - Live tab: a *Simple · Verbose* switch. Simple mode shows only the actions
   and the numbers to read: the level, `Next: 2 × 200 L → expect H ± 2σ mm`,
   the can target, warnings, a short settle line, the expected level in the

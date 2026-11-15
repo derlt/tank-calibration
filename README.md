@@ -276,6 +276,7 @@ Short version:
 - `calib/unknowns.py` — back-prediction, one σ formula, sensitivity battery.
 - `calib/field.py` — live per-pour protocol.
 - `site/site_core.js` — live dip check before a shell is adopted (§10a);
+  `site/i18n.js` translates the page (English, Vietnamese);
   `calib/site_page.py` builds the offline page.
 - `calib/report.py` — strapping table, commercial chart, register, shell record.
 - `calib/charts.py` — the seven views.

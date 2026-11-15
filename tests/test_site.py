@@ -1263,8 +1263,8 @@ console.log(JSON.stringify(out));
         self.assertIn("600 L pumped from A into B", got["dip1"]["batchText"])
         self.assertEqual(got["actions"], ["Take another reading (alpha)", "Accept anyway (alpha)"],
                          "the level actions name the current tank")
-        self.assertIn("alpha:", got["verdict"])
-        self.assertIn("beta:", got["verdict"])
+        self.assertIn("alpha — ", got["verdict"])
+        self.assertIn("beta — ", got["verdict"])
         self.assertEqual(got["saved"], {"kind": "transfer", "levels": [2, 2], "pour": [True, True]})
         self.assertEqual(got["files"]["a"], "Download alpha_raw.csv (tank A)")
         self.assertTrue(got["files"]["b"])

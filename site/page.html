@@ -167,7 +167,7 @@
 </head>
 <body>
 <header>
-  <h1 id="hdr-title">calib site</h1>
+  <h1 id="hdr-title" translate="no">calib site</h1>
   <span class="sr-only" id="hdr-tank-label">Current tank</span>
   <nav class="seg hidden" id="hdr-tank" aria-labelledby="hdr-tank-label">
     <button id="hdr-tank-a" data-tank="out" aria-pressed="true">tank A</button>
@@ -414,7 +414,13 @@
 
   <!-- ===================================================== settings -->
   <section id="settings" class="hidden">
-    <div class="card" id="set-campaign">
+    <div class="card" id="set-lang-card">
+      <h2>Language</h2>
+      <label style="max-width:16rem">Language of the page<select id="set-lang" translate="no"></select></label>
+      <p class="muted">The exported files stay in English: they are the record for <span class="mono">calib</span>.</p>
+    </div>
+
+    <div class="card" id="set-campaign" style="margin-top:0.8rem">
       <h2 id="set-campaign-title">This campaign</h2>
       <div class="grid">
         <label>Tank name<input id="set-tank"></label>
@@ -538,6 +544,9 @@
   </section>
 </main>
 
+<script id="site-i18n">
+/*@I18N@*/
+</script>
 <script id="site-core">
 /*@CORE@*/
 </script>
@@ -546,6 +555,7 @@
 (function () {
   "use strict";
   const C = window.CalibSite;
+  const I18N = window.CalibI18n || null;
   const KEY = "calib-site:active", ARCH = "calib-site:archive";
   const $ = (id) => document.getElementById(id);
   const f = (x, d = 1) => (x == null || !isFinite(x) ? "—" : Number(x).toFixed(d));
@@ -727,7 +737,7 @@
   $("t-plus").addEventListener("click", guard("p-err", () => {
     const now = Date.now(), u = activeUnit();
     if (!(u > 0)) throw new Error("Enter the can size in litres.");
-    if (S.quickTap(now) && !confirm(`Less than ${S.cfg.tapGap} s since the last can. Is this a new can?`)) return;
+    if (S.quickTap(now) && !confirm(tr(`Less than ${S.cfg.tapGap} s since the last can. Is this a new can?`))) return;
     S.tap(now, u); save();
     // The can is counted: its pour timer and alarm are done.
     if (T.pour) { delete T.pour; saveTimer(); }
@@ -828,19 +838,19 @@
   $("a-edit").addEventListener("click", guard("d-err", () => {
     const L = isTransfer() ? S.out.current() : S.current();
     const what = isTransfer() ? "Batch" : isDrain() ? "Drain" : "Pour";
-    const t = prompt(`${what} after the recount, L (? = unknown, 200+? = 200 plus unknown):`, L.step.text);
+    const t = prompt(tr(`${what} after the recount, L (? = unknown, 200+? = 200 plus unknown):`), L.step.text);
     if (t == null) return;
     S.editPour(t.trim()); save();
   }));
   $("a-override").addEventListener("click", guard("d-err", () => {
-    const why = prompt("Why do you accept this level against the check?", "");
+    const why = prompt(tr("Why do you accept this level against the check?"), "");
     if (why == null) return;
     S.override(why.trim()); save();
   }));
   $("a-undo").addEventListener("click", guard("d-err", () => {
-    if (!confirm(isTransfer()
+    if (!confirm(tr(isTransfer()
       ? "Remove the last reading (the tank dipped last), or the last batch when it has no readings?"
-      : S.cans() ? "Remove the last can from the count?" : "Remove the last entry (the last reading, or the last pour if it has no reading)?")) return;
+      : S.cans() ? "Remove the last can from the count?" : "Remove the last entry (the last reading, or the last pour if it has no reading)?"))) return;
     if (isTransfer()) {
       const a = S.out.current(), b = S.in.current();
       if (S.out.levels.length === 1 && S.in.levels.length === 1
@@ -867,7 +877,7 @@
     file.text().then((t) => {
       try {
         const s = fromJSON(JSON.parse(t));
-        if (S && !confirm("Replace the open session? It goes to the archive.")) return;
+        if (S && !confirm(tr("Replace the open session? It goes to the archive."))) return;
         if (S) pushArchive();
         resetTallySize();
         S = s; save(); tab = "live"; render();
@@ -884,7 +894,7 @@
     localStorage.setItem(ARCH, JSON.stringify(a.slice(0, 20)));
   }
   $("f-new").addEventListener("click", () => {
-    if (S && !confirm("Close this session? Export it first. It goes to this browser's archive.")) return;
+    if (S && !confirm(tr("Close this session? Export it first. It goes to this browser's archive."))) return;
     if (S) pushArchive();
     resetTallySize();
     S = null; localStorage.removeItem(KEY); render();
@@ -893,7 +903,7 @@
     const b = ev.target.closest("button[data-i]"); if (!b) return;
     const item = archive()[+b.dataset.i];
     if (b.dataset.act === "open") {
-      if (S && !confirm("Replace the open session? It goes to the archive.")) return;
+      if (S && !confirm(tr("Replace the open session? It goes to the archive."))) return;
       if (S) pushArchive();
       resetTallySize();
       S = fromJSON(item.session); save(); tab = "live"; render();
@@ -1033,7 +1043,7 @@
   /** One verdict in simple mode: the title and the action, plus an unknown pour's estimate. */
   function shortVerdict(v, name, pend) {
     const x = v.unknown && !pend ? `<p class="mono">x = ${f(v.unknown.x)} ± ${f(2 * v.unknown.sigma)} L</p>` : "";
-    return `<h3>${name ? esc(name) + ": " : ""}${esc(v.title)}</h3>${x}${v.advice ? `<p class="advice">${esc(v.advice)}</p>` : ""}`;
+    return `<h3>${name ? esc(name) + " — " : ""}${esc(v.title)}</h3>${x}${v.advice ? `<p class="advice">${esc(v.advice)}</p>` : ""}`;
   }
 
   function renderLive(st) {
@@ -1149,7 +1159,7 @@
     const pend = L && L.state === "pending";
     if (simple()) return `<div class="verdict v-${v.color || "info"}" style="margin-bottom:0.6rem">${shortVerdict(v, name, pend)}</div>`;
     if (pend && (v.hidden || v.status === "REDIP")) {
-      return `<div class="verdict v-${v.color || "info"}" style="margin-bottom:0.6rem"><h3>${esc(name)}: ${esc(v.title)}</h3><p>${esc(v.message)}</p><p class="advice">${esc(v.advice)}</p>`
+      return `<div class="verdict v-${v.color || "info"}" style="margin-bottom:0.6rem"><h3>${esc(name)} — ${esc(v.title)}</h3><p>${esc(v.message)}</p><p class="advice">${esc(v.advice)}</p>`
         + `<p class="muted">${L.dips.length} reading(s) recorded. The page shows them after the next reading.</p></div>`;
     }
     let extra = "";
@@ -1157,7 +1167,7 @@
     if (L && L.dips.length > 1 && !pend) extra += `<p class="muted">Readings: ${L.dips.map((d) => f(d)).join(" / ")} mm → adopted ${f(L.H)} mm</p>`;
     // No per-tank "next pour" here: the batch is shared, and the Now card
     // gives the batch advice with the level each tank must find.
-    return `<div class="verdict v-${v.color || "info"}" style="margin-bottom:0.6rem"><h3>${esc(name)}: ${esc(v.title)}</h3><p>${esc(v.message)}</p>${extra}<p class="advice">${esc(v.advice)}</p></div>`;
+    return `<div class="verdict v-${v.color || "info"}" style="margin-bottom:0.6rem"><h3>${esc(name)} — ${esc(v.title)}</h3><p>${esc(v.message)}</p>${extra}<p class="advice">${esc(v.advice)}</p></div>`;
   }
 
   /** The live tab of a transfer: both tanks, one can tally, one dip at a time. */
@@ -1699,7 +1709,7 @@
     alarmBeeps = beeps || 3;
     $("alarm-text").textContent = text;
     $("alarm").classList.remove("hidden");
-    document.title = "⏰ " + text;
+    document.title = "⏰ " + tr(text);
     ringTick(Date.now());
   }
   function ringTick(now) {
@@ -1714,7 +1724,7 @@
     const was = alarmOn || !$("alarm").classList.contains("hidden");
     alarmOn = false;
     $("alarm").classList.add("hidden");
-    document.title = TITLE;
+    document.title = tr(TITLE);
     if (was && navigator.vibrate) navigator.vibrate(0);
   }
   $("alarm-stop").addEventListener("click", () => { stopAlarm(); render(); });
@@ -2064,7 +2074,7 @@
         + ` <button class="small" data-note-save="${L.row}">Save</button>`
         + ` <button class="small secondary" data-note-cancel="${L.row}">Cancel</button>`;
     }
-    return `${tags}${sep}${esc(L.note || "")} <button class="small secondary" id="note-edit-${L.row}" data-note-edit="${L.row}" title="Edit the note" aria-label="Edit note for row ${L.row}">Edit</button>`;
+    return `${tags}${sep}<span translate="no">${esc(L.note || "")}</span> <button class="small secondary" id="note-edit-${L.row}" data-note-edit="${L.row}" title="Edit the note" aria-label="Edit note for row ${L.row}">Edit</button>`;
   }
 
   // ------------------------------------------------- table ↔ chart selection
@@ -2342,7 +2352,70 @@
       + `<button class="secondary small" data-i="${i}" data-act="open">Open</button><button class="secondary small" data-i="${i}" data-act="get">Download</button></div>`).join("") : "";
   }
 
+  // ------------------------------------------------------------ language
+  // The page writes English; the translator (i18n.js) shows each text in
+  // the chosen language.  A DOM observer translates every text the page
+  // writes, the moment it writes it, so the render code stays in one
+  // language.  User text (notes, tank names in inputs) is marked
+  // translate="no" or lives in inputs, which the observer never touches.
+  // Switching back to English reloads the page: the session is saved.
+  function lang() {
+    if (P.lang) return P.lang;
+    const nav = (typeof navigator !== "undefined" && navigator.language) || "";
+    return /^vi\b/i.test(nav) ? "vi" : "en";
+  }
+  function tr(s) { return I18N ? I18N.translate(s, lang()) : s; }
+  const ATTRS = ["title", "aria-label", "placeholder"];
+  const SKIP = '[translate="no"], script, style, textarea';
+  function trText(node) {
+    const el = node.parentElement;
+    if (!el || (el.closest && el.closest(SKIP))) return;
+    const out = tr(node.data);
+    if (out !== node.data) node.data = out;
+  }
+  function trAttrs(el) {
+    if (!el.getAttribute || (el.closest && el.closest(SKIP))) return;
+    for (const a of ATTRS) {
+      const v = el.getAttribute(a);
+      if (v) { const out = tr(v); if (out !== v) el.setAttribute(a, out); }
+    }
+  }
+  function trTree(root) {
+    if (root.nodeType === 3) { trText(root); return; }
+    if (root.nodeType !== 1) return;
+    trAttrs(root);
+    const w = document.createTreeWalker(root, 1 | 4);   // elements and text
+    for (let n = w.nextNode(); n; n = w.nextNode()) { if (n.nodeType === 3) trText(n); else trAttrs(n); }
+  }
+  function startLang() {
+    const L = lang();
+    if (document.documentElement && document.documentElement.setAttribute) document.documentElement.setAttribute("lang", L);
+    const sel = $("set-lang");
+    sel.innerHTML = (I18N ? I18N.LANGS : [{ code: "en", name: "English" }])
+      .map((x) => `<option value="${x.code}"${x.code === L ? " selected" : ""}>${esc(x.name)}</option>`).join("");
+    sel.value = L;
+    if (L === "en" || typeof MutationObserver === "undefined" || !document.createTreeWalker || !document.body) return;
+    document.title = tr(TITLE);
+    trTree(document.body);
+    new MutationObserver((muts) => {
+      for (const m of muts) {
+        if (m.type === "characterData") trText(m.target);
+        else if (m.type === "attributes") trAttrs(m.target);
+        else for (const n of m.addedNodes) trTree(n);
+      }
+    }).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ATTRS });
+  }
+  $("set-lang").addEventListener("change", () => {
+    const v = $("set-lang").value, was = lang();
+    P.lang = v;
+    localStorage.setItem(PREFS, JSON.stringify(P));
+    if (v === was) return;
+    // English needs the page's own text back: reload (the session is saved).
+    if (typeof location !== "undefined" && location.reload) location.reload();
+  });
+
   S = load();
+  startLang();
   render();
 })();
 </script>

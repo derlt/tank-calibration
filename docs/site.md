@@ -66,10 +66,12 @@ tape gets 0.2–0.4 mm. Do not use the §9 interval σ (about 1–1.5 mm) here: 
 
 ## Settings
 
-The **Settings** tab holds every number the check uses, in three cards:
+The **Settings** tab holds the page language and every number the check
+uses, in four cards:
 
 | Card | Holds | When |
 |---|---|---|
+| Language | The language of the page: English or Tiếng Việt (Vietnamese) | Any time |
 | This campaign | Tank name, D, L, pour unit and their ± | After the first level |
 | Noise and limits | Reading σ, pour noise, datum ±, brim ± at the neck entrance (drain) | Before or during a campaign |
 | Timers, alarm and device | Settle and dip times, fill time per can, alarm lead, animation, sound, vibration, screen | After the first level |
@@ -90,6 +92,34 @@ the 3 % default from the L you enter, so a corrected L also gets a new limit.
 
 The timers and device settings are operator settings, not data: they never
 enter the raw file or the fit.
+
+### Language
+
+Choose the language in **Settings → Language**. The device keeps the choice;
+the page reloads in the new language (the open session is saved). Without a
+choice, a phone set to Vietnamese starts in Vietnamese, any other in English.
+
+Only what the page shows changes. The exported raw CSV and the session JSON
+stay in English: they are the record that `calib init` and `calib fit` read,
+and a site marker such as *pour edited on site* means the same in every
+campaign. Status codes of the anomaly register (`OBJECT?`, `LOSS?`, `LEAK?`,
+`RETURN?`) stay as they are in both languages. Notes and tank names stay as
+typed.
+
+**How the translation works.** The page and the core write English. The
+translator in `site/i18n.js` shows each text in the chosen language: a DOM
+observer translates every text the page writes, when it writes it. The
+dictionary maps English to Vietnamese. A key is a whole text, or a pattern:
+`{0}`…`{9}` take a number, a named placeholder such as `{name}` takes text
+within one sentence. A text with no key is split at ` · `, ` — ` and sentence
+ends, and each part is looked up alone; a part with no key stays English.
+
+**When you change a text on the page or in the core,** add its Vietnamese key
+to `site/i18n.js`. `tests/test_i18n.py` fails on any English text with no key:
+it drives the page through fill, drain, transfer, simple and verbose mode,
+errors, timers and replay (`tests/i18n_harness.js`), and reads the static
+HTML of `page.html`. To list the whole texts behind the missing parts, run
+`I18N_WHOLE=1 node tests/i18n_harness.js vi STATIC.json`.
 
 ## Each pour
 
@@ -505,8 +535,10 @@ for example `1,2`) and `--neck-entrance` (row 1 is the brim reading). Without
 | File | Role |
 |---|---|
 | `site/site_core.js` | The rules and the maths. One source for the page and the tests. |
+| `site/i18n.js` | The page translator and the Vietnamese dictionary. |
 | `site/page.html` | The page template. |
 | `site/calib_site.html` | The built page. Copy this file to the device. |
 | `site/replay.js` | Replay a raw CSV from a terminal. |
 | `site/simulate.js` | Detection-rate study on synthetic campaigns. |
 | `tests/test_site.py` | Build check; with Node: geometry against Python, demo replay, session rules, detection rate. |
+| `tests/test_i18n.py`, `tests/i18n_harness.js` | The translator's rules, and a Vietnamese key for every text the page can show. |

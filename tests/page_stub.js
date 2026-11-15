@@ -57,7 +57,7 @@ function boot(pagePath, corePath, store) {
   const mem = store || new Map();
   const downloads = [];   // every <a> the page makes: { download: filename, href }
   const context = {
-    window: { CalibSite: core, addEventListener: () => {} },
+    window: { CalibSite: core, CalibI18n: require(require("path").join(require("path").dirname(corePath), "i18n.js")), addEventListener: () => {} },
     document: { getElementById: el, createElement: () => { const a = makeElement("a"); downloads.push(a); return a; }, body: { appendChild: () => {} } },
     localStorage: {
       getItem: (k) => (mem.has(k) ? mem.get(k) : null),
@@ -88,7 +88,7 @@ function boot(pagePath, corePath, store) {
   context.window.document = context.document;
   vm.createContext(context);
   vm.runInContext(pageScript, context);
-  return { el, tabs, store: mem, downloads };
+  return { el, els, tabs, store: mem, downloads };
 }
 
 module.exports = { boot };
