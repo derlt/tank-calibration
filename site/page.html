@@ -66,6 +66,12 @@
   th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--card); }
   td.l, th.l { text-align: left; }
   td { font-family: var(--mono); }
+  #log-table tr[data-row] { cursor: pointer; }
+  #log-table tr.sel td { background: #fff1c2; }
+  #log-table tr.sel td:first-child { box-shadow: inset 4px 0 0 #14324a; }
+  #chart .mark { cursor: pointer; }
+  #chart .mark:focus { outline: none; }
+  #chart .mark:focus-visible .hit { stroke: #14324a; stroke-width: 1.5; stroke-dasharray: 2 2; }
   td input.note { width: 16rem; max-width: 55vw; font-size: 0.9rem; padding: 0.25rem 0.4rem; }
   .tabs { display: flex; gap: 0.3rem; flex-wrap: wrap; }
   .tabs button { background: #fff; color: var(--brand); min-height: 2.3rem; padding: 0.3rem 0.8rem; }
@@ -380,8 +386,9 @@
     <h2 id="chart-title"></h2>
     <div id="chart"></div>
     <div class="legend" id="chart-legend"></div>
+    <p id="chart-sel" style="margin:0.3rem 0 0;font-weight:650"></p>
     <p class="muted" id="chart-note"></p>
-    <p class="muted">Tap a button, or swipe the chart left or right, to change the chart.</p>
+    <p class="muted">Tap a button, or swipe the chart left or right, to change the chart. Tap a mark to find its row in the table, or tap a row to find its mark.</p>
     <h2 style="margin-top:0.8rem" id="log-title">Levels</h2>
     <div class="table"><table id="log-table"></table></div>
     <p id="log-err" class="error"></p>
@@ -536,6 +543,7 @@
   let S = null;           // the session
   let tab = "live";
   let editRow = null;     // the row whose note is open for editing
+  let sel = null;         // the selected level in Log & charts: { tank, row }, shared by the table and the chart
 
   // ------------------------------------------------------------ storage
   function save() { if (S) localStorage.setItem(KEY, JSON.stringify(S.toJSON())); }
@@ -1933,7 +1941,8 @@
     for (const L of S.levels) {
       const blind = L.state === "pending" && L.dips.length > 0;
       const c = !blind && L.check ? L.check : {};
-      h += `<tr><td>${L.row}</td><td>${esc(L.step.text)}${L.cans ? ` · ${L.cans.unit ? `${L.cans.tapped}×${f(L.cans.unit, 0)}` : `${L.cans.tapped} cans`}` : ""}</td><td>${blind ? "• • •" : L.dips.map((d) => f(d)).join(" / ")}</td><td class=l>${timeCell(L)}</td>`
+      const on = isSel(L.row);
+      h += `<tr id="log-row-${L.row}" data-row="${L.row}" tabindex="0"${on ? ' class="sel" aria-selected="true"' : ""}><td>${L.row}</td><td>${esc(L.step.text)}${L.cans ? ` · ${L.cans.unit ? `${L.cans.tapped}×${f(L.cans.unit, 0)}` : `${L.cans.tapped} cans`}` : ""}</td><td>${blind ? "• • •" : L.dips.map((d) => f(d)).join(" / ")}</td><td class=l>${timeCell(L)}</td>`
         + `<td>${blind || L.H == null ? "—" : f(L.H)}</td><td>${f(c.predicted)}</td><td>${c.sd ? f(2 * c.sd) : "—"}</td>`
         + `<td>${c.e == null ? "—" : sg(c.e)}</td><td>${c.resid == null ? "—" : sg(c.resid)}</td><td>${c.z == null ? "—" : sg(c.z)}</td>`
         + `<td class=l>${stateTag(L)}${L.suspect ? ' <span class="tag t-pending">suspect</span>' : ""}</td><td class=l>${noteCell(L)}</td></tr>`;
@@ -1967,6 +1976,53 @@
     return `${tags}${sep}${esc(L.note || "")} <button class="small secondary" id="note-edit-${L.row}" data-note-edit="${L.row}" title="Edit the note" aria-label="Edit note for row ${L.row}">Edit</button>`;
   }
 
+  // ------------------------------------------------- table ↔ chart selection
+  /** Is row the selected level of the tank now shown? */
+  function isSel(row) { return !!(sel && S && sel.tank === S.cfg.tank && sel.row === row); }
+
+  /**
+   * Select a level from the table or the chart; the same level again clears
+   * it.  The other view shows the selection and scrolls into sight: a tap on
+   * a row brings the chart into view, a tap on a mark brings the row.
+   */
+  function select(row, from) {
+    sel = isSel(row) ? null : { tank: S.cfg.tank, row };
+    if (editRow == null) renderLog();
+    else {
+      // The note editor is open: keep its draft, update only the row marks.
+      for (const tr of $("log-table").querySelectorAll("tr[data-row]")) {
+        const on = isSel(+tr.dataset.row);
+        tr.classList.toggle("sel", on);
+        if (on) tr.setAttribute("aria-selected", "true"); else tr.removeAttribute("aria-selected");
+      }
+      renderChart();
+    }
+    if (!sel) return;
+    const target = from === "chart" ? $(`log-row-${row}`) : $("chart");
+    if (target && target.scrollIntoView) target.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+
+  /** One line under the chart: the selected level, or why it has no mark here. */
+  function selNote(marked) {
+    if (!sel || sel.tank !== S.cfg.tank) return "";
+    const L = S.levels.find((l) => l.row === sel.row);
+    if (!L) { sel = null; return ""; }
+    if (marked) return `Selected: row ${L.row}${L.H != null ? ` at ${f(L.H)} mm` : ""}. Tap it again to clear.`;
+    const why = L.state === "pending" ? "it waits for a reading"
+      : which === "miss" ? "it has no checked prediction" : "it is not a fitted interval";
+    return `Selected: row ${L.row} has no mark in this chart (${why}).`;
+  }
+
+  $("chart").addEventListener("click", (ev) => {
+    const g = ev.target && ev.target.closest ? ev.target.closest("[data-row]") : null;
+    if (g) select(+g.dataset.row, "chart");
+    else if (sel) { sel = null; editRow == null ? renderLog() : renderChart(); }
+  });
+  $("chart").addEventListener("keydown", (ev) => {
+    const g = ev.target && ev.target.closest ? ev.target.closest("[data-row]") : null;
+    if (g && (ev.key === "Enter" || ev.key === " ")) { if (ev.preventDefault) ev.preventDefault(); select(+g.dataset.row, "chart"); }
+  });
+
   /** Put the focus back on the row's Edit button after the editor closes. */
   function focusEdit(row) {
     const b = row == null ? null : $(`note-edit-${row}`);
@@ -1984,9 +2040,18 @@
     const s = pick("button[data-note-save]");
     if (s) { saveNote(+s.dataset.noteSave); return; }
     const c = pick("button[data-note-cancel]");
-    if (c) { const row = +c.dataset.noteCancel; editRow = null; renderLog(); focusEdit(row); }
+    if (c) { const row = +c.dataset.noteCancel; editRow = null; renderLog(); focusEdit(row); return; }
+    // A tap on a row (not on its note editor) selects its mark in the chart.
+    if (pick("input, button")) return;
+    const tr = pick("tr[data-row]");
+    if (tr) select(+tr.dataset.row, "table");
   });
   $("log-table").addEventListener("keydown", (ev) => {
+    if (ev.target && ev.target.dataset && ev.target.dataset.row && (ev.key === "Enter" || ev.key === " ")) {
+      if (ev.preventDefault) ev.preventDefault();
+      select(+ev.target.dataset.row, "table");
+      return;
+    }
     if (!ev.target || ev.target.id !== "note-edit") return;
     if (ev.key === "Enter") {
       // An input method may use Enter to pick a character.
@@ -2031,6 +2096,7 @@
   };
   const ORDER = Object.keys(CHARTS);
   let which = "miss";
+  let plotY = [16, 232];   // top and bottom of the plot area, set by frame()
 
   function pickChart(k) {
     if (!CHARTS[k] || k === which) return;
@@ -2060,7 +2126,10 @@
     const c = CHARTS[which];
     $("chart-title").textContent = isTransfer() ? `${S.cfg.tank} — ${c.title}` : c.title;
     $("chart-note").textContent = (isDrain() && c.noteDrain) || c.note;
-    $("chart").innerHTML = c.draw();
+    const svg = c.draw();
+    $("chart").innerHTML = svg;
+    const marked = !!sel && svg.indexOf(`data-row="${sel.row}"`) >= 0;
+    $("chart-sel").textContent = selNote(marked);
     $("chart-legend").innerHTML = Object.keys(COL).map((k) => `<span><i style="background:${COL[k]}"></i>${k}</span>`).join("")
       + `<span><i style="background:#fff;border:2px solid ${COL.accepted}"></i>watch</span>`;
   }
@@ -2078,6 +2147,7 @@
   function frame(label, ylo, yhi, unit) {
     const W = Math.max(280, Math.min(720, Math.round($("chart").clientWidth || 700)));
     const H = 260, l = 44, r = 10, t = 16, b = 28;
+    plotY = [t, H - b];
     const top = Math.max(C.brim(S.fit.p), ...S.levels.filter((L) => L.H != null).map((L) => L.H));
     const X = (h) => l + (W - l - r) * Math.min(Math.max(h / top, 0), 1);
     const Y = (v) => t + (H - t - b) * (1 - (Math.min(Math.max(v, ylo), yhi) - ylo) / (yhi - ylo));
@@ -2091,9 +2161,18 @@
     const hline = (v, stroke, dash, op) => `<line x1="${l}" x2="${W - r}" y1="${Y(v)}" y2="${Y(v)}" stroke="${stroke}"${dash ? ` stroke-dasharray="${dash}"` : ""} opacity="${op || 1}"/>`;
     return { s, X, Y, top, hline, empty: `<text x="${(W + l - r) / 2}" y="${H / 2}" text-anchor="middle">No checked interval yet</text>` };
   }
+  /**
+   * One mark: a group keyed by its row, with a wide clear circle so a
+   * finger hits it.  The selected mark gets a vertical guide and a dark
+   * ring (table ↔ chart selection).
+   */
   function dot(x, y, d, text) {
-    const k = COL[d.state] || INK;
-    return `<circle cx="${x}" cy="${y}" r="${d.watch ? 5 : 4}" fill="${d.watch ? "#fff" : k}" stroke="${k}" stroke-width="2"><title>${esc(text)}</title></circle>`;
+    const k = COL[d.state] || INK, on = isSel(d.row);
+    const guide = on ? `<line x1="${x}" x2="${x}" y1="${plotY[0]}" y2="${plotY[1]}" stroke="#14324a" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.7"/>` : "";
+    const ring = on ? `<circle cx="${x}" cy="${y}" r="10" fill="#fff1c2" stroke="#14324a" stroke-width="2.5"/>` : "";
+    return `<g class="mark${on ? " sel" : ""}" data-row="${d.row}" tabindex="0" role="button" aria-label="${esc(text)}"${on ? ' aria-pressed="true"' : ""}>`
+      + `${guide}<circle class="hit" cx="${x}" cy="${y}" r="14" fill="transparent"/>${ring}`
+      + `<circle cx="${x}" cy="${y}" r="${d.watch ? 5 : 4}" fill="${d.watch ? "#fff" : k}" stroke="${k}" stroke-width="2"/><title>${esc(text)}</title></g>`;
   }
   function path(pts) { return pts.map((q, i) => `${i ? "L" : "M"}${q[0].toFixed(1)} ${q[1].toFixed(1)}`).join(""); }
 

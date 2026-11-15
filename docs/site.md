@@ -281,6 +281,15 @@ level. The site's own markers, such as *pour edited on site* and *accepted
 against the check*, stay apart from the note: an edit cannot erase them, and
 the cell shows them before the note in grey.
 
+The table and the chart select one level together. Tap a row: the row gets
+a yellow background, and its mark in the chart gets a dark ring and a dashed
+vertical line. Tap a mark: its row is selected in the same way, and the
+table scrolls to it. Tap the same row or mark again, or an empty part of
+the chart, to clear the selection. The selection stays when you change the
+chart. A level with no mark in the chart now shown (the first level, a
+pending level, an unknown pour) says so in the line under the chart. The
+*time* column gives when the pour ended and when each reading was taken.
+
 ## Drain campaign (reverse strapping)
 
 A drain campaign runs the calibration from the top down. The tank is full of

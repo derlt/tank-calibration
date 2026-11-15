@@ -506,6 +506,59 @@ class TestSitePage(unittest.TestCase):
         self.assertRegex(got["table"], r"poured \d\d:\d\d", "the pour carries a time")
 
     @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_selects_a_level_in_table_and_chart(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "for (const h of ['489', '573', '651']) {\n"
+            "  el('p-vol').value = '400'; el('p-go').click();\n"
+            "  el('d-val').value = h; el('d-go').click();\n"
+            "  if (!el('dip-card')._classes.has('hidden')) { el('d-val').value = h; el('d-go').click(); }\n"
+            "}\n"
+            "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'log' } }) } });\n"
+            "const rows = [...el('chart').innerHTML.matchAll(/data-row=\"(\\d+)\"/g)].map((m) => m[1]);\n"
+            "out.rows = rows;\n"
+            "const r = rows[rows.length - 1];\n"
+            "// A tap on a table row: the row and its mark are selected.\n"
+            "const rowTarget = { closest: (s) => (s === 'tr[data-row]' ? { dataset: { row: r } } : null) };\n"
+            "el('log-table')._listeners.click[0]({ target: rowTarget });\n"
+            "out.tableSel = (el('log-table').innerHTML.match(/<tr [^>]*class=\"sel\"[^>]*>/g) || []);\n"
+            "out.chartSel = (el('chart').innerHTML.match(/class=\"mark sel\" data-row=\"(\\d+)\"/) || [])[1];\n"
+            "out.note = el('chart-sel').textContent;\n"
+            "// A tap on the same mark clears it.\n"
+            "const markTarget = (row) => ({ closest: (s) => (s === '[data-row]' ? { dataset: { row } } : null) });\n"
+            "el('chart')._listeners.click[0]({ target: markTarget(r) });\n"
+            "out.cleared = /class=\"sel\"/.test(el('log-table').innerHTML) || /mark sel/.test(el('chart').innerHTML);\n"
+            "// A tap on another mark selects its row.\n"
+            "el('chart')._listeners.click[0]({ target: markTarget(rows[0]) });\n"
+            "out.fromChart = (el('log-table').innerHTML.match(/<tr id=\"log-row-(\\d+)\"[^>]*class=\"sel\"/) || [])[1];\n"
+            "// A tap on the empty chart clears the selection.\n"
+            "el('chart')._listeners.click[0]({ target: { closest: () => null } });\n"
+            "out.blank = /class=\"sel\"/.test(el('log-table').innerHTML);\n"
+            "// A row without a mark in this chart (the start level) says so.\n"
+            "el('log-table')._listeners.click[0]({ target: { closest: (s) => (s === 'tr[data-row]' ? { dataset: { row: '1' } } : null) } });\n"
+            "out.noMark = el('chart-sel').textContent;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertGreaterEqual(len(got["rows"]), 2, got["rows"])
+        last = got["rows"][-1]
+        self.assertEqual(len(got["tableSel"]), 1)
+        self.assertIn(f'data-row="{last}"', got["tableSel"][0])
+        self.assertEqual(got["chartSel"], last)
+        self.assertIn(f"Selected: row {last}", got["note"])
+        self.assertFalse(got["cleared"], "a second tap on the same mark clears the selection")
+        self.assertEqual(got["fromChart"], got["rows"][0])
+        self.assertFalse(got["blank"], "a tap on the empty chart clears the selection")
+        self.assertIn("row 1 has no mark in this chart", got["noMark"])
+
+    @unittest.skipUnless(NODE, "node is not installed")
     def test_core_exports_the_times_in_the_note(self):
         got = _node(
             "const s = new core.Session({ D: 1800, Lest: 3000 });\n"

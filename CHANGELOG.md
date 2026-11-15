@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Log & charts: the Levels table and the chart select one level together.
+  A tap on a row rings its mark in the chart and draws a vertical guide at
+  its level; a tap on a mark highlights its row and scrolls the table to
+  it. A second tap, or a tap on an empty part of the chart, clears it. The
+  selection stays across the four charts; a level with no mark in the chart
+  now shown says why. Rows and marks also answer Enter and Space, and each
+  mark has a wide touch area.
 - Live tab: the pour advice now gives the level the next dip must find
   (§10a.2), for the advised pour, from the running shell: "Expect the next
   dip at ≈ H ± 2σ mm". A drain gives the level after the advised drain; a
