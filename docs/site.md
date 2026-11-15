@@ -390,19 +390,26 @@ The setup asks for both tanks: A's record (it is a drain, so the start-level
 choice applies to A) and B's record with its heel. Both first levels are
 dipped before the first batch, two readings each. Then each batch is: pump
 cans from A → *Batch done* → empty the cans into B → dip A → dip B. The dip
-card has **one field per tank**: type both readings and press *Check both*,
-or fill only the tank you have read. A blank field leaves that tank waiting.
-A decided tank's field is closed; *Take another reading* re-opens it. Each
-field carries its role: a **↑ pump out** badge on A's field and a **↓ pour
-in** badge on B's, with the input edge in the same colour. The arrow follows
-the water: out of the underground tank is up, into it is down.
+card has **one field per tank** and one button per tank: *Check alpha*
+submits A's reading, *Check beta* submits B's. Each button reads only its
+own field, so you can check one tank now and the other later. A decided
+tank's field and button are closed; *Take another reading* re-opens it. The
+two fields sit in their own tinted cards, under a **Same batch** header,
+with a tank pictogram that shows the level and the arrow direction, a large
+arrow watermark in the input, and a role legend line. Each field carries its
+role: a **↑ pump out** badge on A's field and a **↓ pour in** badge on B's,
+with the input edge in the same colour. The arrow follows the water: out of
+the underground tank is up, into it is down.
 
 Each tank keeps its own check, its own running shell and its own raw file.
-The **A / B switch** turns the Log & charts tab, the Shell tab and the
-campaign card to the other tank; the Log & charts tab carries the same
-switch, and its table and chart are always the named tank's own (A's table
-reads *drained L*, B's *pour L*). The Live tab always shows both. *Files*
-exports one raw CSV per tank.
+The header's **Current tank** switch names each tank with its role
+(`alpha · out`, `beta · in`). It selects the tank that the Log & charts,
+Shell and campaign cards show, and the tank that *Take another reading* and
+*Accept anyway* apply to; the Live tab marks the current tank. The switch
+hides on Replay and Help, where it changes nothing. The Log & charts tab
+carries the same switch, and its table and chart are always the named tank's
+own (A's table reads *drained L*, B's *pour L*). The Live tab always shows
+both tanks. *Files* exports one raw CSV per tank.
 
 **The pair view.** When both dips of a batch are in, the page compares the
 two residuals of the same batch — but only on levels the prediction test

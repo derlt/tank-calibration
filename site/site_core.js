@@ -1453,7 +1453,10 @@
 
   /** Accept the pending level against the check (operator decision). */
   TransferSession.prototype.override = function (why) {
-    const k = this.pendingTank() || this.active;
+    // The current tank first: the header switch says which tank the level
+    // actions apply to.  A decided current tank leaves the only pending one.
+    const act = this[this.active].current();
+    const k = act && act.state === "pending" ? this.active : (this.pendingTank() || this.active);
     const v = this[k].override(why);
     this._pair();   // an override is not a prediction test: the pair leaves with it
     return v;

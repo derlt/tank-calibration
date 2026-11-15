@@ -28,15 +28,22 @@ All notable changes to this project are documented here. The format follows
   cards to the other tank. `TransferSession` in `site/site_core.js`;
   methodology §3.12; operator guide in `docs/site.md`;
   `tests/test_site.py::TestSiteTransfer`.
-- Transfer dips enter both tanks at once: the dip card has one field per
-  tank, so the two readings of a batch are typed in one go and checked with
-  one button (`TransferSession.dipBoth`). Each field carries a visual clue —
-  a ↑ pump out badge on A's field and a ↓ pour in badge on B's, with the
-  input edge in the same colour; the arrow follows the water. A blank field
-  leaves that tank waiting; a decided tank's field is closed until *Take
-  another reading*.
+- Transfer dips enter both tanks at once: the dip card has one field and one
+  button per tank, so each tank is checked as soon as its reading is in
+  (`TransferSession.dipBoth`). The two fields sit in tinted cards under a
+  **Same batch** header, each with a tank pictogram that shows the level and
+  the arrow direction, a large arrow watermark in the input, and a role
+  legend line. Each field carries a visual clue — a ↑ pump out badge on A's
+  field and a ↓ pour in badge on B's, with the input edge in the same
+  colour; the arrow follows the water. A decided tank's field and button are
+  closed until *Take another reading*.
   The Log & charts tab carries its own A/B switch, and its table and chart
   headings name the tank they show, so the two tanks stay separate.
+- The header tank switch now says what it does: a **Current tank** label,
+  each button named with its role (`alpha · out`, `beta · in`), and a
+  *current* marker on the Live tab's tank block. The level actions name the
+  tank they apply to, an override follows the current tank while it waits,
+  and the switch hides on Replay and Help, where it changes nothing.
 - Reverse strapping (drain campaigns, §3.11): a tank that is already full is
   calibrated from the top down, with a pump that draws known volumes out in
   cans. `"direction": "drain"` in the campaign JSON; `calib init` infers it

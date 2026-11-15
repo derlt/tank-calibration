@@ -120,7 +120,7 @@ adopted shell, so the tool cannot drift from the fit.
 | 10a.10 Performance | `site/simulate.js`; `tests/test_site.py` |
 | Offline page | `site/page.html` + core → `calib site-page` → `site/calib_site.html` |
 | Settings tab | `site/page.html`; `Session.setCampaign` refits the running shell after a change of the tank record, the priors or the noise |
-| Transfer, two tanks (§3.12) | `TransferSession` in `site_core.js` + the page's transfer mode: shared tally, one dip field per tank (`dipBoth`), per-tank verdicts, the pair view after both dips, per-tank raw files, an A/B switch in the header and in Log & charts |
+| Transfer, two tanks (§3.12) | `TransferSession` in `site_core.js` + the page's transfer mode: shared tally, one dip field and button per tank (`dipBoth`), tinted field cards with tank pictograms and a same-batch header, per-tank verdicts, the pair view after both dips, per-tank raw files, a labeled Current tank switch in the header and in Log & charts |
 
 ## §11 Deliverables
 

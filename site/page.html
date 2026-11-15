@@ -112,7 +112,26 @@
   .eta div { margin: 0.15rem 0; }
   .pred { margin: 0.45rem 0 0; font-size: 0.93rem; font-weight: 650; }
   .pred.muted { font-weight: 400; }
-  .dip-head { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+  .dipfield-h { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+  .dipfield-in { display: flex; gap: 0.5rem; align-items: stretch; margin-top: 0.55rem; flex-wrap: wrap; }
+  .dipfield-in > button { flex: 0 0 auto; }
+  .inwrap { position: relative; flex: 1 1 9rem; }
+  #dip-card.two .dipfield { border: 1px solid; border-left-width: 6px; border-radius: 12px; padding: 0.6rem 0.7rem; margin: 0.6rem 0; }
+  #dip-card.two #dip-row-a { border-color: #e7c9a0; border-left-color: var(--warn); background: #fffaf1; }
+  #dip-card.two #dip-row-b { border-color: #b9d2ea; border-left-color: var(--info); background: #f5f9fd; }
+  #dip-card.two .inwrap input { padding-right: 2.4rem; }
+  #dip-card.two #d-val:focus { outline: 3px solid var(--warn); outline-offset: 1px; }
+  #dip-card.two #d-val-b:focus { outline: 3px solid var(--info); outline-offset: 1px; }
+  .wm { position: absolute; right: 0.6rem; top: 50%; transform: translateY(-50%); font-size: 1.7rem; font-weight: 700; opacity: 0.35; pointer-events: none; }
+  .wm.out { color: var(--warn); }
+  .wm.in { color: var(--info); }
+  .chip { display: inline-flex; align-items: center; justify-content: center; width: 1.5rem; height: 1.5rem; border-radius: 6px; font-weight: 800; font-size: 0.8rem; flex: 0 0 auto; }
+  .chip.out { background: var(--warn); color: #fff; }
+  .chip.in { background: #fff; color: var(--info); border: 2px solid var(--info); }
+  .batch { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; background: var(--info-bg); border: 1px dashed #9fb6c9; border-radius: 8px; padding: 0.35rem 0.55rem; font-size: 0.8rem; margin-bottom: 0.5rem; }
+  .batch .same { background: var(--brand); color: #fff; border-radius: 999px; padding: 0 0.5rem; font-size: 0.72rem; font-weight: 700; }
+  .dip-legend { font-size: 0.8rem; color: var(--muted); margin: 0 0 0.5rem; }
+  .tankicon { width: 58px; height: 35px; flex: 0 0 auto; }
   .role { display: inline-flex; align-items: center; gap: 0.2rem; border-radius: 999px; padding: 0.05rem 0.45rem; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.02em; border: 1px solid; }
   .role.out { color: var(--warn); background: var(--warn-bg); border-color: var(--warn); }
   .role.in { color: var(--info); background: var(--info-bg); border-color: var(--info); }
@@ -125,6 +144,8 @@
   .error { color: var(--bad); font-weight: 600; }
   .big-num { font-family: var(--mono); font-size: 1.5rem; font-weight: 650; }
   .kv dt.hd { grid-column: 1 / -1; color: var(--ink); font-weight: 700; padding-top: 0.35rem; }
+  .tag.t-current { background: #eef1f4; color: var(--muted); }
+  header .hdr-note { font-size: 0.78rem; color: rgba(255, 255, 255, 0.78); }
   header .seg { margin: 0; }
   header .seg button { min-height: 2.2rem; padding: 0.2rem 0.8rem; font-size: 0.85rem; }
   details summary { cursor: pointer; color: var(--muted); }
@@ -133,7 +154,8 @@
 <body>
 <header>
   <h1 id="hdr-title">calib site — live dip check</h1>
-  <nav class="seg hidden" id="hdr-tank" aria-label="Tank">
+  <span class="hdr-note hidden" id="hdr-tank-label">Current tank</span>
+  <nav class="seg hidden" id="hdr-tank" aria-label="Current tank">
     <button id="hdr-tank-a" data-tank="out" aria-pressed="true">tank A</button>
     <button id="hdr-tank-b" data-tank="in" aria-pressed="false">tank B</button>
   </nav>
@@ -285,19 +307,49 @@
       <h2 id="dip-title">2 · Dip</h2>
       <p id="dip-settle" class="muted" style="margin-top:0"></p>
       <div class="tally-bar hidden" id="dip-bar-wrap"><i id="dip-bar"></i></div>
-      <div class="row">
-        <label style="min-width:9rem">
-          <span class="dip-head"><span class="role out hidden" id="dip-role"></span><span id="dip-label">Reading, mm</span></span>
-          <input id="d-val" class="big" type="number" inputmode="decimal" step="0.5">
-        </label>
+      <div class="batch hidden" id="dip-batch"><span class="same">Same batch</span><span id="dip-batch-text"></span></div>
+      <p class="dip-legend hidden" id="dip-legend">↑ pump out = A · ↓ pour in = B</p>
+
+      <div class="dipfield" id="dip-row-a">
+        <div class="dipfield-h">
+          <span class="chip out hidden" id="dip-chip-a">A</span>
+          <svg class="tankicon hidden" id="dip-tank-a" viewBox="0 0 72 44" aria-hidden="true">
+            <rect id="dip-tank-a-water" x="4" y="18" width="64" height="20" rx="10" fill="#9a5b00" opacity=".18"/>
+            <rect x="2" y="14" width="68" height="26" rx="13" fill="none" stroke="#14324a" stroke-width="2"/>
+            <path d="M36 12 V3 M30 9 L36 3 L42 9" fill="none" stroke="#9a5b00" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span class="role out hidden" id="dip-role"></span>
+          <span id="dip-label">Reading, mm</span>
+        </div>
+        <div class="dipfield-in">
+          <div class="inwrap">
+            <input id="d-val" class="big" type="number" inputmode="decimal" step="0.5" aria-labelledby="dip-label">
+            <span class="wm out hidden" id="dip-wm" aria-hidden="true">↑</span>
+          </div>
+          <button id="d-go">Check</button>
+          <button id="d-go-a" class="hidden">Check tank A</button>
+        </div>
       </div>
-      <div class="row hidden" id="dip-row-b" style="margin-top:0.4rem">
-        <label style="min-width:9rem">
-          <span class="dip-head"><span class="role in hidden" id="dip-role-b"></span><span id="dip-label-b">Tank B reading, mm</span></span>
-          <input id="d-val-b" class="big" type="number" inputmode="decimal" step="0.5">
-        </label>
+
+      <div class="dipfield hidden" id="dip-row-b">
+        <div class="dipfield-h">
+          <span class="chip in" id="dip-chip-b">B</span>
+          <svg class="tankicon" id="dip-tank-b" viewBox="0 0 72 44" aria-hidden="true">
+            <rect id="dip-tank-b-water" x="4" y="30" width="64" height="8" rx="4" fill="#1f5d99" opacity=".18"/>
+            <rect x="2" y="14" width="68" height="26" rx="13" fill="none" stroke="#14324a" stroke-width="2"/>
+            <path d="M36 3 V12 M30 6 L36 12 L42 6" fill="none" stroke="#1f5d99" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span class="role in" id="dip-role-b"></span>
+          <span id="dip-label-b">Tank B reading, mm</span>
+        </div>
+        <div class="dipfield-in">
+          <div class="inwrap">
+            <input id="d-val-b" class="big" type="number" inputmode="decimal" step="0.5" aria-labelledby="dip-label-b">
+            <span class="wm in" id="dip-wm-b" aria-hidden="true">↓</span>
+          </div>
+          <button id="d-go-b">Check tank B</button>
+        </div>
       </div>
-      <div class="row" style="margin-top:0.5rem"><button id="d-go">Check</button></div>
       <p id="d-err" class="error"></p>
     </div>
 
@@ -461,7 +513,7 @@
     <p><b>What it catches.</b> In a simulation of 100 campaigns per slip size, a reading off by 3 mm was caught 92 % of the time, and 4 mm or more every time. An honest reading triggered a second dip 3–6 % of the time.</p>
     <p><b>Drain campaign (reverse strapping).</b> The tank starts full. A pump draws the water out into calibrated cans; each batch is one step, and the level falls. Start at the neck entrance: pump the neck down until the level just reaches the shell crown and dip. That reading is the brim, and the running shell knows the top from the first level. Keep the hose in the same state at every dip. Fill each can to its mark. When the pump loses suction, tick <i>pump lost suction: last can part</i>.</p>
     <p><b>Signs in a drain.</b> resid &lt; 0: the fall came too large (an object exposed, a leak, a spill at the can, or more left than the count). resid &gt; 0: the fall came too small (RETURN?: the hose drained back, wall film, or less left than the count).</p>
-    <p><b>Two tanks at once (transfer).</b> A pump draws water out of a full tank A into calibrated cans, and the same cans are emptied into tank B. One batch is one step for both tanks: A is a drain, B is a fill. Each tank keeps its own check, its own running shell and its own raw file; switch tanks in the header or in Log &amp; charts. Dip A, then dip B, after each batch — the dip card has one field per tank, so both readings can go in at once. When both dips are in, the page compares the two residuals of the same batch: the same litres in both tanks means the cans (a count or fill error) — one recount fixes both files; litres that only B misses means a spill on the way; a miss that only one tank shows means that tank or its hose. The pour noise is shared, so the comparison is as sharp as the dips alone.</p>
+    <p><b>Two tanks at once (transfer).</b> A pump draws water out of a full tank A into calibrated cans, and the same cans are emptied into tank B. One batch is one step for both tanks: A is a drain, B is a fill. Each tank keeps its own check, its own running shell and its own raw file; switch tanks in the header or in Log &amp; charts. Dip A, then dip B, after each batch — the dip card has one field and one button per tank, so each tank is checked as soon as its reading is in. When both dips are in, the page compares the two residuals of the same batch: the same litres in both tanks means the cans (a count or fill error) — one recount fixes both files; litres that only B misses means a spill on the way; a miss that only one tank shows means that tank or its hose. The pour noise is shared, so the comparison is as sharp as the dips alone.</p>
     <p class="muted">Method: CALIBRATION_METHODOLOGY.md §10a. Residual convention §2: resid = pour − predicted pour. resid &lt; 0: the rise came too cheap (object, or more liquid than recorded). resid &gt; 0: the rise came too small (loss, or less liquid than recorded).</p>
   </section>
 </main>
@@ -715,16 +767,19 @@
   }
 
   // ------------------------------------------------------------ dip
-  function doDip() {
+  function doDip(k) {
     if (isTransfer()) {
-      // Two fields, one button: a blank field keeps its tank waiting.
-      const a = num("d-val"), b = num("d-val-b");
-      if (a == null && b == null) throw new Error("Enter at least one reading.");
-      const r = S.dipBoth(a, b, Date.now());
-      if (r.out) $("d-val").value = "";
-      if (r.in) $("d-val-b").value = "";
+      // One button per tank: each submits its own field only.
+      const key = k === "in" ? "in" : "out";
+      const id = key === "in" ? "d-val-b" : "d-val";
+      const v = num(id);
+      if (v == null) throw new Error(`Enter ${S[key].cfg.tank}'s reading.`);
+      S.dipBoth(key === "out" ? v : null, key === "in" ? v : null, Date.now());
+      $(id).value = "";
       save();
-      const next = S.out.current().state === "pending" ? "d-val" : S.in.current().state === "pending" ? "d-val-b" : null;
+      const next = S[key].current().state === "pending" ? id
+        : S.out.current().state === "pending" ? "d-val"
+          : S.in.current().state === "pending" ? "d-val-b" : null;
       if (next) setTimeout(() => $(next).focus(), 50);
       return;
     }
@@ -734,9 +789,11 @@
     $("d-val").value = "";
     save();
   }
-  $("d-go").addEventListener("click", guard("d-err", doDip));
-  for (const id of ["d-val", "d-val-b"]) {
-    $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") guard("d-err", doDip)(); });
+  $("d-go").addEventListener("click", guard("d-err", () => doDip()));
+  $("d-go-a").addEventListener("click", guard("d-err", () => doDip("out")));
+  $("d-go-b").addEventListener("click", guard("d-err", () => doDip("in")));
+  for (const [id, k] of [["d-val", "out"], ["d-val-b", "in"]]) {
+    $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") guard("d-err", () => doDip(isTransfer() ? k : undefined))(); });
   }
 
   // ------------------------------------------------------------ level actions
@@ -878,20 +935,25 @@
     renderSetup();
     renderSetupNoise();
     renderSettings();
-    if (!has) { $("hdr-phase").textContent = "no session"; $("hdr-count").textContent = ""; $("hdr-title").textContent = "calib site — live dip check"; $("hdr-tank").classList.add("hidden"); return; }
+    if (!has) { $("hdr-phase").textContent = "no session"; $("hdr-count").textContent = ""; $("hdr-title").textContent = "calib site — live dip check"; $("hdr-tank").classList.add("hidden"); $("hdr-tank-label").classList.add("hidden"); return; }
     const st = S.status();
     $("hdr-title").textContent = isTransfer() ? `${S.out.cfg.tank} → ${S.in.cfg.tank} — transfer` : `${S.cfg.tank} — live dip check`;
     $("hdr-phase").textContent = (st.learning ? `learning (${st.intervals}/${S.cfg.learnN})` : "checking")
       + (isDrain() ? " · drain" : "") + (isTransfer() ? " · transfer" : "");
     $("hdr-count").textContent = `${S.levels.length} levels · ${st.redips} extra dips`;
-    $("hdr-tank").classList.toggle("hidden", !isTransfer());
+    // The switch names what it does: the current tank, with its role.  It
+    // hides on the tabs it cannot change.
+    const showTank = isTransfer() && tab !== "replay" && tab !== "help";
+    $("hdr-tank-label").textContent = "Current tank";
+    $("hdr-tank").classList.toggle("hidden", !showTank);
+    $("hdr-tank-label").classList.toggle("hidden", !showTank);
     if (isTransfer()) {
-      $("hdr-tank-a").textContent = S.out.cfg.tank;
-      $("hdr-tank-b").textContent = S.in.cfg.tank;
+      $("hdr-tank-a").textContent = `${S.out.cfg.tank} · pump out`;
+      $("hdr-tank-b").textContent = `${S.in.cfg.tank} · pour in`;
       $("hdr-tank-a").setAttribute("aria-pressed", String(S.active === "out"));
       $("hdr-tank-b").setAttribute("aria-pressed", String(S.active === "in"));
-      $("log-tank-a").textContent = S.out.cfg.tank;
-      $("log-tank-b").textContent = S.in.cfg.tank;
+      $("log-tank-a").textContent = `${S.out.cfg.tank} · pump out`;
+      $("log-tank-b").textContent = `${S.in.cfg.tank} · pour in`;
       $("log-tank-a").setAttribute("aria-pressed", String(S.active === "out"));
       $("log-tank-b").setAttribute("aria-pressed", String(S.active === "in"));
     }
@@ -900,12 +962,22 @@
 
   function renderLive(st) {
     if (isTransfer()) { renderLiveTransfer(); return; }
+    $("dip-card").classList.remove("two");
     $("dip-row-b").classList.add("hidden");
-    $("d-val").disabled = false;
-    $("d-go").textContent = "Check";
-    // A single tank has no role to tell apart: no badge, no coloured edge.
+    $("dip-batch").classList.add("hidden");
+    $("dip-legend").classList.add("hidden");
+    $("dip-chip-a").classList.add("hidden");
+    $("dip-tank-a").classList.add("hidden");
     $("dip-role").classList.add("hidden");
     $("dip-role-b").classList.add("hidden");
+    $("dip-wm").classList.add("hidden");
+    $("d-go").classList.remove("hidden");
+    $("d-go-a").classList.add("hidden");
+    $("d-val").disabled = false;
+    $("d-go").textContent = "Check";
+    $("a-redip").textContent = "Take another reading";
+    $("a-override").textContent = "Accept anyway";
+    // A single tank has no role to tell apart: no badge, no coloured edge.
     $("d-val").classList.remove("dip-out");
     $("d-val").classList.remove("dip-in");
     $("d-val-b").classList.remove("dip-out");
@@ -1010,9 +1082,12 @@
     const adv = S.adviceBatch();
     const pend = pending();
     const nameO = S.out.cfg.tank, nameI = S.in.cfg.tank;
+    const cur = (k) => (S.active === k ? ' <span class="tag t-current">current</span>' : "");
 
-    $("now-kv").innerHTML = `<dt class="hd">${esc(nameO)} — pump out</dt><dd></dd>` + tankKv(GO, adv && adv.out, stO, "pump out")
-      + `<dt class="hd">${esc(nameI)} — pour in</dt><dd></dd>` + tankKv(GI, adv && adv.in, stI, "pour in");
+    // The heading spans both columns: no empty <dd> after it, or the pairs
+    // below shift one row and the right column rides high.
+    $("now-kv").innerHTML = `<dt class="hd">${esc(nameO)} — pump out${cur("out")}</dt>` + tankKv(GO, adv && adv.out, stO, "pump out")
+      + `<dt class="hd">${esc(nameI)} — pour in${cur("in")}</dt>` + tankKv(GI, adv && adv.in, stI, "pour in");
     $("now-advice").textContent = adv && !pend ? adv.text : "";
     const drifts = [];
     if (stO.intervals > 2) drifts.push(`${nameO} ${sg(stO.drift)} L (alarm beyond ±${f(stO.driftLimit, 0)} L)`);
@@ -1028,7 +1103,15 @@
     // tank's field is closed until "Take another reading" re-opens it.
     const curO = S.out.current(), curI = S.in.current();
     const pendO = !!curO && curO.state === "pending", pendI = !!curI && curI.state === "pending";
+    $("dip-card").classList.add("two");
     $("dip-row-b").classList.remove("hidden");
+    $("dip-batch").classList.remove("hidden");
+    $("dip-legend").classList.remove("hidden");
+    $("dip-chip-a").classList.remove("hidden");
+    $("dip-tank-a").classList.remove("hidden");
+    $("dip-wm").classList.remove("hidden");
+    $("d-go").classList.add("hidden");
+    $("d-go-a").classList.remove("hidden");
     // One badge and one coloured edge per role: A pumps out, B pours in.
     // The arrow follows the water: out of the underground tank is up, into
     // it is down.
@@ -1051,7 +1134,30 @@
     $("dip-label-b").textContent = dipLabel(nameI, curI, pendI);
     $("dip-title").textContent = pendO && pendI ? "2 · Dip both tanks"
       : pendO ? `2 · Dip ${nameO}` : `2 · Dip ${nameI}`;
-    $("d-go").textContent = pendO && pendI ? "Check both" : "Check";
+    // The batch header and the two tank icons: one batch, two levels.
+    const stepText = curO && curO.step ? curO.step.text : "";
+    $("dip-batch-text").textContent = curO && curO.start
+      ? "Both start levels, before the first batch"
+      : `${stepText === "?" ? "unknown litres" : stepText + " L"} pumped from A into B · both readings belong to this batch`;
+    const hOf = (sess, L) => (L && L.H != null ? L.H : (sess.lastGood() >= 0 ? sess.levels[sess.lastGood()].H : null));
+    const fill = (sess, L) => {
+      const H = hOf(sess, L);
+      if (H == null) return 0;
+      const cap = C.capacity(sess.fit.p);
+      return cap > 0 ? Math.min(1, Math.max(0, C.volume(H, sess.fit.p) / cap)) : 0;
+    };
+    const water = (id, frac) => {
+      const h = 20 * frac;
+      $(id).setAttribute("y", String(38 - h));
+      $(id).setAttribute("height", String(h));
+    };
+    water("dip-tank-a-water", fill(S.out, curO));
+    water("dip-tank-b-water", fill(S.in, curI));
+    // One button per tank: each submits only its own field.
+    $("d-go-a").textContent = `Check ${nameO}`;
+    $("d-go-b").textContent = `Check ${nameI}`;
+    $("d-go-a").disabled = !pendO;
+    $("d-go-b").disabled = !pendI;
     tickSettle(Date.now());
     tickEta(Date.now());
 
@@ -1068,10 +1174,15 @@
       }
       box.innerHTML = verdictBox(LO, vO, nameO) + verdictBox(LI, vI, nameI) + pair;
     }
-    const LA = S[S.active].current();
-    $("a-redip").disabled = !LA || LA.state === "pending";
+    const act = S[S.active].current();
+    // The level actions follow the current tank: an override applies to it
+    // while it waits for a reading, else to the only tank that does.
+    const overK = act && act.state === "pending" ? S.active : S.pendingTank();
+    $("a-redip").textContent = `Take another reading (${S[S.active].cfg.tank})`;
+    $("a-override").textContent = `Accept anyway (${S[overK || S.active].cfg.tank})`;
+    $("a-redip").disabled = !act || act.state === "pending";
     $("a-edit").disabled = !LO || LO.start;
-    $("a-override").disabled = !(pend && pend.dips.length >= 2);
+    $("a-override").disabled = !(overK && S[overK].current().dips.length >= 2);
     $("a-undo").disabled = !S;
   }
 
