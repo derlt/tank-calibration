@@ -127,6 +127,31 @@ class TestSitePage(unittest.TestCase):
         self.assertEqual(got["reloadedCount"], "2 cans · 300 L")
 
     @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_dip_panel_shows_the_expected_level(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click();\n"
+            "out.first = el('dip-expect-a').textContent;\n"
+            "el('d-val').value = '400'; el('d-go').click();\n"
+            "el('t-plus').click(); el('p-go').click();\n"
+            "out.pour = el('dip-expect-a').textContent;\n"
+            "// A reading far off asks for a repeat: the repeat stays blind.\n"
+            "el('d-val').value = '600'; el('d-go').click();\n"
+            "out.repeat = el('dip-expect-a').textContent;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertIn("none (the first level)", got["first"])
+        self.assertRegex(got["pour"], r"^Expected level: \d+(\.\d)? mm ± \d+(\.\d)? mm \(2σ\)")
+        self.assertIn("hidden", got["repeat"], "a repeat reading must stay blind (§10a.6)")
+
+    @unittest.skipUnless(NODE, "node is not installed")
     def test_page_settings_tab(self):
         stub = (HERE / "tests" / "page_stub.js").as_posix()
         got = _node(
@@ -457,6 +482,43 @@ class TestSitePage(unittest.TestCase):
         self.assertTrue(got["settled"]["shown"])
         self.assertTrue(got["stopped"])
         self.assertIn("Cannot read the time", got["bad"])
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_logs_the_time_of_each_recording(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "el('p-vol').value = '400'; el('p-go').click();\n"
+            "el('d-val').value = '800'; el('d-go').click();\n"
+            "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'log' } }) } });\n"
+            "out.table = el('log-table').innerHTML;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertIn("<th class=l>time</th>", got["table"])
+        self.assertRegex(got["table"], r"read \d\d:\d\d / \d\d:\d\d", "both start readings carry a time")
+        self.assertRegex(got["table"], r"poured \d\d:\d\d", "the pour carries a time")
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_core_exports_the_times_in_the_note(self):
+        got = _node(
+            "const s = new core.Session({ D: 1800, Lest: 3000 });\n"
+            "const t0 = new Date(2026, 10, 16, 9, 5).getTime();\n"
+            "s.start('?', 400, '', t0); s.dip(400, t0 + 300000);\n"
+            "const L = s.pour('400'); L.pourTime = t0 + 600000;\n"
+            "s.dip(500, t0 + 900000);\n"
+            "const replay = core.replayRows([{ step: '?', H: 400 }, { step: '400', H: 500 }], { D: 1800, Lest: 3000 });\n"
+            "console.log(JSON.stringify({ csv: s.toRawCsv().split('\\n'), replay: replay.session.toRawCsv().split('\\n') }));"
+        )
+        self.assertIn("date 2026-11-16 read 09:05/09:10", got["csv"][1])
+        self.assertIn("poured 09:15 read 09:20", got["csv"][2])
+        self.assertNotIn("read ", got["replay"][1], "no time recorded, no time in the note")
 
     @unittest.skipUnless(NODE, "node is not installed")
     def test_page_edits_a_level_note(self):

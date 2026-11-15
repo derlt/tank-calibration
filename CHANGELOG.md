@@ -8,6 +8,23 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Live tab: the pour advice now gives the level the next dip must find
+  (§10a.2), for the advised pour, from the running shell: "Expect the next
+  dip at ≈ H ± 2σ mm". A drain gives the level after the advised drain; a
+  transfer gives one level per tank for the shared batch. A pour that
+  reaches the neck, or a drain that runs the tank dry, says so instead. In
+  a transfer, the per-tank verdict no longer repeats a per-tank "next pour"
+  that is not the batch.
+- Log timestamps: the Levels table has a **time** column with the time the
+  pour (or drain, or batch) ended and the time of each reading, local
+  clock. The exported raw CSV puts the same times in the note
+  (`poured 09:15 read 09:20/09:25`), and row 1 also carries the date
+  (`date 2026-11-16`). A level without recorded times (a replay, an older
+  session) gets no time in its note.
+- Dip panel: each dip field shows the level the waiting dip must find
+  ("Expected level: H ± 2σ mm"), for the pour actually recorded. It shows
+  for the first reading only; a repeat reading stays blind (§10a.6). With no
+  prediction (first level, unknown pour, overflow, neck) the line says why.
 - Transfer strapping (two tanks, one water, §3.12): the on-site page can
   calibrate two tanks at once. A pump draws known volumes out of the full
   tank A into calibrated cans, and the same cans are emptied into tank B: A

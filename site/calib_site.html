@@ -314,7 +314,7 @@
         <div class="dipfield-h">
           <span class="chip out hidden" id="dip-chip-a">A</span>
           <svg class="tankicon hidden" id="dip-tank-a" viewBox="0 0 72 44" aria-hidden="true">
-            <rect id="dip-tank-a-water" x="4" y="18" width="64" height="20" rx="10" fill="#9a5b00" opacity=".18"/>
+            <rect id="dip-tank-a-water" x="4" y="18" width="64" height="20" rx="10" fill="#9a5b00" opacity=".6"/>
             <rect x="2" y="14" width="68" height="26" rx="13" fill="none" stroke="#14324a" stroke-width="2"/>
             <path d="M36 12 V3 M30 9 L36 3 L42 9" fill="none" stroke="#9a5b00" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
@@ -329,13 +329,14 @@
           <button id="d-go">Check</button>
           <button id="d-go-a" class="hidden">Check tank A</button>
         </div>
+        <p class="pred" id="dip-expect-a"></p>
       </div>
 
       <div class="dipfield hidden" id="dip-row-b">
         <div class="dipfield-h">
           <span class="chip in" id="dip-chip-b">B</span>
           <svg class="tankicon" id="dip-tank-b" viewBox="0 0 72 44" aria-hidden="true">
-            <rect id="dip-tank-b-water" x="4" y="30" width="64" height="8" rx="4" fill="#1f5d99" opacity=".18"/>
+            <rect id="dip-tank-b-water" x="4" y="30" width="64" height="8" rx="4" fill="#1f5d99" opacity=".6"/>
             <rect x="2" y="14" width="68" height="26" rx="13" fill="none" stroke="#14324a" stroke-width="2"/>
             <path d="M36 3 V12 M30 6 L36 12 L42 6" fill="none" stroke="#1f5d99" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
@@ -349,6 +350,7 @@
           </div>
           <button id="d-go-b">Check tank B</button>
         </div>
+        <p class="pred" id="dip-expect-b"></p>
       </div>
       <p id="d-err" class="error"></p>
     </div>
@@ -1157,6 +1159,27 @@
     return this.preview(A.H, L.step.value, A.n, nNew);
   };
 
+  /**
+   * The level the dip now waiting must find, for the dip panel.
+   * { pr } with the preview for one new reading, or { why } when no
+   * prediction exists (§10a.5): first level, unknown pour, overflow, neck.
+   * Null when no level is pending.
+   */
+  Session.prototype.expectPending = function () {
+    const L = this.current();
+    if (!L || L.state !== "pending") return null;
+    if (L.start) return { why: "the first level" };
+    if (L.step.kind !== "known") return { why: "an unknown pour" };
+    if (L.overflow) return { why: "an overflow reading" };
+    const A = L.from != null && L.from >= 0 ? this.levels[L.from] : null;
+    if (L.neck || (A && A.neck)) return { why: "a level in the neck" };
+    const pr = this._predict(L, 1);
+    if (!pr) return { why: "no anchor level" };
+    if (this.cfg.dir > 0 && pr.overflow) return { why: "the pour reaches the neck" };
+    if (this.cfg.dir < 0 && pr.empty) return { why: "the drain runs the tank dry" };
+    return { pr };
+  };
+
   /** Interval residual in the §2 convention with the running fit (pred > 0 in both directions). */
   Session.prototype._resid = function (L, H) {
     const A = this.levels[L.from], p = this.fit.p;
@@ -1644,10 +1667,30 @@
 
   /** Pour advisor and brim watch (§3.4, §10). */
   Session.prototype._advise = function (verdict, L) {
-    const a = this.advice(L.H);
+    const a = L.neck ? this.advice(L.H) : this.adviceNext(L.H, L.n);
     verdict.next = a;
     return verdict;
   };
+
+  /**
+   * The advice plus the level the next dip must find after the advised pour
+   * (§10a.2), from the running shell now.  The page shows it before the
+   * pour, as a target for the operator; the check itself keeps its own
+   * prediction hidden while a level is pending (§10a.6).
+   */
+  Session.prototype.adviceNext = function (H, nAnchor) {
+    const a = this.advice(H);
+    a.expect = this.preview(H, a.target, nAnchor || 1);
+    a.text += expectText(a.expect, this.cfg.dir);
+    return a;
+  };
+
+  /** One sentence: where the next dip must land, or why there is no level. */
+  function expectText(pr, dir) {
+    if (dir > 0 && pr.overflow) return " That pour reaches the neck: no shell level to expect.";
+    if (dir < 0 && pr.empty) return " That drain runs the tank dry: no level to expect.";
+    return ` Expect the next dip at ≈ ${fmt(pr.H, 1)} ± ${fmt(2 * pr.sd, 1)} mm (2σ).`;
+  }
 
   Session.prototype.advice = function (H) {
     const p = this.fit.p, cfg = this.cfg;
@@ -1764,6 +1807,8 @@
         else if (L.from != null && L.from >= 0 && this.levels[L.from].neck) bits.push("neck interval");
       }
       if (L.dips.length > 1) bits.push("dips " + L.dips.map((d) => fmt(d, 1)).join("/"));
+      const tm = levelTimes(L);
+      if (tm) bits.push(tm);
       bits.push("site " + L.state);
       if (L.verdict && L.verdict.cause && L.state === "anomaly") bits.push(L.verdict.cause);
       if (L.watch) bits.push("watch");
@@ -2065,12 +2110,22 @@
     const unit = this.out.cfg.pourUnit;
     let target = Math.min(aO.target, aI.target), units = null;
     if (unit) { units = Math.max(1, Math.round(target / unit)); target = units * unit; }
+    // Where both next dips must land after the advised batch (§10a.2).
+    const GO = this.out.levels[giO], GI = this.in.levels[giI];
+    const prO = GO.neck ? null : this.out.preview(GO.H, target, GO.n);
+    const prI = this.in.preview(GI.H, target, GI.n);
+    const eO = !prO ? "A: in the neck, no level to expect"
+      : prO.empty ? "A runs dry"
+        : `A ≈ ${fmt(prO.H, 1)} ± ${fmt(2 * prO.sd, 1)} mm`;
+    const eI = prI.overflow ? "B reaches the neck" : `B ≈ ${fmt(prI.H, 1)} ± ${fmt(2 * prI.sd, 1)} mm`;
     return {
       target, units, out: aO, in: aI, halve: aI.halve, bottom: aO.bottom,
+      expect: { out: prO, in: prI },
       text: (aI.halve ? `Tank B near the brim (≈ ${fmt(aI.toBrim, 0)} mm): small batches. ` : "")
         + (aO.bottom ? `Tank A near the bottom (≈ ${fmt(aO.toBottom, 0)} mm): the pump may lose suction; a part can is fine. ` : "")
         + `Next batch ≈ ${fmt(target, 0)} L` + (units ? ` = ${units} × ${fmt(unit, 0)} L` : "")
-        + ` (≈ ${fmt(target / Math.max(aO.slope, 1e-3), 0)} mm out of A, ≈ ${fmt(target / Math.max(aI.slope, 1e-3), 0)} mm into B).`,
+        + ` (≈ ${fmt(target / Math.max(aO.slope, 1e-3), 0)} mm out of A, ≈ ${fmt(target / Math.max(aI.slope, 1e-3), 0)} mm into B).`
+        + ` Expect the next dips at ${eO} · ${eI} (2σ).`,
     };
   };
 
@@ -2284,6 +2339,25 @@
   }
   function round(x, d) { const f = Math.pow(10, d); return Math.round(x * f) / f; }
   function sizeKey(u) { return String(round(Number(u), 3)); }
+  /** The date as YYYY-MM-DD, local time. */
+  function day(t) { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+
+  /**
+   * The times of one level, local clock: when the pour ended (the page sets
+   * L.pourTime) and when
+   * each reading was taken.  The first level also carries the date.  Empty
+   * when no time was recorded (a replay, an older session).
+   */
+  function levelTimes(L) {
+    const ts = (L.times || []).filter((x) => x != null);
+    const bits = [];
+    const first = L.pourTime != null ? L.pourTime : ts.length ? ts[0] : null;
+    if (L.start && first != null) bits.push("date " + day(first));
+    if (L.pourTime != null) bits.push("poured " + clock(L.pourTime));
+    if (ts.length) bits.push("read " + ts.map(clock).join("/"));
+    return bits.join(" ");
+  }
+
   function clock(t) { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; }
   function fmt(x, d) { return x == null || !isFinite(x) ? "—" : Number(x).toFixed(d); }
   function sgn(x, d) { return (x >= 0 ? "+" : "−") + fmt(Math.abs(x), d); }
@@ -2291,7 +2365,7 @@
   const api = {
     area, volume, slope, capacity, brim, levelFor, fitShell, predictLevel, parseStep,
     resolveConfig, Session, TransferSession, DEFAULTS, adopt, canHint, NAMES, replayRows,
-    readRawText, detectDirection, makePrior,
+    readRawText, detectDirection, makePrior, levelTimes, clock,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.CalibSite = api;
@@ -2763,7 +2837,8 @@
     const gi = S.lastGood();
     const G = gi >= 0 ? S.levels[gi] : null;
     const p = st.fit.p;
-    const adv = G ? S.advice(G.H) : null;
+    // The advice carries the level the next dip must find (§10a.2).
+    const adv = G ? (G.neck ? S.advice(G.H) : S.adviceNext(G.H, G.n)) : null;
     const drain = isDrain();
     $("now-kv").innerHTML = G ? [
       ["level", `${f(G.H)} mm (row ${G.row}, ${G.n > 1 ? "2 readings" : "1 reading"})${G.neck ? " · in the neck" : ""}`],
@@ -2791,6 +2866,7 @@
       $("dip-title").textContent = n === 0 ? "2 · Dip" : `2 · Dip again (reading ${n + 1})`;
       $("dip-label").textContent = n === 0 ? `Reading after ${drain ? "draining " : ""}${pend.step.text} L, mm` : "Next reading, mm — earlier readings hidden";
     }
+    renderDipExpect("dip-expect-a", S);
     tickSettle(Date.now());
     tickEta(Date.now());
 
@@ -2845,8 +2921,9 @@
     let extra = "";
     if (v.unknown) extra += `<p class="mono">x = ${f(v.unknown.x)} ± ${f(2 * v.unknown.sigma)} L</p>`;
     if (L && L.dips.length > 1 && !pend) extra += `<p class="muted">Readings: ${L.dips.map((d) => f(d)).join(" / ")} mm → adopted ${f(L.H)} mm</p>`;
-    return `<div class="verdict v-${v.color || "info"}" style="margin-bottom:0.6rem"><h3>${esc(name)}: ${esc(v.title)}</h3><p>${esc(v.message)}</p>${extra}<p class="advice">${esc(v.advice)}</p>`
-      + (v.next && !pend ? `<p>${esc(v.next.text)}</p>` : "") + `</div>`;
+    // No per-tank "next pour" here: the batch is shared, and the Now card
+    // gives the batch advice with the level each tank must find.
+    return `<div class="verdict v-${v.color || "info"}" style="margin-bottom:0.6rem"><h3>${esc(name)}: ${esc(v.title)}</h3><p>${esc(v.message)}</p>${extra}<p class="advice">${esc(v.advice)}</p></div>`;
   }
 
   /** The live tab of a transfer: both tanks, one can tally, one dip at a time. */
@@ -2908,6 +2985,8 @@
     };
     $("dip-label").textContent = dipLabel(nameO, curO, pendO);
     $("dip-label-b").textContent = dipLabel(nameI, curI, pendI);
+    renderDipExpect("dip-expect-a", S.out);
+    renderDipExpect("dip-expect-b", S.in);
     $("dip-title").textContent = pendO && pendI ? "2 · Dip both tanks"
       : pendO ? `2 · Dip ${nameO}` : `2 · Dip ${nameI}`;
     // The batch header and the two tank icons: one batch, two levels.
@@ -2960,6 +3039,32 @@
     $("a-edit").disabled = !LO || LO.start;
     $("a-override").disabled = !(overK && S[overK].current().dips.length >= 2);
     $("a-undo").disabled = !S;
+  }
+
+  /**
+   * The expected level in the dip panel, for the dip now waiting (§10a.2).
+   * It shows for the first reading only: a repeat reading stays blind
+   * (§10a.6), so the line hides once one reading is in.
+   */
+  function renderDipExpect(id, sess) {
+    const el = $(id);
+    const L = sess.current();
+    const e = sess.expectPending();
+    if (!e) { el.textContent = ""; el.className = "pred"; return; }
+    if (e.why) {
+      el.textContent = `Expected level: none (${e.why}). Take two readings.`;
+      el.className = "pred muted";
+      return;
+    }
+    if (L.dips.length > 0) {
+      el.textContent = "Expected level hidden for the repeat reading (blind repeat).";
+      el.className = "pred muted";
+      return;
+    }
+    const sharp = 2 * e.pr.sd <= sess.cfg.sharpMm;
+    el.textContent = `Expected level: ${f(e.pr.H)} mm ± ${f(2 * e.pr.sd)} mm (2σ)`
+      + (sharp ? "" : " · too wide to judge: expect two readings");
+    el.className = "pred";
   }
 
   /** The pour now in the pour panel: a known volume, or why it has none. */
@@ -3671,18 +3776,31 @@
   function renderLog() {
     if (tab !== "log") return;
     $("log-title").textContent = isTransfer() ? `Levels — ${S.cfg.tank}` : "Levels";
-    let h = `<tr><th>row</th><th>${isDrain() ? "drained L" : "pour L"}</th><th>readings</th>`
+    let h = `<tr><th>row</th><th>${isDrain() ? "drained L" : "pour L"}</th><th>readings</th><th class=l>time</th>`
       + "<th>adopted</th><th>pred</th><th>±2σ</th><th>e mm</th><th>resid L</th><th>z</th><th class=l>state</th><th class=l>note</th></tr>";
     for (const L of S.levels) {
       const blind = L.state === "pending" && L.dips.length > 0;
       const c = !blind && L.check ? L.check : {};
-      h += `<tr><td>${L.row}</td><td>${esc(L.step.text)}${L.cans ? ` · ${L.cans.unit ? `${L.cans.tapped}×${f(L.cans.unit, 0)}` : `${L.cans.tapped} cans`}` : ""}</td><td>${blind ? "• • •" : L.dips.map((d) => f(d)).join(" / ")}</td>`
+      h += `<tr><td>${L.row}</td><td>${esc(L.step.text)}${L.cans ? ` · ${L.cans.unit ? `${L.cans.tapped}×${f(L.cans.unit, 0)}` : `${L.cans.tapped} cans`}` : ""}</td><td>${blind ? "• • •" : L.dips.map((d) => f(d)).join(" / ")}</td><td class=l>${timeCell(L)}</td>`
         + `<td>${blind || L.H == null ? "—" : f(L.H)}</td><td>${f(c.predicted)}</td><td>${c.sd ? f(2 * c.sd) : "—"}</td>`
         + `<td>${c.e == null ? "—" : sg(c.e)}</td><td>${c.resid == null ? "—" : sg(c.resid)}</td><td>${c.z == null ? "—" : sg(c.z)}</td>`
         + `<td class=l>${stateTag(L)}${L.suspect ? ' <span class="tag t-pending">suspect</span>' : ""}</td><td class=l>${noteCell(L)}</td></tr>`;
     }
     $("log-table").innerHTML = h;
     renderChart();
+  }
+
+  /**
+   * The time cell: when the pour ended and when each reading was taken,
+   * local clock.  The times show during a blind repeat too: they hold no
+   * reading.
+   */
+  function timeCell(L) {
+    const ts = (L.times || []).filter((x) => x != null);
+    const lines = [];
+    if (L.pourTime != null) lines.push(`${isDrain() ? "drained" : "poured"} ${C.clock(L.pourTime)}`);
+    if (ts.length) lines.push(`read ${ts.map(C.clock).join(" / ")}`);
+    return lines.length ? lines.join("<br>") : "—";
   }
 
   /** The note cell: the site markers, the text and an Edit button, or the open editor. */

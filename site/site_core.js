@@ -636,6 +636,27 @@
     return this.preview(A.H, L.step.value, A.n, nNew);
   };
 
+  /**
+   * The level the dip now waiting must find, for the dip panel.
+   * { pr } with the preview for one new reading, or { why } when no
+   * prediction exists (§10a.5): first level, unknown pour, overflow, neck.
+   * Null when no level is pending.
+   */
+  Session.prototype.expectPending = function () {
+    const L = this.current();
+    if (!L || L.state !== "pending") return null;
+    if (L.start) return { why: "the first level" };
+    if (L.step.kind !== "known") return { why: "an unknown pour" };
+    if (L.overflow) return { why: "an overflow reading" };
+    const A = L.from != null && L.from >= 0 ? this.levels[L.from] : null;
+    if (L.neck || (A && A.neck)) return { why: "a level in the neck" };
+    const pr = this._predict(L, 1);
+    if (!pr) return { why: "no anchor level" };
+    if (this.cfg.dir > 0 && pr.overflow) return { why: "the pour reaches the neck" };
+    if (this.cfg.dir < 0 && pr.empty) return { why: "the drain runs the tank dry" };
+    return { pr };
+  };
+
   /** Interval residual in the §2 convention with the running fit (pred > 0 in both directions). */
   Session.prototype._resid = function (L, H) {
     const A = this.levels[L.from], p = this.fit.p;
@@ -1123,10 +1144,30 @@
 
   /** Pour advisor and brim watch (§3.4, §10). */
   Session.prototype._advise = function (verdict, L) {
-    const a = this.advice(L.H);
+    const a = L.neck ? this.advice(L.H) : this.adviceNext(L.H, L.n);
     verdict.next = a;
     return verdict;
   };
+
+  /**
+   * The advice plus the level the next dip must find after the advised pour
+   * (§10a.2), from the running shell now.  The page shows it before the
+   * pour, as a target for the operator; the check itself keeps its own
+   * prediction hidden while a level is pending (§10a.6).
+   */
+  Session.prototype.adviceNext = function (H, nAnchor) {
+    const a = this.advice(H);
+    a.expect = this.preview(H, a.target, nAnchor || 1);
+    a.text += expectText(a.expect, this.cfg.dir);
+    return a;
+  };
+
+  /** One sentence: where the next dip must land, or why there is no level. */
+  function expectText(pr, dir) {
+    if (dir > 0 && pr.overflow) return " That pour reaches the neck: no shell level to expect.";
+    if (dir < 0 && pr.empty) return " That drain runs the tank dry: no level to expect.";
+    return ` Expect the next dip at ≈ ${fmt(pr.H, 1)} ± ${fmt(2 * pr.sd, 1)} mm (2σ).`;
+  }
 
   Session.prototype.advice = function (H) {
     const p = this.fit.p, cfg = this.cfg;
@@ -1243,6 +1284,8 @@
         else if (L.from != null && L.from >= 0 && this.levels[L.from].neck) bits.push("neck interval");
       }
       if (L.dips.length > 1) bits.push("dips " + L.dips.map((d) => fmt(d, 1)).join("/"));
+      const tm = levelTimes(L);
+      if (tm) bits.push(tm);
       bits.push("site " + L.state);
       if (L.verdict && L.verdict.cause && L.state === "anomaly") bits.push(L.verdict.cause);
       if (L.watch) bits.push("watch");
@@ -1544,12 +1587,22 @@
     const unit = this.out.cfg.pourUnit;
     let target = Math.min(aO.target, aI.target), units = null;
     if (unit) { units = Math.max(1, Math.round(target / unit)); target = units * unit; }
+    // Where both next dips must land after the advised batch (§10a.2).
+    const GO = this.out.levels[giO], GI = this.in.levels[giI];
+    const prO = GO.neck ? null : this.out.preview(GO.H, target, GO.n);
+    const prI = this.in.preview(GI.H, target, GI.n);
+    const eO = !prO ? "A: in the neck, no level to expect"
+      : prO.empty ? "A runs dry"
+        : `A ≈ ${fmt(prO.H, 1)} ± ${fmt(2 * prO.sd, 1)} mm`;
+    const eI = prI.overflow ? "B reaches the neck" : `B ≈ ${fmt(prI.H, 1)} ± ${fmt(2 * prI.sd, 1)} mm`;
     return {
       target, units, out: aO, in: aI, halve: aI.halve, bottom: aO.bottom,
+      expect: { out: prO, in: prI },
       text: (aI.halve ? `Tank B near the brim (≈ ${fmt(aI.toBrim, 0)} mm): small batches. ` : "")
         + (aO.bottom ? `Tank A near the bottom (≈ ${fmt(aO.toBottom, 0)} mm): the pump may lose suction; a part can is fine. ` : "")
         + `Next batch ≈ ${fmt(target, 0)} L` + (units ? ` = ${units} × ${fmt(unit, 0)} L` : "")
-        + ` (≈ ${fmt(target / Math.max(aO.slope, 1e-3), 0)} mm out of A, ≈ ${fmt(target / Math.max(aI.slope, 1e-3), 0)} mm into B).`,
+        + ` (≈ ${fmt(target / Math.max(aO.slope, 1e-3), 0)} mm out of A, ≈ ${fmt(target / Math.max(aI.slope, 1e-3), 0)} mm into B).`
+        + ` Expect the next dips at ${eO} · ${eI} (2σ).`,
     };
   };
 
@@ -1763,6 +1816,25 @@
   }
   function round(x, d) { const f = Math.pow(10, d); return Math.round(x * f) / f; }
   function sizeKey(u) { return String(round(Number(u), 3)); }
+  /** The date as YYYY-MM-DD, local time. */
+  function day(t) { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+
+  /**
+   * The times of one level, local clock: when the pour ended (the page sets
+   * L.pourTime) and when
+   * each reading was taken.  The first level also carries the date.  Empty
+   * when no time was recorded (a replay, an older session).
+   */
+  function levelTimes(L) {
+    const ts = (L.times || []).filter((x) => x != null);
+    const bits = [];
+    const first = L.pourTime != null ? L.pourTime : ts.length ? ts[0] : null;
+    if (L.start && first != null) bits.push("date " + day(first));
+    if (L.pourTime != null) bits.push("poured " + clock(L.pourTime));
+    if (ts.length) bits.push("read " + ts.map(clock).join("/"));
+    return bits.join(" ");
+  }
+
   function clock(t) { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; }
   function fmt(x, d) { return x == null || !isFinite(x) ? "—" : Number(x).toFixed(d); }
   function sgn(x, d) { return (x >= 0 ? "+" : "−") + fmt(Math.abs(x), d); }
@@ -1770,7 +1842,7 @@
   const api = {
     area, volume, slope, capacity, brim, levelFor, fitShell, predictLevel, parseStep,
     resolveConfig, Session, TransferSession, DEFAULTS, adopt, canHint, NAMES, replayRows,
-    readRawText, detectDirection, makePrior,
+    readRawText, detectDirection, makePrior, levelTimes, clock,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.CalibSite = api;

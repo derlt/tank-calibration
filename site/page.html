@@ -314,7 +314,7 @@
         <div class="dipfield-h">
           <span class="chip out hidden" id="dip-chip-a">A</span>
           <svg class="tankicon hidden" id="dip-tank-a" viewBox="0 0 72 44" aria-hidden="true">
-            <rect id="dip-tank-a-water" x="4" y="18" width="64" height="20" rx="10" fill="#9a5b00" opacity=".18"/>
+            <rect id="dip-tank-a-water" x="4" y="18" width="64" height="20" rx="10" fill="#9a5b00" opacity=".6"/>
             <rect x="2" y="14" width="68" height="26" rx="13" fill="none" stroke="#14324a" stroke-width="2"/>
             <path d="M36 12 V3 M30 9 L36 3 L42 9" fill="none" stroke="#9a5b00" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
@@ -329,13 +329,14 @@
           <button id="d-go">Check</button>
           <button id="d-go-a" class="hidden">Check tank A</button>
         </div>
+        <p class="pred" id="dip-expect-a"></p>
       </div>
 
       <div class="dipfield hidden" id="dip-row-b">
         <div class="dipfield-h">
           <span class="chip in" id="dip-chip-b">B</span>
           <svg class="tankicon" id="dip-tank-b" viewBox="0 0 72 44" aria-hidden="true">
-            <rect id="dip-tank-b-water" x="4" y="30" width="64" height="8" rx="4" fill="#1f5d99" opacity=".18"/>
+            <rect id="dip-tank-b-water" x="4" y="30" width="64" height="8" rx="4" fill="#1f5d99" opacity=".6"/>
             <rect x="2" y="14" width="68" height="26" rx="13" fill="none" stroke="#14324a" stroke-width="2"/>
             <path d="M36 3 V12 M30 6 L36 12 L42 6" fill="none" stroke="#1f5d99" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
@@ -349,6 +350,7 @@
           </div>
           <button id="d-go-b">Check tank B</button>
         </div>
+        <p class="pred" id="dip-expect-b"></p>
       </div>
       <p id="d-err" class="error"></p>
     </div>
@@ -987,7 +989,8 @@
     const gi = S.lastGood();
     const G = gi >= 0 ? S.levels[gi] : null;
     const p = st.fit.p;
-    const adv = G ? S.advice(G.H) : null;
+    // The advice carries the level the next dip must find (§10a.2).
+    const adv = G ? (G.neck ? S.advice(G.H) : S.adviceNext(G.H, G.n)) : null;
     const drain = isDrain();
     $("now-kv").innerHTML = G ? [
       ["level", `${f(G.H)} mm (row ${G.row}, ${G.n > 1 ? "2 readings" : "1 reading"})${G.neck ? " · in the neck" : ""}`],
@@ -1015,6 +1018,7 @@
       $("dip-title").textContent = n === 0 ? "2 · Dip" : `2 · Dip again (reading ${n + 1})`;
       $("dip-label").textContent = n === 0 ? `Reading after ${drain ? "draining " : ""}${pend.step.text} L, mm` : "Next reading, mm — earlier readings hidden";
     }
+    renderDipExpect("dip-expect-a", S);
     tickSettle(Date.now());
     tickEta(Date.now());
 
@@ -1069,8 +1073,9 @@
     let extra = "";
     if (v.unknown) extra += `<p class="mono">x = ${f(v.unknown.x)} ± ${f(2 * v.unknown.sigma)} L</p>`;
     if (L && L.dips.length > 1 && !pend) extra += `<p class="muted">Readings: ${L.dips.map((d) => f(d)).join(" / ")} mm → adopted ${f(L.H)} mm</p>`;
-    return `<div class="verdict v-${v.color || "info"}" style="margin-bottom:0.6rem"><h3>${esc(name)}: ${esc(v.title)}</h3><p>${esc(v.message)}</p>${extra}<p class="advice">${esc(v.advice)}</p>`
-      + (v.next && !pend ? `<p>${esc(v.next.text)}</p>` : "") + `</div>`;
+    // No per-tank "next pour" here: the batch is shared, and the Now card
+    // gives the batch advice with the level each tank must find.
+    return `<div class="verdict v-${v.color || "info"}" style="margin-bottom:0.6rem"><h3>${esc(name)}: ${esc(v.title)}</h3><p>${esc(v.message)}</p>${extra}<p class="advice">${esc(v.advice)}</p></div>`;
   }
 
   /** The live tab of a transfer: both tanks, one can tally, one dip at a time. */
@@ -1132,6 +1137,8 @@
     };
     $("dip-label").textContent = dipLabel(nameO, curO, pendO);
     $("dip-label-b").textContent = dipLabel(nameI, curI, pendI);
+    renderDipExpect("dip-expect-a", S.out);
+    renderDipExpect("dip-expect-b", S.in);
     $("dip-title").textContent = pendO && pendI ? "2 · Dip both tanks"
       : pendO ? `2 · Dip ${nameO}` : `2 · Dip ${nameI}`;
     // The batch header and the two tank icons: one batch, two levels.
@@ -1184,6 +1191,32 @@
     $("a-edit").disabled = !LO || LO.start;
     $("a-override").disabled = !(overK && S[overK].current().dips.length >= 2);
     $("a-undo").disabled = !S;
+  }
+
+  /**
+   * The expected level in the dip panel, for the dip now waiting (§10a.2).
+   * It shows for the first reading only: a repeat reading stays blind
+   * (§10a.6), so the line hides once one reading is in.
+   */
+  function renderDipExpect(id, sess) {
+    const el = $(id);
+    const L = sess.current();
+    const e = sess.expectPending();
+    if (!e) { el.textContent = ""; el.className = "pred"; return; }
+    if (e.why) {
+      el.textContent = `Expected level: none (${e.why}). Take two readings.`;
+      el.className = "pred muted";
+      return;
+    }
+    if (L.dips.length > 0) {
+      el.textContent = "Expected level hidden for the repeat reading (blind repeat).";
+      el.className = "pred muted";
+      return;
+    }
+    const sharp = 2 * e.pr.sd <= sess.cfg.sharpMm;
+    el.textContent = `Expected level: ${f(e.pr.H)} mm ± ${f(2 * e.pr.sd)} mm (2σ)`
+      + (sharp ? "" : " · too wide to judge: expect two readings");
+    el.className = "pred";
   }
 
   /** The pour now in the pour panel: a known volume, or why it has none. */
@@ -1895,18 +1928,31 @@
   function renderLog() {
     if (tab !== "log") return;
     $("log-title").textContent = isTransfer() ? `Levels — ${S.cfg.tank}` : "Levels";
-    let h = `<tr><th>row</th><th>${isDrain() ? "drained L" : "pour L"}</th><th>readings</th>`
+    let h = `<tr><th>row</th><th>${isDrain() ? "drained L" : "pour L"}</th><th>readings</th><th class=l>time</th>`
       + "<th>adopted</th><th>pred</th><th>±2σ</th><th>e mm</th><th>resid L</th><th>z</th><th class=l>state</th><th class=l>note</th></tr>";
     for (const L of S.levels) {
       const blind = L.state === "pending" && L.dips.length > 0;
       const c = !blind && L.check ? L.check : {};
-      h += `<tr><td>${L.row}</td><td>${esc(L.step.text)}${L.cans ? ` · ${L.cans.unit ? `${L.cans.tapped}×${f(L.cans.unit, 0)}` : `${L.cans.tapped} cans`}` : ""}</td><td>${blind ? "• • •" : L.dips.map((d) => f(d)).join(" / ")}</td>`
+      h += `<tr><td>${L.row}</td><td>${esc(L.step.text)}${L.cans ? ` · ${L.cans.unit ? `${L.cans.tapped}×${f(L.cans.unit, 0)}` : `${L.cans.tapped} cans`}` : ""}</td><td>${blind ? "• • •" : L.dips.map((d) => f(d)).join(" / ")}</td><td class=l>${timeCell(L)}</td>`
         + `<td>${blind || L.H == null ? "—" : f(L.H)}</td><td>${f(c.predicted)}</td><td>${c.sd ? f(2 * c.sd) : "—"}</td>`
         + `<td>${c.e == null ? "—" : sg(c.e)}</td><td>${c.resid == null ? "—" : sg(c.resid)}</td><td>${c.z == null ? "—" : sg(c.z)}</td>`
         + `<td class=l>${stateTag(L)}${L.suspect ? ' <span class="tag t-pending">suspect</span>' : ""}</td><td class=l>${noteCell(L)}</td></tr>`;
     }
     $("log-table").innerHTML = h;
     renderChart();
+  }
+
+  /**
+   * The time cell: when the pour ended and when each reading was taken,
+   * local clock.  The times show during a blind repeat too: they hold no
+   * reading.
+   */
+  function timeCell(L) {
+    const ts = (L.times || []).filter((x) => x != null);
+    const lines = [];
+    if (L.pourTime != null) lines.push(`${isDrain() ? "drained" : "poured"} ${C.clock(L.pourTime)}`);
+    if (ts.length) lines.push(`read ${ts.map(C.clock).join(" / ")}`);
+    return lines.length ? lines.join("<br>") : "—";
   }
 
   /** The note cell: the site markers, the text and an Edit button, or the open editor. */
