@@ -222,6 +222,85 @@ class TestSitePage(unittest.TestCase):
         self.assertTrue(got["stopped"])
         self.assertIn("Cannot read the time", got["bad"])
 
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_edits_a_level_note(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "el('p-note').value = 'slow pump'; el('p-vol').value = '400'; el('p-go').click();\n"
+            "el('d-val').value = '800'; el('d-go').click();\n"
+            "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'log' } }) } });\n"
+            "out.table = el('log-table').innerHTML;\n"
+            "const click = (sel, data) => el('log-table')._listeners.click[0]("
+            "{ target: { closest: (s) => (s === sel ? { dataset: data } : null) } });\n"
+            "const key = (k) => el('log-table')._listeners.keydown[0]("
+            "{ target: { id: 'note-edit' }, key: k, preventDefault() {} });\n"
+            "const note = (i) => JSON.parse(store.get('calib-site:active')).levels[i].note;\n"
+            "click('button[data-note-edit]', { noteEdit: '2' });\n"
+            "out.open = el('log-table').innerHTML;\n"
+            "el('note-edit').value = 'pump was slow';\n"
+            "click('button[data-note-save]', { noteSave: '2' });\n"
+            "out.saved = note(1);\n"
+            "out.closed = el('log-table').innerHTML;\n"
+            "// Cancel keeps the old note.\n"
+            "click('button[data-note-edit]', { noteEdit: '2' });\n"
+            "el('note-edit').value = 'throw this away';\n"
+            "click('button[data-note-cancel]', { noteCancel: '2' });\n"
+            "out.cancelled = note(1);\n"
+            "out.cancelClosed = el('log-table').innerHTML;\n"
+            "// Escape keeps it too.\n"
+            "click('button[data-note-edit]', { noteEdit: '2' });\n"
+            "el('note-edit').value = 'also thrown away';\n"
+            "key('Escape');\n"
+            "out.escaped = note(1);\n"
+            "// Enter saves.\n"
+            "click('button[data-note-edit]', { noteEdit: '2' });\n"
+            "el('note-edit').value = 'saved by Enter';\n"
+            "key('Enter');\n"
+            "out.entered = note(1);\n"
+            "// Enter during an input method composition does nothing.\n"
+            "click('button[data-note-edit]', { noteEdit: '2' });\n"
+            "el('note-edit').value = 'still typing';\n"
+            "el('log-table')._listeners.keydown[0]({ target: { id: 'note-edit' }, key: 'Enter', isComposing: true });\n"
+            "out.composing = note(1);\n"
+            "key('Escape');\n"
+            "// A second Edit closes the first editor.\n"
+            "click('button[data-note-edit]', { noteEdit: '2' });\n"
+            "click('button[data-note-edit]', { noteEdit: '1' });\n"
+            "out.one = (el('log-table').innerHTML.match(/id=\"note-edit\"/g) || []).length;\n"
+            "// Quotes and tags survive the round trip.\n"
+            "el('note-edit').value = 'say \"hi\" <b>';\n"
+            "click('button[data-note-save]', { noteSave: '1' });\n"
+            "out.kept = note(0);\n"
+            "out.escapedHtml = el('log-table').innerHTML;\n"
+            "click('button[data-note-edit]', { noteEdit: '1' });\n"
+            "out.reopen = el('log-table').innerHTML;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertIn('data-note-edit="1"', got["table"], "every level has an edit button")
+        self.assertIn('data-note-edit="2"', got["table"])
+        self.assertIn('id="note-edit"', got["open"])
+        self.assertIn('value="slow pump"', got["open"])
+        self.assertEqual(got["saved"], "pump was slow")
+        self.assertNotIn('id="note-edit"', got["closed"], "Save closes the editor")
+        self.assertIn("pump was slow", got["closed"])
+        self.assertEqual(got["cancelled"], "pump was slow", "Cancel keeps the note")
+        self.assertNotIn('id="note-edit"', got["cancelClosed"], "Cancel closes the editor")
+        self.assertEqual(got["escaped"], "pump was slow", "Escape keeps the note")
+        self.assertEqual(got["entered"], "saved by Enter", "Enter saves")
+        self.assertEqual(got["composing"], "saved by Enter", "Enter during a composition does not save")
+        self.assertEqual(got["one"], 1, "one editor at a time")
+        self.assertEqual(got["kept"], 'say "hi" <b>', "the note is stored as typed")
+        self.assertIn("&quot;hi&quot; &lt;b&gt;", got["escapedHtml"], "the cell escapes the note")
+        self.assertIn('value="say &quot;hi&quot; &lt;b&gt;"', got["reopen"], "the editor escapes the note")
+
 
 @unittest.skipUnless(NODE, "node is not installed")
 class TestSiteCore(unittest.TestCase):
@@ -375,6 +454,39 @@ class TestSiteCore(unittest.TestCase):
         self.assertEqual(got["alarm"], {"status": "ALARM", "cause": "OBJECT?"})
         self.assertIn(got["afterRecount"], ("ACCEPT", "WATCH"))
         self.assertTrue(got["roundTrip"])
+
+    def test_edit_note(self):
+        got = _node(
+            "const s = new core.Session({D: 1800, Lest: 3000});\n"
+            "s.start('400', 400); s.dip(400); s.pour('400', {note: 'old'}); s.dip(800);\n"
+            "const out = {};\n"
+            "out.set = s.editNote(2, '  new note  ').note;\n"
+            "out.csv = s.toRawCsv().split('\\n')[2];\n"
+            "out.cleared = s.editNote(2, '   ').note;\n"
+            "out.empty = s.toRawCsv().split('\\n')[2];\n"
+            "try { s.editNote(99, 'x'); } catch (e) { out.bad = e.message; }\n"
+            "// Site markers stay apart from the operator note and cannot be erased.\n"
+            "s.editPour('500');\n"
+            "out.tags = s.levels[1].tags.slice();\n"
+            "s.editNote(2, 'fixed');\n"
+            "out.kept = s.toRawCsv().split('\\n')[2];\n"
+            "s.override('looks right');\n"
+            "out.overrideTags = s.levels[1].tags;\n"
+            "s.editNote(2, '');\n"
+            "out.overrideKept = s.toRawCsv().split('\\n')[2];\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["set"], "new note", "the note is trimmed")
+        self.assertIn("new note", got["csv"], "the note goes into the raw file")
+        self.assertEqual(got["cleared"], "", "an empty text clears the note")
+        self.assertNotIn("new note", got["empty"])
+        self.assertIn("no row 99", got["bad"])
+        self.assertEqual(got["tags"], ["pour edited on site"], "the pour marker is a tag, not a note")
+        self.assertIn("pour edited on site", got["kept"], "the marker survives a note edit")
+        self.assertIn("fixed", got["kept"])
+        self.assertEqual(got["overrideTags"], ["pour edited on site", "accepted against the check: looks right"])
+        self.assertIn("accepted against the check: looks right", got["overrideKept"],
+                      "the override marker survives a cleared note")
 
     def test_batch_can_tally(self):
         # Truth shell r 900, L 3000, h0 0.  Batches of 200 L cans, one dip each.

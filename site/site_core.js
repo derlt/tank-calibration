@@ -264,7 +264,7 @@
     }
     if (saved) {
       this.levels = saved.levels.map((l) => {
-        const L = Object.assign({}, l, { dips: l.dips.slice(), times: (l.times || []).slice() });
+        const L = Object.assign({}, l, { dips: l.dips.slice(), times: (l.times || []).slice(), tags: (l.tags || []).slice() });
         // Older pages saved a closed batch with one unit and no per-can sizes.
         if (L.cans && !L.cans.units) L.cans.units = (L.cans.taps || []).map(() => L.cans.unit);
         return L;
@@ -339,7 +339,7 @@
   Session.prototype.start = function (stepText, dip, note, time) {
     if (this.levels.length) throw new Error("the session has already started");
     const step = parseStep(stepText);
-    const L = { row: 1, step, dips: [], state: "pending", from: null, note: note || "", H: null, n: 0, start: true };
+    const L = { row: 1, step, dips: [], state: "pending", from: null, note: note || "", tags: [], H: null, n: 0, start: true };
     this.levels.push(L);
     return this.dip(dip, time);
   };
@@ -353,7 +353,7 @@
     const step = parseStep(stepText);
     const L = {
       row: this.levels.length + 1, step, dips: [], state: "pending", from,
-      note: (opts && opts.note) || "", overflow: !!(opts && opts.overflow), H: null, n: 0,
+      note: (opts && opts.note) || "", tags: [], overflow: !!(opts && opts.overflow), H: null, n: 0,
     };
     this.levels.push(L);
     return L;
@@ -421,13 +421,27 @@
     return L;
   };
 
+  /** Add a site marker to a level.  Markers stay apart from the operator note. */
+  function addTag(L, text) {
+    if (!L.tags) L.tags = [];
+    L.tags.push(text);
+  }
+
   /** Change the pour of the pending (or last) level after a recount. */
   Session.prototype.editPour = function (stepText) {
     const L = this.current();
     if (!L || L.start) throw new Error("no pour to edit");
     L.step = parseStep(stepText);
-    L.note = (L.note ? L.note + "; " : "") + "pour edited on site";
+    addTag(L, "pour edited on site");
     return this._evaluate(L);
+  };
+
+  /** Replace the operator note of a level.  row is 1-based, as in the raw file. */
+  Session.prototype.editNote = function (row, text) {
+    const L = this.levels.find((l) => l.row === row);
+    if (!L) throw new Error(`no row ${row}`);
+    L.note = String(text == null ? "" : text).trim();
+    return L;
   };
 
   /** Record one dip reading at the current level and judge it. */
@@ -452,7 +466,7 @@
     if (!L || !L.dips.length) throw new Error("nothing to accept");
     const a = adopt(L.dips, this.cfg.repeatTol);
     L.H = a.H; L.n = a.n; L.state = "override";
-    L.note = (L.note ? L.note + "; " : "") + "accepted against the check" + (why ? ": " + why : "");
+    addTag(L, "accepted against the check" + (why ? ": " + why : ""));
     L.verdict = { status: "OVERRIDE", color: "warn", title: "Accepted by the operator", message: "This level is kept as an anchor. Its interval stays out of the running fit.", advice: "" };
     this._refit();
     return L.verdict;
@@ -924,6 +938,7 @@
         bits.push(`cans ${spec} L` + (L.cans.partial ? " last can part" : "")
           + (ts.length ? ` ${clock(ts[0])}-${clock(ts[ts.length - 1])}` : ""));
       }
+      if (L.tags) for (const t of L.tags) bits.push(t);
       if (L.note) bits.push(L.note);
       const note = bits.join("; ").replace(/[",\r\n]/g, " ");
       out.push(`${L.step.text},${round(L.H, 2)},${note}`);

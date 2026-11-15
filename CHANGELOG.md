@@ -42,6 +42,10 @@ All notable changes to this project are documented here. The format follows
   Drift with its ±3σ√n band, and z-score alarm (§6.6). A row of buttons or a
   swipe changes the chart. `Session.series()` in `site_core.js` supplies the
   data.
+- The **Levels** table on the **Log & charts** tab edits the note of any level:
+  *Edit* opens the note, *Save* keeps it and *Cancel* leaves it. The note goes
+  into the raw CSV with its level. The site's own markers, such as *pour edited
+  on site*, stay apart from the note and an edit cannot erase them.
 - The page is also published as a Cloudflare Worker with static assets
   (`wrangler.jsonc`, `make deploy`). The addresses are kept in `.env`.
 
