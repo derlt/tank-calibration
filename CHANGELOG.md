@@ -35,6 +35,8 @@ All notable changes to this project are documented here. The format follows
   The Now card estimates the time to half and to the brim from the running
   shell and the pour advice (`Session.fillPlan`). With no pour time set, the
   page uses the time measured between taps.
+  The drawing is a setting: *pour animation* off keeps the clock, the bar and
+  the alarm.
 - The page shows four charts on the **Log & charts** tab: Miss, Slope profile,
   Drift with its ±3σ√n band, and z-score alarm (§6.6). A row of buttons or a
   swipe changes the chart. `Session.series()` in `site_core.js` supplies the
