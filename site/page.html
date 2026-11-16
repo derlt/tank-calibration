@@ -208,6 +208,39 @@
   .mode-seg button { min-height: 2rem; padding: 0.15rem 0.8rem; font-size: 0.85rem; }
   body.simple #live .vb { display: none !important; }
   body.simple #now-advice { font-size: 1.1rem; }
+  /* Phone layout.  A grid item never grows past its column: a wide table
+     scrolls in its own box instead of widening the whole page. */
+  main > *, .card { min-width: 0; }
+  .row > button { flex: 0 1 auto; max-width: 100%; }
+  .grid > label { align-content: end; }
+  .kv { grid-template-columns: fit-content(45%) minmax(0, 1fr); }
+  .kv dd { overflow-wrap: anywhere; }
+  #help td, #help th { white-space: normal; font-family: inherit; text-align: left; vertical-align: top; }
+  header { padding-left: max(0.8rem, env(safe-area-inset-left)); padding-right: max(0.8rem, env(safe-area-inset-right)); }
+  main { padding-left: max(0.8rem, env(safe-area-inset-left)); padding-right: max(0.8rem, env(safe-area-inset-right)); padding-bottom: calc(0.8rem + env(safe-area-inset-bottom)); }
+  @media (max-width: 560px) {
+    header { flex-wrap: nowrap; gap: 0.5rem; }
+    header .seg { flex: 0 0 auto; }
+    header .hdr-status { flex: 1 1 0; min-width: 0; white-space: normal; text-align: right; line-height: 1.2; font-size: 0.72rem; }
+    main { padding-top: 0.5rem; padding-left: max(0.5rem, env(safe-area-inset-left)); padding-right: max(0.5rem, env(safe-area-inset-right)); gap: 0.6rem; }
+    .card { padding: 0.75rem; }
+    #live > .card, #live > .verdict, #live > .row, #settings > .card { margin-top: 0.6rem !important; }
+    /* The tabs: one line that scrolls sideways, not three wrapped lines. */
+    .tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; scroll-snap-type: x proximity; margin: 0 -0.5rem; padding: 0 0.5rem 0.1rem; scroll-padding: 0 0.5rem; }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tabs button { flex: 0 0 auto; scroll-snap-align: start; white-space: nowrap; }
+    /* Two fields per line, so a pair such as D and D ± stays side by side. */
+    .grid { grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: 0.5rem; }
+    #setup > .grid:first-of-type > label:first-child, #s-b-wrap .grid > label:first-child, #set-campaign .grid > label:first-child { grid-column: 1 / -1; }
+    /* The main action of a card fills the width: one thumb, one target. */
+    #s-go, #p-go, #set-save, #set-noise-save, #r-go { flex: 1 1 100%; }
+    #level-actions > button, #files .row > button { flex: 1 1 auto; }
+    .verdict { padding: 0.75rem 0.8rem; }
+    .verdict h3 { font-size: 1.15rem; }
+    /* 16 px or more: a phone does not zoom into the field on focus. */
+    td input.note { font-size: 1rem; }
+    #help .table { margin: 0 -0.75rem; padding: 0 0.75rem; }
+  }
 </style>
 </head>
 <body>
@@ -574,14 +607,14 @@
     <p><b>The question.</b> You just read the tape. Is the reading good, or must you dip again? You must know <i>now</i>: after the next pour that level is gone.</p>
     <p><b>Test 1: the prediction.</b> The page knows your diameter and length estimates, the readings you accepted, and the pour. From these it learns the tank shape, and it predicts the level that this pour must give. If your reading falls inside the band, accept it and pour the next can.</p>
     <p><b>Test 2: the repeat reading.</b> If the reading misses the band, or if no prediction is possible (the first level, an unknown pour), the page asks for a second reading. It hides the first reading and the prediction, so that the second reading cannot copy them. Two readings that agree within about 1 mm make a good dip.</p>
-    <table style="margin:0.5rem 0">
+    <div class="table"><table style="margin:0.5rem 0">
       <tr><th class="l">Repeat</th><th class="l">Prediction</th><th class="l">Meaning</th><th class="l">Action</th></tr>
       <tr><td class="l">—</td><td class="l">inside</td><td class="l">good reading</td><td class="l">pour next</td></tr>
       <tr><td class="l">differ</td><td class="l">any</td><td class="l">misread, or level still moving</td><td class="l">dip a third time; wait if it creeps</td></tr>
       <tr><td class="l">agree</td><td class="l">inside</td><td class="l">the first reading slipped a little</td><td class="l">pour next</td></tr>
       <tr><td class="l">agree</td><td class="l">miss &lt; action bar</td><td class="l">watch item</td><td class="l">pour next</td></tr>
       <tr><td class="l">agree</td><td class="l">miss ≥ action bar</td><td class="l">the pour or the tank is off</td><td class="l">recount the pour; OBJECT? / LOSS?</td></tr>
-    </table>
+    </table></div>
     <p><b>The first pours.</b> The page does not know the bottom shape yet. For the first 3 intervals a confirmed miss is "learning": the level is kept and teaches the shape.</p>
     <p><b>Too wide to judge.</b> When the band is wider than ±3 mm (very large pours, an early shell), the prediction cannot catch a 3 mm slip. Then the page asks for a second reading.</p>
     <p><b>What it catches.</b> In a simulation of 100 campaigns per slip size, a reading off by 3 mm was caught 92 % of the time, and 4 mm or more every time. An honest reading triggered a second dip 3–6 % of the time.</p>
@@ -658,6 +691,14 @@
     const b = ev.target.closest("button[data-tab]");
     if (!b) return;
     tab = b.dataset.tab; editRow = null; render();
+    // On a phone the tabs are one sideways-scrolling line: show the chosen
+    // tab whole, and move only that line, never the page.
+    const bar = $("tabs");
+    if (bar.scrollWidth > bar.clientWidth) {
+      const left = b.offsetLeft - bar.offsetLeft, right = left + b.offsetWidth;
+      if (left < bar.scrollLeft) bar.scrollLeft = left - 8;
+      else if (right > bar.scrollLeft + bar.clientWidth) bar.scrollLeft = right - bar.clientWidth + 8;
+    }
   });
   $("hdr-tank").addEventListener("click", (ev) => {
     const b = ev.target.closest("button[data-tank]");

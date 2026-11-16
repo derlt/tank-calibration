@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- On-site page on a phone: no tab is wider than the screen any more (Log &
+  charts was 1094 px wide at 360 px; the level table now scrolls in its own
+  box, and the chart takes the card width). The How it works table wraps and
+  scrolls in its box; long buttons wrap. Below 560 px the tabs are one line
+  that scrolls sideways, the setup and settings forms show two fields per
+  line (D beside D ±), the main button of a card fills its width, the Now
+  labels wrap to give the values room, the transfer header stays one line,
+  and the log note field is 16 px so the phone does not zoom. Safe-area
+  padding for phones with a notch.
 - Transfer verdict titles join the tank name with " — " instead of ": "
   (`alpha — Reading confirmed`), like the pair box (`Both tanks — …`).
 - Header: one slim line instead of two or three. The title is the tank name
