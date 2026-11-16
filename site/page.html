@@ -32,6 +32,8 @@
     --row-a-bg: #fffaf1; --row-a-line: #e7c9a0; --row-b-bg: #f5f9fd; --row-b-line: #b9d2ea; --batch-line: #9fb6c9;
     --model: #1a6fa8; --chart-warn: #ff9f1c; --shadow: rgba(0, 0, 0, 0.25);
     --radius: 12px; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    /* The header live indicator: the header is dark in both themes, so one set. */
+    --live-fill: #72b4ec; --live-pre: #ffb54d; --live-full: #5ec98a; --live-drain: #7fe0d6; --live-halo: rgba(94, 201, 138, 0.35);
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -63,6 +65,34 @@
   header h1 { font-size: 1rem; margin: 0; font-weight: 650; flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   header .hdr-status { margin-left: auto; font-size: 0.78rem; color: rgba(255, 255, 255, 0.8); white-space: nowrap; font-variant-numeric: tabular-nums; }
   header .hdr-status span + span:not(:empty)::before { content: " · "; }
+  /* The live indicator: a dot before the title and a line along the bottom
+     edge of the header.  The dot tells the state of the can by its colour
+     and its pulse; the line tells how far the can is filled or drained.
+     Filling = blue, close the valve = amber, can full = green, draining =
+     teal.  Nothing shows while no can is in work. */
+  header .live { flex: 0 0 auto; width: 0.7rem; height: 0.7rem; border-radius: 50%; background: var(--lc); }
+  header .live-bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: var(--lc); transition: width 0.5s linear; pointer-events: none; }
+  header .l-fill { --lc: var(--live-fill); }
+  header .l-pre { --lc: var(--live-pre); }
+  header .l-full { --lc: var(--live-full); }
+  header .l-drain { --lc: var(--live-drain); }
+  header .live.l-fill { animation: live-out 1.4s ease-out infinite; }
+  header .live.l-pre { animation: live-out 0.6s ease-out infinite; }
+  header .live.l-full { box-shadow: 0 0 0 3px var(--live-halo); }
+  header .live.l-drain { animation: live-in 1.4s ease-in infinite; }
+  @keyframes live-out { 0% { box-shadow: 0 0 0 0 var(--lc); } 100% { box-shadow: 0 0 0 0.55rem transparent; } }
+  @keyframes live-in { 0% { box-shadow: 0 0 0 0.5rem transparent; } 100% { box-shadow: 0 0 0 0 var(--lc); } }
+  /* A swipe changes the tab: the new tab slides in a little from the side
+     the finger came from. */
+  .swipe-next { animation: swipe-next 0.18s ease-out; }
+  .swipe-prev { animation: swipe-prev 0.18s ease-out; }
+  @keyframes swipe-next { from { transform: translateX(2.5rem); opacity: 0.3; } }
+  @keyframes swipe-prev { from { transform: translateX(-2.5rem); opacity: 0.3; } }
+  @media (prefers-reduced-motion: reduce) {
+    header .live.l-fill, header .live.l-pre, header .live.l-drain { animation: none; }
+    header .live-bar { transition: none; }
+    .swipe-next, .swipe-prev { animation: none; }
+  }
   .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
   main { max-width: 760px; margin: 0 auto; padding: 0.8rem; display: grid; gap: 0.8rem; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.9rem; }
@@ -245,6 +275,7 @@
 </head>
 <body>
 <header>
+  <span class="live hidden" id="hdr-live" role="img"></span>
   <h1 id="hdr-title" translate="no">calib site</h1>
   <span class="sr-only" id="hdr-tank-label">Current tank</span>
   <nav class="seg hidden" id="hdr-tank" aria-labelledby="hdr-tank-label">
@@ -252,8 +283,9 @@
     <button id="hdr-tank-b" data-tank="in" aria-pressed="false">tank B</button>
   </nav>
   <span class="hdr-status"><span id="hdr-phase"></span><span id="hdr-count"></span><span id="hdr-cloud"></span></span>
+  <i class="live-bar" id="hdr-bar" aria-hidden="true"></i>
 </header>
-<main>
+<main id="main">
   <nav class="tabs" id="tabs">
     <button data-tab="live" aria-pressed="true">Live</button>
     <button data-tab="log" aria-pressed="false">Log &amp; charts</button>
@@ -934,19 +966,78 @@
   function isDrain() { return !!S && S.cfg.dir < 0; }
 
   // ------------------------------------------------------------ tabs
-  $("tabs").addEventListener("click", (ev) => {
-    const b = ev.target.closest("button[data-tab]");
-    if (!b) return;
-    tab = b.dataset.tab; editRow = null; render();
+  const TABS = ["live", "log", "shell", "settings", "files", "replay", "help"];
+  function goTab(name) {
+    tab = name; editRow = null; render();
     // On a phone the tabs are one sideways-scrolling line: show the chosen
     // tab whole, and move only that line, never the page.
     const bar = $("tabs");
-    if (bar.scrollWidth > bar.clientWidth) {
+    const b = Array.from(bar.querySelectorAll("button")).find((x) => x.dataset.tab === name);
+    if (b && bar.scrollWidth > bar.clientWidth) {
       const left = b.offsetLeft - bar.offsetLeft, right = left + b.offsetWidth;
       if (left < bar.scrollLeft) bar.scrollLeft = left - 8;
       else if (right > bar.scrollLeft + bar.clientWidth) bar.scrollLeft = right - bar.clientWidth + 8;
     }
+  }
+  $("tabs").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-tab]");
+    if (b) goTab(b.dataset.tab);
   });
+
+  // A swipe left or right in the middle of the screen goes to the next or the
+  // previous tab, in the order of the tab bar; it stops at the ends.  The tab
+  // changes when the finger lifts.  A swipe does nothing when it starts on
+  // the tab bar, a field, the chart, or a box that scrolls sideways (the
+  // level table), or near the screen edge (the phone's own back gesture).
+  // It must be mostly sideways, so a page scroll never changes the tab.
+  const SWIPE = { min: 60, ratio: 1.8, ms: 800, edge: 24 };
+  let swipe = null;
+  function swipeBlocked(t) {
+    for (let e = t; e && e !== document.body; e = e.parentElement) {
+      if (e.id === "tabs" || e.id === "chart" || e.id === "hdr-tank" || e.id === "log-tank") return true;
+      const n = e.tagName;
+      if (n === "INPUT" || n === "TEXTAREA" || n === "SELECT") return true;
+      if (e.scrollWidth > e.clientWidth + 1 && window.getComputedStyle) {
+        const o = window.getComputedStyle(e).overflowX;
+        if (o === "auto" || o === "scroll") return true;
+      }
+    }
+    return false;
+  }
+  /** The tab dx px of swipe goes to, or null: the tabs the page shows now, in bar order. */
+  function swipeTarget(dx) {
+    const shown = TABS.filter((id) => S || !(id === "log" || id === "shell"));
+    const i = shown.indexOf(tab), j = i + (dx < 0 ? 1 : -1);
+    return i >= 0 && j >= 0 && j < shown.length ? shown[j] : null;
+  }
+  $("main").addEventListener("touchstart", (ev) => {
+    swipe = null;
+    if (!ev.touches || ev.touches.length !== 1) return;
+    const p = ev.touches[0], w = window.innerWidth || 0;
+    if (p.clientX < SWIPE.edge || (w && p.clientX > w - SWIPE.edge)) return;
+    if (swipeBlocked(ev.target)) return;
+    swipe = { x: p.clientX, y: p.clientY, t: Date.now() };
+  }, { passive: true });
+  $("main").addEventListener("touchmove", (ev) => {
+    if (swipe && ev.touches && ev.touches.length !== 1) swipe = null;   // a pinch
+  }, { passive: true });
+  $("main").addEventListener("touchend", (ev) => {
+    const s = swipe; swipe = null;
+    if (!s || !ev.changedTouches || !ev.changedTouches.length) return;
+    const p = ev.changedTouches[0], dx = p.clientX - s.x, dy = p.clientY - s.y;
+    if (Date.now() - s.t > SWIPE.ms || Math.abs(dx) < SWIPE.min || Math.abs(dx) < SWIPE.ratio * Math.abs(dy)) return;
+    // A text selection is a drag, not a swipe.
+    if (window.getSelection && String(window.getSelection()).length) return;
+    const to = swipeTarget(dx);
+    if (!to) return;
+    goTab(to);
+    const sec = $(to === "live" && !S ? "setup" : to), cls = dx < 0 ? "swipe-next" : "swipe-prev";
+    sec.classList.remove("swipe-next", "swipe-prev");
+    void sec.offsetWidth;   // restart the slide
+    sec.classList.add(cls);
+    setTimeout(() => sec.classList.remove(cls), 250);
+  }, { passive: true });
+  $("main").addEventListener("touchcancel", () => { swipe = null; }, { passive: true });
   $("hdr-tank").addEventListener("click", (ev) => {
     const b = ev.target.closest("button[data-tank]");
     if (!b || !isTransfer()) return;
@@ -2207,6 +2298,50 @@
     if (pt && frac < 1) startPourAnim(); else stopPourAnim();
   }
 
+  /**
+   * The can in work now, for the header: { state, frac, size } or null.
+   * fill / pre / full follow the fill timer, with the same limits as the
+   * timer panel.  drain is the time after a +1 can tap, while the drain time
+   * set for that can size runs; a new fill timer ends it.  With no drain
+   * time set, the page cannot know when the can is empty, so it shows none.
+   */
+  function liveState(now) {
+    if (!S) return null;
+    const pt = T.pour;
+    if (pt) {
+      const left = pt.dur - (now - pt.start) / 1000, lead = Math.min(pt.lead, pt.dur - 1);
+      const frac = Math.min(1, Math.max(0, 1 - left / pt.dur));
+      return { state: left > lead ? "fill" : left > 0 ? "pre" : "full", frac, size: pt.size };
+    }
+    // The last can tapped: in the open batch, or in the batch just closed.
+    let t = null, u = null;
+    const list = S.canList();
+    if (list.length) { t = list[list.length - 1].t; u = list[list.length - 1].u; } else {
+      const L = (isTransfer() ? S.out : S).current(), c = L && L.cans;
+      if (c && c.taps && c.taps.length) { t = c.taps[c.taps.length - 1]; u = (c.units && c.units[c.units.length - 1]) || c.unit; }
+    }
+    const d = t != null && u > 0 ? S.drainSecondsFor(u) : null;
+    if (!d) return null;
+    const gone = (now - t) / 1000;
+    return gone >= 0 && gone < d.seconds ? { state: "drain", frac: 1 - gone / d.seconds, size: u } : null;
+  }
+  const LIVE_TEXT = { fill: "Filling a {0} L can", pre: "Close the valve: {0} L can almost full", full: "{0} L can full: pump off", drain: "Draining a {0} L can" };
+  let liveSig = null;
+  function tickLive(now) {
+    const ls = liveState(now), dot = $("hdr-live"), bar = $("hdr-bar");
+    const sig = ls ? `${ls.state}|${ls.size}` : "";
+    if (sig !== liveSig) {
+      liveSig = sig;
+      const cls = ls ? `l-${ls.state}` : "";
+      dot.className = ls ? `live ${cls}` : "live hidden";
+      bar.className = `live-bar ${cls}`;
+      const label = ls ? LIVE_TEXT[ls.state].replace("{0}", f(ls.size, 0)) : "";
+      dot.setAttribute("aria-label", label);
+      dot.setAttribute("title", label);
+    }
+    bar.style.width = ls ? `${100 * ls.frac}%` : "0";
+  }
+
   // The drawing is made from JavaScript, not CSS: CSS transforms on an SVG
   // group and CSS keyframes are not reliable on every phone browser, and a
   // reduced-motion setting turns them off.  Here the hose fills the can,
@@ -2410,6 +2545,7 @@
   function heartbeat() {
     const now = Date.now();
     ringTick(now);
+    tickLive(now);
     if (!S) return;
     // Every tab: an alarm must ring while the operator looks at a chart.
     if (!pending()) tickPour(now);

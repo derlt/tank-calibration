@@ -13,6 +13,12 @@ All notable changes to this project are documented here. The format follows
   the cans left × (fill time + drain time).
 - Now card: *Your taps* shows the measured time per can; a button sets the
   drain time from it (tap gap − fill time).
+- On-site page: a live indicator in the header, on every tab: a dot before
+  the tank name and a progress line along the header's bottom edge. Blue
+  while the can fills, amber at the close-the-valve alarm, green when the
+  can is full, teal while it drains (for the set drain time after *+1 can*).
+- On-site page on a touch screen: swipe left or right in the middle of the
+  screen to go to the next or the previous tab.
 
 ### Changed
 

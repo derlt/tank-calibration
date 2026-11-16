@@ -173,6 +173,87 @@ class TestSitePage(unittest.TestCase):
         self.assertEqual(got["reloadedCount"], "2 cans · 300 L")
 
     @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_header_live_indicator(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "let clock = Date.UTC(2026, 10, 16, 8, 0, 0), beats = [];\n"
+            "class FD extends Date { constructor(...a) { if (a.length) super(...a); else super(clock); } }\n"
+            "FD.now = () => clock;\n"
+            "const extra = () => ({ Date: FD, setInterval: (fn) => { beats.push(fn); return beats.length; } });\n"
+            "const out = {}, store = new Map();\n"
+            "let p = stub.boot(page, corePath, store, extra()), el = p.el;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "// 60 s to fill a 200 L can, 30 s to empty it; the alarm 15 s before full.\n"
+            "const s = JSON.parse(store.get('calib-site:active'));\n"
+            "s.config.fillSeconds = { '200': 60 }; s.config.drainSeconds = { '200': 30 };\n"
+            "store.set('calib-site:active', JSON.stringify(s));\n"
+            "beats = []; p = stub.boot(page, corePath, store, extra()); el = p.el;\n"
+            "const beat = () => { for (const fn of beats) fn(); };\n"
+            "const look = () => ({ dot: el('hdr-live').className, bar: el('hdr-bar').className,"
+            " w: el('hdr-bar').style.width, label: el('hdr-live')['aria-label'] });\n"
+            "beat(); out.idle = look();\n"
+            "el('pt-start').click(); clock += 15000; beat(); out.fill = look();\n"
+            "clock += 35000; beat(); out.pre = look();\n"
+            "clock += 15000; beat(); out.full = look();\n"
+            "el('t-plus').click(); clock += 15000; beat(); out.drain = look();\n"
+            "clock += 20000; beat(); out.after = look();\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertIn("hidden", got["idle"]["dot"], "no dot while no can is in work")
+        self.assertEqual(got["fill"]["dot"], "live l-fill")
+        self.assertEqual(got["fill"]["bar"], "live-bar l-fill")
+        self.assertEqual(got["fill"]["w"], "25%")
+        self.assertEqual(got["fill"]["label"], "Filling a 200 L can")
+        self.assertEqual(got["pre"]["dot"], "live l-pre", "15 s before full: close the valve")
+        self.assertEqual(got["full"]["dot"], "live l-full")
+        self.assertEqual(got["full"]["w"], "100%")
+        self.assertEqual(got["drain"]["dot"], "live l-drain", "after +1 can, the can drains")
+        self.assertEqual(got["drain"]["w"], "50%", "the bar falls as the can empties")
+        self.assertIn("hidden", got["after"]["dot"], "the drain time is over")
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_swipe_changes_the_tab(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "const fire = (type, ev) => { for (const fn of el('main')._listeners[type] || []) fn(ev); };\n"
+            "const swipe = (x0, y0, x1, y1, target) => {\n"
+            "  const t = target || el('live');\n"
+            "  fire('touchstart', { target: t, touches: [{ clientX: x0, clientY: y0 }] });\n"
+            "  fire('touchend', { target: t, changedTouches: [{ clientX: x1, clientY: y1 }] });\n"
+            "};\n"
+            "const shown = () => ['live', 'log', 'shell', 'settings', 'files', 'replay', 'help']"
+            ".filter((id) => !el(id)._classes.has('hidden'));\n"
+            "swipe(250, 300, 120, 310); out.next = shown();\n"
+            "swipe(250, 300, 120, 310); out.next2 = shown();\n"
+            "swipe(120, 300, 250, 300); out.back = shown();\n"
+            "swipe(250, 300, 200, 300); out.short = shown();\n"
+            "swipe(250, 300, 150, 400); out.scroll = shown();\n"
+            "swipe(250, 300, 120, 300, { tagName: 'INPUT' }); out.input = shown();\n"
+            "swipe(120, 300, 250, 300); swipe(120, 300, 250, 300); out.first = shown();\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["next"], ["log"], "a swipe to the left goes to the next tab")
+        self.assertEqual(got["next2"], ["shell"])
+        self.assertEqual(got["back"], ["log"], "a swipe to the right goes back")
+        self.assertEqual(got["short"], ["log"], "a short drag is not a swipe")
+        self.assertEqual(got["scroll"], ["log"], "a mostly vertical drag is a scroll")
+        self.assertEqual(got["input"], ["log"], "a drag in a field is not a swipe")
+        self.assertEqual(got["first"], ["live"], "the first tab is the end: no wrap")
+
+    @unittest.skipUnless(NODE, "node is not installed")
     def test_page_dip_panel_shows_the_expected_level(self):
         stub = (HERE / "tests" / "page_stub.js").as_posix()
         got = _node(

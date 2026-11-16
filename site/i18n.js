@@ -423,6 +423,11 @@
     "Tap +1 can poured.": "Chạm +1 bình đã đổ.",
     "Close the valve: {0} to full": "Khoá van: còn {0} là đầy",
     "Can full: pump off ({0} L)": "Bình đầy: tắt bơm ({0} L)",
+    // The live indicator in the header (its tooltip and accessible name)
+    "Filling a {0} L can": "Đang bơm bình {0} L",
+    "Close the valve: {0} L can almost full": "Khoá van: bình {0} L sắp đầy",
+    "{0} L can full: pump off": "Bình {0} L đầy: tắt bơm",
+    "Draining a {0} L can": "Đang trút bình {0} L",
     "Test alarm": "Thử báo động",
     "▶ Start fill timer ({0})": "▶ Bật hẹn giờ bơm ({0})",
     "Fill time of one {0} L can.": "Thời gian bơm đầy một bình {0} L.",

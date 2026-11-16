@@ -275,6 +275,29 @@ The timer does not count the can. Tap *+1 can poured* when the can is full.
 That tap is the record, and it also stops the timer and the alarm. Emptying
 the can into the tank has no timer.
 
+**Live indicator in the header.** A dot before the tank name and a thin line
+along the bottom edge of the header show the can in work, on every tab:
+
+| Dot | Line | When |
+|---|---|---|
+| blue, slow pulse | grows as the can fills | the fill timer runs |
+| amber, fast pulse | near the full width | the alarm lead: close the valve |
+| green, steady halo | full width | the timer is at 0:00: the can is full |
+| teal, pulse that closes in | shrinks as the can empties | after *+1 can*, for the drain time of that can size |
+| none | none | no can is in work |
+
+The draining state needs a drain time for the can size (*Timers, alarm and
+device*): without one the page cannot know when the can is empty. A new fill
+timer ends it. Hold a finger on the dot (or hover it) for the state in words.
+
+**Swipe between tabs.** On a touch screen, swipe left in the middle of the
+screen for the next tab (Live → Log & charts → Shell → …) and right for the
+one before. The tab changes when the finger lifts; the row stops at the first
+and the last tab. A swipe does nothing when it starts on the tab bar, a
+field, the chart, a box that scrolls sideways (the level table), or within
+24 px of the screen edge, where the phone has its own back gesture. A drag
+that is mostly up or down stays a page scroll.
+
 **Settle timer.** *Batch done* starts the settle timer from the last can.
 The dip card counts down and rings once when the level is ready to dip.
 
