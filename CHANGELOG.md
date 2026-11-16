@@ -23,7 +23,9 @@ All notable changes to this project are documented here. The format follows
   the lock screen and rings when the phone is locked. Setup steps and a
   10 s test are in *Timers, alarm and device*.
 - On-site page on a touch screen: swipe left or right in the middle of the
-  screen to go to the next or the previous tab.
+  screen to go to the next or the previous tab. The tab follows the finger,
+  the next tab slides in, and a short drag springs back (a fade with Reduce
+  Motion).
 
 ### Changed
 
@@ -49,6 +51,13 @@ All notable changes to this project are documented here. The format follows
   buttons read `↑ alpha` and `↓ beta` (the dip card's arrows); the full role
   stays in the tooltip and the accessible name, and the "Current tank"
   label stays for screen readers. Less padding, smaller buttons.
+
+### Fixed
+
+- iPhone timer: the page timer started at the tap on *Start fill timer*,
+  while Safari still asked *Open in "Shortcuts"?*, so the two timers did not
+  agree. The page timer now waits and starts when Shortcuts opens; the panel
+  offers *Open Shortcuts again*, *Start without iPhone timer* and *Cancel*.
 
 ### Added
 

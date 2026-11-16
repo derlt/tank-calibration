@@ -305,6 +305,15 @@ timer (10 s)*. The page opens
 
     shortcuts://x-callback-url/run-shortcut?name=Calib%20timer&input=text&text=75&x-success=<page address>
 
+Safari first asks *Open in "Shortcuts"?*. The iPhone timer starts only when
+you tap *Open*, so the page timer does not start at the tap on *Start fill
+timer*. The panel waits (*Waiting for Shortcuts: tap Open*), and the page
+timer starts when iOS leaves the page for Shortcuts: both timers run
+together. While it waits, *Open Shortcuts again* asks again, *Start without
+iPhone timer* starts the page timer alone, and *Cancel* stops the wait. If
+Shortcuts does not open within 60 s, the wait ends: leaving the page later
+starts nothing.
+
 Shortcuts opens for a moment and Safari comes back to the page. A page opened
 from a Home Screen icon has no address iOS can open, so the link has no
 `x-success`: swipe back to the page. *Stop timer*, *+20 s* and *−20 s* do
@@ -312,11 +321,15 @@ not change the iPhone timer; stop it in the Clock app.
 
 **Swipe between tabs.** On a touch screen, swipe left in the middle of the
 screen for the next tab (Live → Log & charts → Shell → …) and right for the
-one before. The tab changes when the finger lifts; the row stops at the first
-and the last tab. A swipe does nothing when it starts on the tab bar, a
+one before. Once the drag is clearly sideways, the tab follows the finger
+and the page does not scroll. Let go after a quarter of the screen width, or
+with a fast flick, and the next tab slides in from that side; let go sooner
+and the tab springs back. Past the first or the last tab the drag gives way
+and springs back. A swipe does nothing when it starts on the tab bar, a
 field, the chart, a box that scrolls sideways (the level table), or within
 24 px of the screen edge, where the phone has its own back gesture. A drag
-that is mostly up or down stays a page scroll.
+that starts up or down stays a page scroll. With *Reduce Motion* on in the
+phone's settings, the tab does not move: the new tab fades in.
 
 **Settle timer.** *Batch done* starts the settle timer from the last can.
 The dip card counts down and rings once when the level is ready to dip.

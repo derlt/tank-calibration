@@ -82,16 +82,11 @@
   header .live.l-drain { animation: live-in 1.4s ease-in infinite; }
   @keyframes live-out { 0% { box-shadow: 0 0 0 0 var(--lc); } 100% { box-shadow: 0 0 0 0.55rem transparent; } }
   @keyframes live-in { 0% { box-shadow: 0 0 0 0.5rem transparent; } 100% { box-shadow: 0 0 0 0 var(--lc); } }
-  /* A swipe changes the tab: the new tab slides in a little from the side
-     the finger came from. */
-  .swipe-next { animation: swipe-next 0.18s ease-out; }
-  .swipe-prev { animation: swipe-prev 0.18s ease-out; }
-  @keyframes swipe-next { from { transform: translateX(2.5rem); opacity: 0.3; } }
-  @keyframes swipe-prev { from { transform: translateX(-2.5rem); opacity: 0.3; } }
+  /* A swipe moves the tab sideways: no sideways scroll of the page. */
+  main { overflow-x: clip; }
   @media (prefers-reduced-motion: reduce) {
     header .live.l-fill, header .live.l-pre, header .live.l-drain { animation: none; }
     header .live-bar { transition: none; }
-    .swipe-next, .swipe-prev { animation: none; }
   }
   .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
   main { max-width: 760px; margin: 0 auto; padding: 0.8rem; display: grid; gap: 0.8rem; }
@@ -394,6 +389,7 @@
           </div>
           <div class="acts">
             <button class="secondary" id="pt-start">▶ Start fill timer</button>
+            <button class="secondary hidden" id="pt-page">Start without iPhone timer</button>
             <button class="secondary small hidden" id="pt-less">−20 s</button>
             <button class="secondary small hidden" id="pt-more">+20 s</button>
             <button class="danger small hidden" id="pt-stop">Stop timer</button>
@@ -602,7 +598,7 @@
             <li>Name the shortcut with the name above (Calib timer) and tap Done.</li>
             <li>Tick the box above, tap <b>Save timers and device</b>, then <b>Test iPhone timer</b>. Allow the shortcut when iOS asks.</li>
           </ol>
-          <p class="muted">The phone opens Shortcuts for a moment and comes back to the page. From a Home Screen icon it cannot come back by itself: swipe back to the page.</p>
+          <p class="muted">Safari asks first: tap Open. The page timer starts when Shortcuts opens, so the two timers run together. The phone opens Shortcuts for a moment and comes back to the page. From a Home Screen icon it cannot come back by itself: swipe back to the page.</p>
         </details>
       </div>
       <div class="row" style="margin-top:0.6rem"><button id="tm-save">Save timers and device</button><button class="secondary" id="tm-test">Test alarm</button></div>
@@ -1005,11 +1001,14 @@
 
   // A swipe left or right in the middle of the screen goes to the next or the
   // previous tab, in the order of the tab bar; it stops at the ends.  The tab
-  // changes when the finger lifts.  A swipe does nothing when it starts on
-  // the tab bar, a field, the chart, or a box that scrolls sideways (the
-  // level table), or near the screen edge (the phone's own back gesture).
-  // It must be mostly sideways, so a page scroll never changes the tab.
-  const SWIPE = { min: 60, ratio: 1.8, ms: 800, edge: 24 };
+  // follows the finger once the drag is clearly sideways; when the finger
+  // lifts far or fast enough, the next tab slides in from that side, else
+  // the tab springs back.  A swipe does nothing when it starts on the tab
+  // bar, a field, the chart, or a box that scrolls sideways (the level
+  // table), or near the screen edge (the phone's own back gesture).  A drag
+  // that starts up or down stays a page scroll.  With reduced motion the
+  // tab does not move: the new one fades in.
+  const SWIPE = { min: 60, ratio: 1.8, ms: 800, edge: 24, lock: 10, share: 0.25, flick: 0.5 };
   let swipe = null;
   function swipeBlocked(t) {
     for (let e = t; e && e !== document.body; e = e.parentElement) {
@@ -1029,34 +1028,82 @@
     const i = shown.indexOf(tab), j = i + (dx < 0 ? 1 : -1);
     return i >= 0 && j >= 0 && j < shown.length ? shown[j] : null;
   }
+  /** The section a tab shows: Live without a campaign shows the setup card. */
+  function tabSection(name) { return $(name === "live" && !S ? "setup" : name); }
+  function reducedMotion() { return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); }
+  function screenWidth() { return window.innerWidth || 360; }
+  /** Move a section to x px with an optional transition; "" clears the style. */
+  function slide(el, x, how) {
+    el.style.transition = how || "none";
+    el.style.transform = x === "" ? "" : `translateX(${x}px)`;
+  }
+  /** Clear the inline styles once a transition is over. */
+  function settle(el, ms) {
+    setTimeout(() => { el.style.transition = ""; el.style.transform = ""; el.style.opacity = ""; }, ms + 30);
+  }
   $("main").addEventListener("touchstart", (ev) => {
     swipe = null;
     if (!ev.touches || ev.touches.length !== 1) return;
     const p = ev.touches[0], w = window.innerWidth || 0;
     if (p.clientX < SWIPE.edge || (w && p.clientX > w - SWIPE.edge)) return;
     if (swipeBlocked(ev.target)) return;
-    swipe = { x: p.clientX, y: p.clientY, t: Date.now() };
+    swipe = { x: p.clientX, y: p.clientY, t: Date.now(), locked: false, moved: false, sec: tabSection(tab) };
   }, { passive: true });
+  // Not passive: once the drag is sideways, the page must not scroll too.
   $("main").addEventListener("touchmove", (ev) => {
-    if (swipe && ev.touches && ev.touches.length !== 1) swipe = null;   // a pinch
-  }, { passive: true });
+    const s = swipe;
+    if (!s) return;
+    if (!ev.touches || ev.touches.length !== 1) { springBack(s); swipe = null; return; }   // a pinch
+    const p = ev.touches[0], dx = p.clientX - s.x, dy = p.clientY - s.y;
+    s.moved = true;
+    if (!s.locked) {
+      if (Math.abs(dy) > SWIPE.lock && Math.abs(dy) >= Math.abs(dx)) { swipe = null; return; }   // a scroll
+      if (Math.abs(dx) < SWIPE.lock || Math.abs(dx) < 1.5 * Math.abs(dy)) return;
+      if (window.getSelection && String(window.getSelection()).length) { swipe = null; return; }
+      s.locked = true;
+    }
+    if (ev.cancelable) ev.preventDefault();
+    s.dx = dx;
+    if (reducedMotion()) return;
+    // Past the first or the last tab the drag gives way: a rubber band.
+    slide(s.sec, swipeTarget(dx) ? dx : dx * 0.3);
+  }, { passive: false });
+  function springBack(s) {
+    if (!s || !s.locked || reducedMotion()) return;
+    slide(s.sec, 0, "transform 0.2s ease-out");
+    settle(s.sec, 200);
+  }
   $("main").addEventListener("touchend", (ev) => {
     const s = swipe; swipe = null;
     if (!s || !ev.changedTouches || !ev.changedTouches.length) return;
-    const p = ev.changedTouches[0], dx = p.clientX - s.x, dy = p.clientY - s.y;
-    if (Date.now() - s.t > SWIPE.ms || Math.abs(dx) < SWIPE.min || Math.abs(dx) < SWIPE.ratio * Math.abs(dy)) return;
-    // A text selection is a drag, not a swipe.
-    if (window.getSelection && String(window.getSelection()).length) return;
-    const to = swipeTarget(dx);
-    if (!to) return;
+    const p = ev.changedTouches[0], dx = p.clientX - s.x, dy = p.clientY - s.y, dt = Math.max(1, Date.now() - s.t);
+    const w = screenWidth();
+    const go = s.locked
+      ? Math.abs(dx) >= Math.max(SWIPE.min, SWIPE.share * w) || (Math.abs(dx) >= SWIPE.min / 2 && Math.abs(dx) / dt >= SWIPE.flick)
+      // No move events came (a very fast flick): the plain rule.
+      : !s.moved && dt <= SWIPE.ms && Math.abs(dx) >= SWIPE.min && Math.abs(dx) >= SWIPE.ratio * Math.abs(dy)
+        && !(window.getSelection && String(window.getSelection()).length);
+    const to = go ? swipeTarget(dx) : null;
+    if (!to) { springBack(s); return; }
+    slide(s.sec, "");
     goTab(to);
-    const sec = $(to === "live" && !S ? "setup" : to), cls = dx < 0 ? "swipe-next" : "swipe-prev";
-    sec.classList.remove("swipe-next", "swipe-prev");
-    void sec.offsetWidth;   // restart the slide
-    sec.classList.add(cls);
-    setTimeout(() => sec.classList.remove(cls), 250);
+    const sec = tabSection(to);
+    if (reducedMotion()) {
+      sec.style.transition = "none"; sec.style.opacity = "0";
+      void sec.offsetWidth;
+      sec.style.transition = "opacity 0.15s ease-out"; sec.style.opacity = "1";
+      settle(sec, 150);
+      return;
+    }
+    // The new tab comes in next to where the old one was let go.
+    const from = (dx < 0 ? 1 : -1) * Math.max(0, w - Math.abs(s.locked ? dx : 0));
+    const ms = Math.round(120 + 180 * Math.abs(from) / w);
+    slide(sec, from);
+    void sec.offsetWidth;   // the start position must be drawn before the transition
+    slide(sec, 0, `transform ${ms}ms cubic-bezier(0.2, 0.7, 0.3, 1)`);
+    settle(sec, ms);
   }, { passive: true });
-  $("main").addEventListener("touchcancel", () => { swipe = null; }, { passive: true });
+  $("main").addEventListener("touchcancel", () => { springBack(swipe); swipe = null; }, { passive: true });
   $("hdr-tank").addEventListener("click", (ev) => {
     const b = ev.target.closest("button[data-tank]");
     if (!b || !isTransfer()) return;
@@ -1186,7 +1233,7 @@
     if (S.quickTap(now) && !confirm(tr(`Less than ${S.cfg.tapGap} s since the last can. Is this a new can?`))) return;
     S.tap(now, u); save();
     // The can is counted: its pour timer and alarm are done.
-    if (T.pour) { delete T.pour; saveTimer(); }
+    if (T.pour || T.wait) { delete T.pour; delete T.wait; saveTimer(); }
     stopAlarm();
     unlockAudio();
     if (navigator.vibrate) navigator.vibrate(40);
@@ -1206,7 +1253,7 @@
       const ts = L.cans.taps.filter((x) => x != null);
       L.pourTime = ts.length ? ts[ts.length - 1] : Date.now();
       if (isTransfer()) S.in.current().pourTime = L.pourTime;
-      if (T.pour) { delete T.pour; saveTimer(); }
+      if (T.pour || T.wait) { delete T.pour; delete T.wait; saveTimer(); }
       stopAlarm(); unlockAudio();
       $("p-note").value = ""; $("p-vol").value = ""; $("t-part").checked = false; $("p-over").checked = false; $("p-neck").checked = false;
       save();
@@ -1226,7 +1273,7 @@
     const L = S.pour(text, Object.assign({ note: $("p-note").value.trim() }, overNeck()));
     L.pourTime = Date.now();
     if (isTransfer()) S.in.current().pourTime = L.pourTime;
-    if (T.pour) { delete T.pour; saveTimer(); }
+    if (T.pour || T.wait) { delete T.pour; delete T.wait; saveTimer(); }
     stopAlarm(); unlockAudio();
     $("p-note").value = ""; $("p-vol").value = ""; $("p-unknown").checked = false; $("p-extra").checked = false; $("p-over").checked = false; $("p-neck").checked = false;
     save();
@@ -2262,12 +2309,34 @@
       return;
     }
     stopAlarm(); unlockAudio();
-    T.pour = { start: Date.now(), dur: d.seconds, size: u, lead: S.cfg.alarmLead, preAlarmed: false, fullAlarmed: false };
-    saveTimer(); keepAwake();
+    const run = { dur: d.seconds, size: u, lead: S.cfg.alarmLead };
+    if (!P.iosTimer) { startPour(run, Date.now()); return; }
+    // Safari first asks "Open in Shortcuts?".  The iPhone timer starts only
+    // when the operator taps Open, so the page waits for that moment: iOS
+    // hides the page when Shortcuts opens, and the page timer starts then.
+    T.wait = Object.assign({ at: Date.now() }, run);
+    saveTimer(); render();
     // The iPhone timer rings with the page's first alarm: close the valve.
-    if (P.iosTimer) iosTimer(d.seconds - Math.min(S.cfg.alarmLead, d.seconds - 1), P.iosShortcut);
+    iosTimer(run.dur - Math.min(run.lead, run.dur - 1), P.iosShortcut);
   }));
-  $("pt-stop").addEventListener("click", () => { delete T.pour; saveTimer(); stopAlarm(); render(); });
+  function startPour(run, now) {
+    delete T.wait;
+    T.pour = { start: now, dur: run.dur, size: run.size, lead: run.lead, preAlarmed: false, fullAlarmed: false };
+    saveTimer(); keepAwake(); render();
+  }
+  /** Shortcuts must open within this time of the tap, or the wait is over. */
+  const IOS_WAIT_MS = 60000;
+  function iosWaiting(now) { return !!T.wait && now - T.wait.at < IOS_WAIT_MS; }
+  function onPageHidden() {
+    if (document.hidden && T.wait && !T.pour && iosWaiting(Date.now())) startPour(T.wait, Date.now());
+  }
+  if (document.addEventListener) {
+    document.addEventListener("visibilitychange", onPageHidden);
+    // A page that unloads (x-success may reload it) saves the start first.
+    if (window.addEventListener) window.addEventListener("pagehide", () => { if (T.wait && !T.pour && iosWaiting(Date.now())) startPour(T.wait, Date.now()); });
+  }
+  $("pt-page").addEventListener("click", () => { if (T.wait) startPour(T.wait, Date.now()); });
+  $("pt-stop").addEventListener("click", () => { delete T.pour; delete T.wait; saveTimer(); stopAlarm(); render(); });
   $("pt-more").addEventListener("click", () => {
     if (!T.pour) return;
     T.pour.dur += 20;
@@ -2284,9 +2353,12 @@
   function tickPour(now) {
     if (!S) return;
     const pt = T.pour, u = activeUnit(), d = fillTimeFor(u), box = $("pt");
-    const run = !!pt;
-    for (const id of ["pt-less", "pt-more", "pt-stop"]) $(id).classList.toggle("hidden", !run);
+    const run = !!pt, wait = !pt && !!T.wait;
+    for (const id of ["pt-less", "pt-more"]) $(id).classList.toggle("hidden", !run);
+    $("pt-stop").classList.toggle("hidden", !run && !wait);
+    $("pt-stop").textContent = wait ? "Cancel" : "Stop timer";
     $("pt-start").classList.toggle("hidden", run);
+    $("pt-page").classList.toggle("hidden", !wait);
     // A drain takes the batch out of the tank; a fill puts it in.  A transfer
     // draws the can from tank A, so the drawing follows A.
     const TA = isTransfer() ? S.out : S;
@@ -2296,7 +2368,15 @@
     $("pt-tank").setAttribute("y", String(82 - 42 * tankFrac));
     $("pt-tank").setAttribute("height", String(42 * tankFrac));
     let frac = 0;
-    if (!pt) {
+    if (wait) {
+      box.className = "timer pre";
+      $("pt-clock").textContent = fmtClock(T.wait.dur);
+      $("pt-status").textContent = iosWaiting(now)
+        ? "Waiting for Shortcuts: tap Open. The page timer starts when Shortcuts opens, with the iPhone timer."
+        : "Shortcuts did not open. Open it again, or start the page timer alone.";
+      $("pt-start").textContent = "Open Shortcuts again";
+      $("t-plus").classList.remove("pulse");
+    } else if (!pt) {
       box.className = "timer";
       $("pt-clock").textContent = d ? fmtClock(d.seconds) : "—:—";
       $("pt-status").textContent = !(u > 0) ? "Enter the can size to use the timer."

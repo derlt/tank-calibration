@@ -240,7 +240,20 @@ class TestSitePage(unittest.TestCase):
             "el('tm-fill-200').value = '1:30'; el('tm-lead').value = '15';\n"
             "el('tm-ios-on').checked = true; el('tm-ios-name').value = 'Bồn timer';\n"
             "el('tm-save').click();\n"
+            "const timer = () => JSON.parse(store.get('calib-site:timer') || '{}');\n"
             "el('pt-start').click(); out.url = loc.href;\n"
+            "// Safari asks 'Open in Shortcuts?': the page timer waits for the answer.\n"
+            "out.waiting = { pour: !!timer().pour, wait: !!timer().wait, status: el('pt-status').textContent,"
+            " again: el('pt-start').textContent, alone: !el('pt-page')._classes.has('hidden'), cancel: el('pt-stop').textContent };\n"
+            "p.document.hidden = true; p.document.fire('visibilitychange'); p.document.hidden = false;\n"
+            "out.opened = { pour: !!timer().pour, wait: !!timer().wait };\n"
+            "// The operator taps Cancel at the question: Start without iPhone timer.\n"
+            "el('pt-stop').click(); el('pt-start').click(); el('pt-page').click();\n"
+            "out.alone = { pour: !!timer().pour, wait: !!timer().wait };\n"
+            "// A wait that is cancelled: hiding the page later starts nothing.\n"
+            "el('pt-stop').click(); el('pt-start').click(); el('pt-stop').click();\n"
+            "p.document.hidden = true; p.document.fire('visibilitychange'); p.document.hidden = false;\n"
+            "out.cancelled = { pour: !!timer().pour, wait: !!timer().wait };\n"
             "el('tm-ios-test').click(); out.test = loc.href;\n"
             "// A Home Screen app gets no x-success: iOS cannot open it by address.\n"
             "loc.href = 'https://site.test/';\n"
@@ -255,6 +268,15 @@ class TestSitePage(unittest.TestCase):
             "shortcuts://x-callback-url/run-shortcut?name=B%E1%BB%93n%20timer&input=text&text=75"
             "&x-success=https%3A%2F%2Fsite.test%2F",
         )
+        self.assertEqual(got["waiting"]["pour"], False, "no page timer before Shortcuts opens")
+        self.assertTrue(got["waiting"]["wait"])
+        self.assertIn("Waiting for Shortcuts", got["waiting"]["status"])
+        self.assertEqual(got["waiting"]["again"], "Open Shortcuts again")
+        self.assertTrue(got["waiting"]["alone"])
+        self.assertEqual(got["waiting"]["cancel"], "Cancel")
+        self.assertEqual(got["opened"], {"pour": True, "wait": False}, "Shortcuts opened: the page timer starts")
+        self.assertEqual(got["alone"], {"pour": True, "wait": False})
+        self.assertEqual(got["cancelled"], {"pour": False, "wait": False})
         self.assertIn("text=10&", got["test"])
         self.assertTrue(got["standalone"].endswith("text=75"), got["standalone"])
 

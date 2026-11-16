@@ -58,7 +58,13 @@ function boot(pagePath, corePath, store, extra) {
   const downloads = [];   // every <a> the page makes: { download: filename, href }
   const context = {
     window: { CalibSite: core, CalibI18n: require(require("path").join(require("path").dirname(corePath), "i18n.js")), CalibCloud: require(require("path").join(require("path").dirname(corePath), "cloud.js")), addEventListener: () => {} },
-    document: { getElementById: el, createElement: () => { const a = makeElement("a"); downloads.push(a); return a; }, body: { appendChild: () => {} } },
+    document: {
+      getElementById: el, createElement: () => { const a = makeElement("a"); downloads.push(a); return a; }, body: { appendChild: () => {} },
+      // Page visibility: a test sets hidden and calls fire("visibilitychange").
+      hidden: false, _listeners: {},
+      addEventListener(type, fn) { (this._listeners[type] = this._listeners[type] || []).push(fn); },
+      fire(type) { for (const fn of this._listeners[type] || []) fn({}); },
+    },
     localStorage: {
       getItem: (k) => (mem.has(k) ? mem.get(k) : null),
       setItem: (k, v) => mem.set(k, v),
@@ -89,7 +95,7 @@ function boot(pagePath, corePath, store, extra) {
   context.window.document = context.document;
   vm.createContext(context);
   vm.runInContext(pageScript, context);
-  return { el, els, tabs, store: mem, downloads };
+  return { el, els, tabs, store: mem, downloads, document: context.document };
 }
 
 module.exports = { boot };
