@@ -401,6 +401,47 @@ class TestSitePage(unittest.TestCase):
         self.assertEqual(got["minus"], got["advice"])
 
     @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_drain_time_and_tap_check(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "let p = stub.boot(page, corePath, store), el = p.el;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "el('tm-fill-200').value = '1:30'; el('tm-drain-200').value = '0:40'; el('tm-save').click();\n"
+            "out.cfg = JSON.parse(store.get('calib-site:active')).config.drainSeconds;\n"
+            "out.eta = el('now-eta').innerHTML; out.useHidden = el('eta-use')._classes.has('hidden');\n"
+            "// Two taps 150 s apart: the check says 2:30, the button offers drain 1:00.\n"
+            "el('t-plus').click(); el('t-plus').click();\n"
+            "const s = JSON.parse(store.get('calib-site:active'));\n"
+            "s.batch.cans[0].t = Date.now() - 150000; s.batch.cans[1].t = Date.now();\n"
+            "store.set('calib-site:active', JSON.stringify(s));\n"
+            "p = stub.boot(page, corePath, store); el = p.el;\n"
+            "out.eta2 = el('now-eta').innerHTML;\n"
+            "out.use = {hidden: el('eta-use')._classes.has('hidden'), text: el('eta-use').textContent};\n"
+            "el('eta-use').click();\n"
+            "out.after = JSON.parse(store.get('calib-site:active')).config.drainSeconds;\n"
+            "out.useAfter = el('eta-use')._classes.has('hidden');\n"
+            "out.eta3 = el('now-eta').innerHTML;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["cfg"], {"200": 40})
+        self.assertIn("2:10 per can (fill 1:30 + drain 0:40)", got["eta"])
+        self.assertIn("no settle and no dip time", got["eta"])
+        self.assertTrue(got["useHidden"], "no taps, no button")
+        self.assertIn("Your taps: 2:30 per can", got["eta2"])
+        self.assertIn("2:10 per can", got["eta2"], "the taps do not change the estimate by themselves")
+        self.assertFalse(got["use"]["hidden"])
+        self.assertEqual(got["use"]["text"], "Use the taps: drain 1:00 per 200 L can")
+        self.assertEqual(got["after"], {"200": 60})
+        self.assertTrue(got["useAfter"], "once adopted, the button goes away")
+        self.assertIn("2:30 per can (fill 1:30 + drain 1:00)", got["eta3"])
+
+    @unittest.skipUnless(NODE, "node is not installed")
     def test_page_pour_and_settle_timers(self):
         stub = (HERE / "tests" / "page_stub.js").as_posix()
         got = _node(
@@ -484,7 +525,7 @@ class TestSitePage(unittest.TestCase):
         self.assertEqual(got["cfg"]["fillSeconds"], {"200": 90})
         self.assertEqual(got["cfg"]["alarmLead"], 15)
         self.assertNotIn("pourSeconds", got["cfg"], "the old key is gone")
-        self.assertEqual(got["cfgKeys"], ["alarmLead", "dipSeconds", "fillSeconds", "settleSeconds"])
+        self.assertEqual(got["cfgKeys"], ["alarmLead", "dipSeconds", "drainSeconds", "fillSeconds", "settleSeconds"])
         self.assertIn("To half", got["eta"])
         self.assertIn("To brim", got["eta"])
         self.assertIn("× 200 L", got["eta"])
@@ -1784,7 +1825,7 @@ class TestSiteCore(unittest.TestCase):
             "out.none = s.fillSecondsFor(200);\n"
             "// Taps 100 s, 120 s, 110 s apart; one 100 L can between them breaks a pair.\n"
             "s.tap(0, 200); s.tap(100000, 200); s.tap(220000, 200); s.tap(330000, 200); s.tap(400000, 100);\n"
-            "out.measured = s.cycleSecondsFor(200); out.other = s.cycleSecondsFor(100);\n"
+            "out.measured = s.measuredPourSeconds(200); out.other = s.measuredPourSeconds(100);\n"
             "out.noFill = s.fillSecondsFor(200);\n"
             "s.setTimers({settleSeconds: 420, dipSeconds: 45, alarmLead: 12, fillSeconds: {200: 95, '100.0': 50}});\n"
             "out.set = [s.fillSecondsFor(200), s.fillSecondsFor(100), s.cfg.settleSeconds, s.cfg.dipSeconds, s.cfg.alarmLead];\n"
@@ -1798,16 +1839,43 @@ class TestSiteCore(unittest.TestCase):
         )
         self.assertEqual(got["defaults"], [300, 60, {}, 15])
         self.assertIsNone(got["none"], "the timer needs a set fill time")
-        self.assertEqual(got["measured"], {"seconds": 110, "source": "measured", "n": 3})
+        self.assertEqual(got["measured"], {"seconds": 110, "n": 3})
         self.assertIsNone(got["other"], "one 100 L can has no gap of its own size")
         self.assertIsNone(got["noFill"], "a tap gap never gives the fill time")
         self.assertEqual(got["set"][0], {"seconds": 95, "source": "set"})
         self.assertEqual(got["set"][1], {"seconds": 50, "source": "set"}, "100.0 and 100 are one size")
         self.assertEqual(got["set"][2:], [420, 45, 12])
-        self.assertEqual(got["cycle"]["source"], "measured", "the estimate prefers the measured cycle")
+        self.assertEqual(got["cycle"], {"seconds": 95, "source": "fill", "fill": 95},
+                         "the estimate uses the typed times, never the tap gap")
         self.assertEqual(got["saved"], [420, {"200": 95, "100": 50}, 12])
         self.assertEqual(got["cleared"], None, "a cleared fill time leaves the timer without one")
         self.assertEqual(got["bad"], 4)
+
+    def test_drain_time_adds_to_the_cycle(self):
+        got = _node(
+            "const s = new core.Session({D: 1800, Lest: 3000, pourUnit: 200});\n"
+            "const out = {};\n"
+            "out.default = JSON.parse(JSON.stringify(s.cfg.drainSeconds));\n"
+            "s.start('400', 400); s.dip(400);\n"
+            "s.setTimers({drainSeconds: {200: 40}}); out.drainOnly = s.cycleSecondsFor(200);\n"
+            "s.setTimers({fillSeconds: {200: 90}}); out.both = s.cycleSecondsFor(200);\n"
+            "out.timer = s.fillSecondsFor(200);\n"
+            "const back = core.Session.fromJSON(JSON.parse(JSON.stringify(s.toJSON())));\n"
+            "out.saved = back.cfg.drainSeconds;\n"
+            "s.setTimers({drainSeconds: {200: null}}); out.cleared = s.cycleSecondsFor(200);\n"
+            "try { s.setTimers({drainSeconds: {200: 0}}); out.bad = false; } catch (e) { out.bad = true; }\n"
+            "s.setTimers({drainSeconds: {200: 40}});\n"
+            "s.tap(0, 200); s.tap(150000, 200); out.measured = s.cycleSecondsFor(200);\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["default"], {})
+        self.assertEqual(got["drainOnly"], {"seconds": 40, "source": "drain", "drain": 40})
+        self.assertEqual(got["both"], {"seconds": 130, "source": "set", "fill": 90, "drain": 40})
+        self.assertEqual(got["timer"], {"seconds": 90, "source": "set"}, "the fill timer ignores the drain")
+        self.assertEqual(got["saved"], {"200": 40})
+        self.assertEqual(got["cleared"], {"seconds": 90, "source": "fill", "fill": 90})
+        self.assertTrue(got["bad"])
+        self.assertEqual(got["measured"]["source"], "set", "a tap gap never replaces the typed times")
 
     def test_fill_plan(self):
         got = _node(

@@ -6,8 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- On-site page: a drain time per can size (Timers, alarm and device): the
+  time to empty one can. The time to half and to the brim (or the bottom) is
+  the cans left × (fill time + drain time).
+- Now card: *Your taps* shows the measured time per can; a button sets the
+  drain time from it (tap gap − fill time).
+
 ### Changed
 
+- The time to half and to the brim counts pouring time only (no settle, no
+  dip) and uses only the typed times: the tap gap no longer replaces them
+  without notice.
+- Vietnamese: a can is now "bình" (was "can").
 - On-site page on a phone: no tab is wider than the screen any more (Log &
   charts was 1094 px wide at 360 px; the level table now scrolls in its own
   box, and the chart takes the card width). The How it works table wraps and

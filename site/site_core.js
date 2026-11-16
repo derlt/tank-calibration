@@ -235,6 +235,7 @@
     settleSeconds: 300,         // s: idle time after a batch before the dip (§3.5)
     dipSeconds: 60,             // s: one dip and its entry, for the time estimate
     fillSeconds: null,          // { "200": 90, … }: fill one can by the pump, s
+    drainSeconds: null,         // { "200": 40, … }: empty one can (into the tank, or away), s
     alarmLead: 15,              // s before the can is full: close the valve
     learnN: 3,                  // intervals before a confirmed miss is an anomaly
     scalePrior: 4,              // pseudo-count for the noise scale estimate
@@ -266,6 +267,7 @@
     if (cfg.pourSeconds && !cfg.fillSeconds) cfg.fillSeconds = cfg.pourSeconds;
     delete cfg.pourSeconds;
     cfg.fillSeconds = Object.assign({}, cfg.fillSeconds || {});
+    cfg.drainSeconds = Object.assign({}, cfg.drainSeconds || {});
     if (cfg.direction == null || cfg.direction === "") cfg.direction = "fill";
     if (cfg.direction !== "fill" && cfg.direction !== "drain") throw new Error(`direction must be "fill" or "drain", not ${JSON.stringify(cfg.direction)}`);
     cfg.dir = cfg.direction === "drain" ? -1 : 1;
@@ -1020,6 +1022,12 @@
       if (!(v > 0)) throw new Error("a fill time must be more than 0 s");
       cfg.fillSeconds[sizeKey(k)] = v;
     }
+    for (const k of Object.keys(o.drainSeconds || {})) {
+      const v = o.drainSeconds[k];
+      if (v == null || v === "") { delete cfg.drainSeconds[sizeKey(k)]; continue; }
+      if (!(v > 0)) throw new Error("a drain time must be more than 0 s");
+      cfg.drainSeconds[sizeKey(k)] = v;
+    }
     return cfg;
   };
 
@@ -1052,12 +1060,25 @@
     return set > 0 ? { seconds: set, source: "set" } : null;
   };
 
-  /** Time one can costs the campaign: the measured cycle, else the fill time. */
+  /** Drain time of one can: the time to empty it.  A setting only. */
+  Session.prototype.drainSecondsFor = function (size) {
+    const set = this.cfg.drainSeconds[sizeKey(size)];
+    return set > 0 ? { seconds: set, source: "set" } : null;
+  };
+
+  /**
+   * Time one can costs the campaign: the set fill time plus the set drain
+   * time ("set"); one of them alone is a floor ("fill" or "drain").  Only
+   * the typed times count, so the estimate never changes its source by
+   * itself.  The tap gap (measuredPourSeconds) is shown beside it as a
+   * check; the operator can adopt it as the drain time.
+   */
   Session.prototype.cycleSecondsFor = function (size) {
-    const m = this.measuredPourSeconds(size);
-    if (m) return { seconds: m.seconds, source: "measured", n: m.n };
-    const f = this.fillSecondsFor(size);
-    return f ? { seconds: f.seconds, source: "fill" } : null;
+    const f = this.fillSecondsFor(size), d = this.drainSecondsFor(size);
+    if (f && d) return { seconds: f.seconds + d.seconds, source: "set", fill: f.seconds, drain: d.seconds };
+    if (f) return { seconds: f.seconds, source: "fill", fill: f.seconds };
+    if (d) return { seconds: d.seconds, source: "drain", drain: d.seconds };
+    return null;
   };
 
   /**
@@ -1567,7 +1588,7 @@
     scale: { get: function () { return this[this.active].scale; } },
   });
   for (const name of ["current", "lastGood", "advice", "preview", "status", "series",
-    "learning", "fillPlan", "measuredPourSeconds", "fillSecondsFor", "cycleSecondsFor",
+    "learning", "fillPlan", "measuredPourSeconds", "fillSecondsFor", "drainSecondsFor", "cycleSecondsFor",
     "toRawCsv"]) {
     TransferSession.prototype[name] = function (name) {
       return function () { const s = this[this.active]; return s[name].apply(s, arguments); };

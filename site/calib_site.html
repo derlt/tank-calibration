@@ -325,6 +325,7 @@
       <p id="now-pred" class="pred"></p>
       <p id="now-advice" style="margin:0.6rem 0 0;font-weight:650"></p>
       <div id="now-eta" class="eta vb"></div>
+      <button class="secondary small hidden" id="eta-use"></button>
       <p id="now-drift" class="muted" style="margin:0.3rem 0 0"></p>
     </div>
 
@@ -544,6 +545,9 @@
       <h2 style="margin-top:0.9rem">Fill (pump) time per can, m:ss</h2>
       <p class="muted" style="margin-top:0">The time the pump needs to fill one can. The alarm rings this time minus the lead, so the valve is closed when the can is full. The timer needs this number: a tap gap cannot give it, because the gap also holds the carry and the drain.</p>
       <div class="grid" id="tm-sizes"></div>
+      <h2 style="margin-top:0.9rem">Drain time per can, m:ss</h2>
+      <p class="muted" style="margin-top:0" id="tm-drain-help">The time to empty one can into the tank. The time to half and to the brim adds it to the fill time.</p>
+      <div class="grid" id="tm-drains"></div>
       <div class="row" style="margin-top:0.6rem">
         <label class="check"><input type="checkbox" id="tm-anim"> pour animation</label>
         <label class="check"><input type="checkbox" id="tm-sound"> sound</label>
@@ -741,10 +745,10 @@
     "Two tanks: pump A → pour B": "Hai bồn: bơm từ A → đổ vào B",
     "Fill: pour known volumes in, and the level rises to the brim.": "Đổ vào: đổ các thể tích đã biết vào bồn, và mức dâng dần tới đỉnh bồn.",
     "Drain: the tank is full.": "Bơm ra: bồn đang đầy.",
-    "A pump draws the water out into calibrated cans, and the level falls to the bottom.": "Bơm hút nước ra các can đã hiệu chuẩn, và mức hạ dần tới đáy.",
+    "A pump draws the water out into calibrated cans, and the level falls to the bottom.": "Bơm hút nước ra các bình đã hiệu chuẩn, và mức hạ dần tới đáy.",
     "The direction is fixed for the whole campaign.": "Chiều được cố định cho cả đợt đo.",
-    "Two tanks, one water: a pump draws known volumes out of the full tank A into calibrated cans, and the same cans are emptied into tank B.": "Hai bồn, một lượng nước: bơm hút các thể tích đã biết từ bồn A đầy ra các can đã hiệu chuẩn, rồi trút chính các can đó vào bồn B.",
-    "A is a drain, B is a fill; one batch of cans is one step for both.": "A là bơm ra, B là đổ vào; một mẻ can là một bước cho cả hai bồn.",
+    "Two tanks, one water: a pump draws known volumes out of the full tank A into calibrated cans, and the same cans are emptied into tank B.": "Hai bồn, một lượng nước: bơm hút các thể tích đã biết từ bồn A đầy ra các bình đã hiệu chuẩn, rồi trút chính các bình đó vào bồn B.",
+    "A is a drain, B is a fill; one batch of cans is one step for both.": "A là bơm ra, B là đổ vào; một mẻ bình là một bước cho cả hai bồn.",
     "Two raw files come out, one per tank.": "Kết quả là hai tệp thô, mỗi bồn một tệp.",
     "Tank name": "Tên bồn",
     "Tank A name (pump out)": "Tên bồn A (bơm ra)",
@@ -753,7 +757,7 @@
     "D is good to ±, mm": "Sai số của D ±, mm",
     "Length estimate L, mm": "Chiều dài ước tính L, mm",
     "L is good to ±, mm (blank = {0} %)": "Sai số của L ±, mm (để trống = {0} %)",
-    "Default can size, L": "Cỡ can mặc định, L",
+    "Default can size, L": "Cỡ bình mặc định, L",
     "Noise and limits: reading σ {0} mm, pour {1} % + {2} L, datum ±{3} mm.": "Nhiễu và giới hạn: σ số đo {0} mm, lượng đổ {1} % + {2} L, mốc chuẩn ±{3} mm.",
     "Change them in Settings; they apply to the next campaign.": "Đổi các giá trị này trong Cài đặt; chúng áp dụng cho đợt đo sau.",
     "First level": "Mức đầu tiên",
@@ -820,14 +824,14 @@
     "That pour reaches the neck: no shell level to expect.": "Lần đổ đó chạm tới cổ bồn: không có mức thân bồn dự kiến.",
     "That drain runs the tank dry: no level to expect.": "Lần bơm ra đó làm cạn bồn: không có mức dự kiến.",
     "Near the brim (≈ {0} mm, gap ≈ {1} L): halve the pour.": "Gần đỉnh bồn (≈ {0} mm, khoảng trống ≈ {1} L): giảm một nửa lượng đổ.",
-    "Near the bottom (≈ {0} mm, ≈ {1} L left): the pump may lose suction; a part can is fine (N+?).": "Gần đáy (≈ {0} mm, còn ≈ {1} L): bơm có thể mất hút; can lẻ cũng được (N+?).",
+    "Near the bottom (≈ {0} mm, ≈ {1} L left): the pump may lose suction; a part can is fine (N+?).": "Gần đáy (≈ {0} mm, còn ≈ {1} L): bơm có thể mất hút; bình lẻ cũng được (N+?).",
     "Tank B near the brim (≈ {0} mm): small batches.": "Bồn B gần đỉnh (≈ {0} mm): chia mẻ nhỏ.",
-    "Tank A near the bottom (≈ {0} mm): the pump may lose suction; a part can is fine.": "Bồn A gần đáy (≈ {0} mm): bơm có thể mất hút; can lẻ cũng được.",
+    "Tank A near the bottom (≈ {0} mm): the pump may lose suction; a part can is fine.": "Bồn A gần đáy (≈ {0} mm): bơm có thể mất hút; bình lẻ cũng được.",
     "The level is in the neck.": "Mức đang ở trong cổ bồn.",
     "Drain until the level is back in the shell.": "Bơm ra cho tới khi mức trở lại thân bồn.",
     "Tick 'level still in the neck' while it stays in the neck.": "Đánh dấu 'mức vẫn trong cổ bồn' khi mức còn trong cổ bồn.",
     "Running books − shell: {0} L (alarm beyond ±{1} L)": "Sổ sách − mô hình bồn: {0} L (báo động khi vượt ±{1} L)",
-    "DRIFT: stop and audit (tilt? can size? leak?)": "ĐỘ TRÔI: dừng lại và kiểm tra (bồn nghiêng? cỡ can? rò rỉ?)",
+    "DRIFT: stop and audit (tilt? can size? leak?)": "ĐỘ TRÔI: dừng lại và kiểm tra (bồn nghiêng? cỡ bình? rò rỉ?)",
     "DRIFT {0} L: stop and audit.": "ĐỘ TRÔI {0} L: dừng lại và kiểm tra.",
     "DRIFT: stop and audit.": "ĐỘ TRÔI: dừng lại và kiểm tra.",
     "{name} {0} L (alarm beyond ±{1} L)": "{name} {0} L (báo động khi vượt ±{1} L)",
@@ -844,10 +848,10 @@
     "reaches the neck": "chạm tới cổ bồn",
     "runs dry": "cạn bồn",
     "Near the brim: half pour.": "Gần đỉnh bồn: đổ một nửa.",
-    "Near the bottom: a part can is fine.": "Gần đáy: can lẻ cũng được.",
+    "Near the bottom: a part can is fine.": "Gần đáy: bình lẻ cũng được.",
     "In the neck: drain on.": "Trong cổ bồn: tiếp tục bơm ra.",
     "B near the brim: small batches.": "B gần đỉnh bồn: chia mẻ nhỏ.",
-    "A near the bottom: a part can is fine.": "A gần đáy: can lẻ cũng được.",
+    "A near the bottom: a part can is fine.": "A gần đáy: bình lẻ cũng được.",
     // Time to half, bottom and brim
     "To half": "Tới nửa bồn",
     "To brim": "Tới đỉnh bồn",
@@ -863,87 +867,89 @@
     "{0} h": "{0} giờ",
     "{0} h {1} min": "{0} giờ {1} phút",
     "done ≈": "xong ≈",
-    "{0} per can (measured cycle: fill, carry, drain), settle {1}, dip {2} per level.": "{0} mỗi can (chu kỳ đã đo: bơm đầy, mang, trút), chờ ổn định {1}, đo {2} mỗi mức.",
-    "{0} per can (fill time only: a floor), settle {1}, dip {2} per level.": "{0} mỗi can (chỉ thời gian bơm đầy: mức tối thiểu), chờ ổn định {1}, đo {2} mỗi mức.",
+    "{0} per can (measured cycle: fill, carry, drain), settle {1}, dip {2} per level.": "{0} mỗi bình (chu kỳ đã đo: bơm đầy, mang, trút), chờ ổn định {1}, đo {2} mỗi mức.",
+    "{0} per can (fill time only: a floor), settle {1}, dip {2} per level.": "{0} mỗi bình (chỉ thời gian bơm đầy: mức tối thiểu), chờ ổn định {1}, đo {2} mỗi mức.",
+    "{0} per can (fill {1} + drain {2}), settle {3}, dip {4} per level.": "{0} mỗi bình (bơm đầy {1} + trút {2}), chờ ổn định {3}, đo {4} mỗi mức.",
+    "{0} per can (drain time only: a floor), settle {1}, dip {2} per level.": "{0} mỗi bình (chỉ thời gian trút: mức tối thiểu), chờ ổn định {1}, đo {2} mỗi mức.",
     "From the running shell and the pour advice, without extra dips.": "Theo mô hình bồn tạm và lời khuyên đổ, chưa tính các lần đo thêm.",
     "From the running shells and the pour advice, without extra dips.": "Theo các mô hình bồn tạm và lời khuyên đổ, chưa tính các lần đo thêm.",
-    "Both tanks take the same batches; the cycle now also carries the cans to B and the second dip.": "Cả hai bồn dùng chung các mẻ; chu kỳ giờ gồm cả việc mang can sang B và lần đo thứ hai.",
+    "Both tanks take the same batches; the cycle now also carries the cans to B and the second dip.": "Cả hai bồn dùng chung các mẻ; chu kỳ giờ gồm cả việc mang bình sang B và lần đo thứ hai.",
     "Settle {0}, dip {1} per tank, two dips per level.": "Chờ ổn định {0}, đo {1} mỗi bồn, hai lần đo mỗi mức.",
-    "Set the fill time for {0} L cans (Timers and alarm, below) to see the time to half and to the brim.": "Đặt thời gian bơm cho can {0} L (Hẹn giờ và báo động, bên dưới) để xem thời gian tới nửa bồn và tới đỉnh bồn.",
-    "Set the fill time for {0} L cans (Timers and alarm, below) to see the time to half and to the bottom.": "Đặt thời gian bơm cho can {0} L (Hẹn giờ và báo động, bên dưới) để xem thời gian tới nửa bồn và tới đáy.",
-    "Set the fill time for {0} L cans (Timers and alarm, below) to see the time to the bottom of A and to the brim of B.": "Đặt thời gian bơm cho can {0} L (Hẹn giờ và báo động, bên dưới) để xem thời gian tới đáy của A và tới đỉnh của B.",
-    "Set the fill time for {0} L cans under Timers and alarm.": "Đặt thời gian bơm cho can {0} L trong Hẹn giờ và báo động.",
-    "Set the fill time for {0} L cans here, then press Save timers and device.": "Đặt thời gian bơm cho can {0} L ở đây, rồi nhấn Lưu hẹn giờ và thiết bị.",
+    "Set the fill time for {0} L cans (Timers and alarm, below) to see the time to half and to the brim.": "Đặt thời gian bơm cho bình {0} L (Hẹn giờ và báo động, bên dưới) để xem thời gian tới nửa bồn và tới đỉnh bồn.",
+    "Set the fill time for {0} L cans (Timers and alarm, below) to see the time to half and to the bottom.": "Đặt thời gian bơm cho bình {0} L (Hẹn giờ và báo động, bên dưới) để xem thời gian tới nửa bồn và tới đáy.",
+    "Set the fill time for {0} L cans (Timers and alarm, below) to see the time to the bottom of A and to the brim of B.": "Đặt thời gian bơm cho bình {0} L (Hẹn giờ và báo động, bên dưới) để xem thời gian tới đáy của A và tới đỉnh của B.",
+    "Set the fill time for {0} L cans under Timers and alarm.": "Đặt thời gian bơm cho bình {0} L trong Hẹn giờ và báo động.",
+    "Set the fill time for {0} L cans here, then press Save timers and device.": "Đặt thời gian bơm cho bình {0} L ở đây, rồi nhấn Lưu hẹn giờ và thiết bị.",
     // Pour card and can tally
     "1 · Pour": "1 · Đổ",
     "Pour": "Đổ",
     "Drain": "Bơm ra",
     "Pump out": "Bơm ra",
-    "Can size for the next can, L": "Cỡ can cho can tiếp theo, L",
-    "{0} can · {1} L": "{0} can · {1} L",
-    "{0} cans · {1} L": "{0} can · {1} L",
-    "{0} can": "{0} can",
-    "{0} cans": "{0} can",
-    "{0} L + part can": "{0} L + can lẻ",
-    "{0} can poured ({1} L)": "{0} can đã đổ ({1} L)",
-    "{0} can full ({1} L)": "{0} can đầy ({1} L)",
-    "{0} can poured": "{0} can đã đổ",
-    "{0} can full": "{0} can đầy",
-    "Enter the can size, L": "Nhập cỡ can, L",
-    "{0} L can": "can {0} L",
+    "Can size for the next can, L": "Cỡ bình cho bình tiếp theo, L",
+    "{0} can · {1} L": "{0} bình · {1} L",
+    "{0} cans · {1} L": "{0} bình · {1} L",
+    "{0} can": "{0} bình",
+    "{0} cans": "{0} bình",
+    "{0} L + part can": "{0} L + bình lẻ",
+    "{0} can poured ({1} L)": "{0} bình đã đổ ({1} L)",
+    "{0} can full ({1} L)": "{0} bình đầy ({1} L)",
+    "{0} can poured": "{0} bình đã đổ",
+    "{0} can full": "{0} bình đầy",
+    "Enter the can size, L": "Nhập cỡ bình, L",
+    "{0} L can": "bình {0} L",
     "{0} L": "{0} L",
     "{0} s": "{0} s",
     "▶ Start fill timer": "▶ Bật hẹn giờ bơm",
     "Stop timer": "Dừng hẹn giờ",
-    "Undo last can": "Huỷ can cuối",
-    "last can not fully poured": "can cuối chưa đổ hết",
-    "pump lost suction: last can part": "bơm mất hút: can cuối là can lẻ",
+    "Undo last can": "Huỷ bình cuối",
+    "last can not fully poured": "bình cuối chưa đổ hết",
+    "pump lost suction: last can part": "bơm mất hút: bình cuối là bình lẻ",
     "Advice ≈ {0} L = {1} × {2} L (≈ {3} mm rise).": "Khuyên ≈ {0} L = {1} × {2} L (≈ dâng {3} mm).",
     "Advice ≈ {0} L (≈ {1} mm rise).": "Khuyên ≈ {0} L (≈ dâng {1} mm).",
     "Advice ≈ {0} L = {1} × {2} L (≈ {3} mm fall).": "Khuyên ≈ {0} L = {1} × {2} L (≈ hạ {3} mm).",
     "Advice ≈ {0} L (≈ {1} mm fall).": "Khuyên ≈ {0} L (≈ hạ {1} mm).",
     "Advice ≈ {0} L = {1} × {2} L (≈ {3} mm in each tank).": "Khuyên ≈ {0} L = {1} × {2} L (≈ {3} mm mỗi bồn).",
     "Advice ≈ {0} L (≈ {1} mm in each tank).": "Khuyên ≈ {0} L (≈ {1} mm mỗi bồn).",
-    "{0} more than the advice.": "Hơn lời khuyên {0} can.",
+    "{0} more than the advice.": "Hơn lời khuyên {0} bình.",
     "Near the brim: small batches.": "Gần đỉnh bồn: chia mẻ nhỏ.",
-    "Near the bottom: the pump may lose suction; a part can is fine (N+?).": "Gần đáy: bơm có thể mất hút; can lẻ cũng được (N+?).",
-    "Tank A near the bottom: the pump may lose suction; a part can is fine (N+?).": "Bồn A gần đáy: bơm có thể mất hút; can lẻ cũng được (N+?).",
+    "Near the bottom: the pump may lose suction; a part can is fine (N+?).": "Gần đáy: bơm có thể mất hút; bình lẻ cũng được (N+?).",
+    "Tank A near the bottom: the pump may lose suction; a part can is fine (N+?).": "Bồn A gần đáy: bơm có thể mất hút; bình lẻ cũng được (N+?).",
     "Tank B near the brim: small batches.": "Bồn B gần đỉnh: chia mẻ nhỏ.",
     "{0} L is more than the shell gap (≈ {1} L): expect an overflow.": "{0} L nhiều hơn khoảng trống thân bồn (≈ {1} L): sẽ tràn.",
     "{0} L is more than the liquid left (≈ {1} L): the pump will lose suction.": "{0} L nhiều hơn lượng chất lỏng còn lại (≈ {1} L): bơm sẽ mất hút.",
     "{0} L is more than tank A's liquid (≈ {1} L): the pump will lose suction.": "{0} L nhiều hơn lượng chất lỏng của bồn A (≈ {1} L): bơm sẽ mất hút.",
     "{0} L is more than tank B's shell gap (≈ {1} L): B overflows.": "{0} L nhiều hơn khoảng trống thân bồn B (≈ {1} L): B sẽ tràn.",
-    "Tick the part can.": "Đánh dấu can lẻ.",
+    "Tick the part can.": "Đánh dấu bình lẻ.",
     "This is the final batch": "Đây là mẻ cuối",
     "tick \"tank B reached the neck\".": "đánh dấu \"bồn B tới cổ bồn\".",
     "Target: {0} × {1} L": "Mục tiêu: {0} × {1} L",
     "Target: ≈ {0} L": "Mục tiêu: ≈ {0} L",
     "Start the fill timer when you start the pump.": "Bật hẹn giờ bơm khi bạn bật bơm.",
-    "The alarm rings before the can is full: close the valve.": "Chuông báo reo trước khi can đầy: khoá van.",
-    "The alarm rings before the can is full: close the valve at the calibrated mark.": "Chuông báo reo trước khi can đầy: khoá van ở vạch đã hiệu chuẩn.",
+    "The alarm rings before the can is full: close the valve.": "Chuông báo reo trước khi bình đầy: khoá van.",
+    "The alarm rings before the can is full: close the valve at the calibrated mark.": "Chuông báo reo trước khi bình đầy: khoá van ở vạch đã hiệu chuẩn.",
     "Tap": "Chạm",
-    "+1 can poured": "+1 can đã đổ",
-    "+1 can full": "+1 can đầy",
-    "when the can is full.": "khi can đầy.",
-    "Emptying the can into the tank has no timer.": "Việc trút can vào bồn không có hẹn giờ.",
-    "Each can keeps the size shown above, so one batch can mix sizes.": "Mỗi can giữ cỡ hiển thị ở trên, nên một mẻ có thể gồm nhiều cỡ can.",
+    "+1 can poured": "+1 bình đã đổ",
+    "+1 can full": "+1 bình đầy",
+    "when the can is full.": "khi bình đầy.",
+    "Emptying the can into the tank has no timer.": "Việc trút bình vào bồn không có hẹn giờ.",
+    "Each can keeps the size shown above, so one batch can mix sizes.": "Mỗi bình giữ cỡ hiển thị ở trên, nên một mẻ có thể gồm nhiều cỡ bình.",
     "The count is saved after each tap.": "Số đếm được lưu sau mỗi lần chạm.",
     "One dip follows the batch.": "Sau mẻ là một lần đo.",
-    "The pump fills the can": "Bơm làm đầy can",
+    "The pump fills the can": "Bơm làm đầy bình",
     "from the tank": "từ bồn",
     "from tank A": "từ bồn A",
     "A spill is litres that left the tank but not the record.": "Chất lỏng tràn đổ là số lít đã rời bồn nhưng không có trong bản ghi.",
     "Keep the hose in the same state at every dip.": "Giữ ống ở cùng một trạng thái ở mỗi lần đo.",
     "Keep A's hose in the same state at every dip.": "Giữ ống của A ở cùng một trạng thái ở mỗi lần đo.",
-    "When the pump loses suction, tap the part can and tick": "Khi bơm mất hút, chạm can lẻ và đánh dấu",
+    "When the pump loses suction, tap the part can and tick": "Khi bơm mất hút, chạm bình lẻ và đánh dấu",
     "When the pump loses suction, tick": "Khi bơm mất hút, đánh dấu",
-    ", or enter its measured litres instead.": ", hoặc nhập số lít đã đo của can đó.",
-    "Then empty the cans into": "Sau đó trút các can vào",
-    "One batch of cans is one step for both tanks: A falls, B rises.": "Một mẻ can là một bước cho cả hai bồn: A hạ, B dâng.",
+    ", or enter its measured litres instead.": ", hoặc nhập số lít đã đo của bình đó.",
+    "Then empty the cans into": "Sau đó trút các bình vào",
+    "One batch of cans is one step for both tanks: A falls, B rises.": "Một mẻ bình là một bước cho cả hai bồn: A hạ, B dâng.",
     "One dip per tank follows the batch: A first, then B.": "Sau mẻ, đo mỗi bồn một lần: A trước, rồi B.",
-    "Enter litres instead (meter, odd can, unknown pour)": "Nhập số lít thay thế (đồng hồ, can lẻ, lần đổ không rõ)",
-    "Enter litres instead (meter, measured part can, unknown drain)": "Nhập số lít thay thế (đồng hồ, can lẻ đã đo, lần bơm ra không rõ)",
-    "Enter litres instead (meter, measured part can, unknown batch)": "Nhập số lít thay thế (đồng hồ, can lẻ đã đo, mẻ không rõ)",
+    "Enter litres instead (meter, odd can, unknown pour)": "Nhập số lít thay thế (đồng hồ, bình lẻ, lần đổ không rõ)",
+    "Enter litres instead (meter, measured part can, unknown drain)": "Nhập số lít thay thế (đồng hồ, bình lẻ đã đo, lần bơm ra không rõ)",
+    "Enter litres instead (meter, measured part can, unknown batch)": "Nhập số lít thay thế (đồng hồ, bình lẻ đã đo, mẻ không rõ)",
     "Pour, L": "Lượng đổ, L",
     "Drained, L": "Đã bơm ra, L",
     "Batch, L": "Mẻ, L",
@@ -962,15 +968,15 @@
     "Poured": "Đã đổ",
     "Drained": "Đã bơm ra",
     "Pumped": "Đã bơm",
-    "Batch done: {0} can, {1} L → dip": "Xong mẻ: {0} can, {1} L → đo",
-    "Batch done: {0} cans, {1} L → dip": "Xong mẻ: {0} can, {1} L → đo",
-    "Drained: {0} can, {1} L → dip": "Đã bơm ra: {0} can, {1} L → đo",
-    "Drained: {0} cans, {1} L → dip": "Đã bơm ra: {0} can, {1} L → đo",
-    "Batch done: {0} can, {1} L → pour into B, then dip both": "Xong mẻ: {0} can, {1} L → đổ vào B, rồi đo cả hai",
-    "Batch done: {0} cans, {1} L → pour into B, then dip both": "Xong mẻ: {0} can, {1} L → đổ vào B, rồi đo cả hai",
-    "Tap one can at least, or enter the pour in litres.": "Chạm ít nhất một can, hoặc nhập lượng đổ bằng lít.",
-    "Tap one can at least, or enter the drain in litres.": "Chạm ít nhất một can, hoặc nhập lượng bơm ra bằng lít.",
-    "Tap one can at least, or enter the batch in litres.": "Chạm ít nhất một can, hoặc nhập mẻ bằng lít.",
+    "Batch done: {0} can, {1} L → dip": "Xong mẻ: {0} bình, {1} L → đo",
+    "Batch done: {0} cans, {1} L → dip": "Xong mẻ: {0} bình, {1} L → đo",
+    "Drained: {0} can, {1} L → dip": "Đã bơm ra: {0} bình, {1} L → đo",
+    "Drained: {0} cans, {1} L → dip": "Đã bơm ra: {0} bình, {1} L → đo",
+    "Batch done: {0} can, {1} L → pour into B, then dip both": "Xong mẻ: {0} bình, {1} L → đổ vào B, rồi đo cả hai",
+    "Batch done: {0} cans, {1} L → pour into B, then dip both": "Xong mẻ: {0} bình, {1} L → đổ vào B, rồi đo cả hai",
+    "Tap one can at least, or enter the pour in litres.": "Chạm ít nhất một bình, hoặc nhập lượng đổ bằng lít.",
+    "Tap one can at least, or enter the drain in litres.": "Chạm ít nhất một bình, hoặc nhập lượng bơm ra bằng lít.",
+    "Tap one can at least, or enter the batch in litres.": "Chạm ít nhất một bình, hoặc nhập mẻ bằng lít.",
     "Enter the pour in litres, or tick 'whole pour unknown'.": "Nhập lượng đổ bằng lít, hoặc đánh dấu 'cả lần đổ không rõ'.",
     "Enter the drain in litres, or tick 'whole drain unknown'.": "Nhập lượng bơm ra bằng lít, hoặc đánh dấu 'cả lần bơm ra không rõ'.",
     "Enter the batch in litres, or tick 'whole batch unknown'.": "Nhập mẻ bằng lít, hoặc đánh dấu 'cả mẻ không rõ'.",
@@ -999,8 +1005,8 @@
     "the pour has an unknown extra": "lượng đổ có phần thêm không rõ",
     "the drain has an unknown extra": "lượng bơm ra có phần thêm không rõ",
     "the batch has an unknown extra": "mẻ có phần thêm không rõ",
-    "the last can is a part can": "can cuối là can lẻ",
-    "the pump lost suction: the last can is a part can": "bơm mất hút: can cuối là can lẻ",
+    "the last can is a part can": "bình cuối là bình lẻ",
+    "the pump lost suction: the last can is a part can": "bơm mất hút: bình cuối là bình lẻ",
     "the level is still in the neck": "mức vẫn trong cổ bồn",
     "the level is in the neck now: the drain spans the neck": "mức đang trong cổ bồn: lần bơm ra đi qua cổ bồn",
     "After this pour: overflow (the liquid reached the neck).": "Sau lần đổ này: tràn (chất lỏng tới cổ bồn).",
@@ -1009,7 +1015,7 @@
     "After this drain: the tank runs dry.": "Sau lần bơm ra này: bồn cạn.",
     "{0} L is more than the liquid left (≈ {1} L).": "{0} L nhiều hơn lượng chất lỏng còn lại (≈ {1} L).",
     "A runs dry ({0} L > ≈ {1} L left): the pump loses suction": "A cạn ({0} L > còn ≈ {1} L): bơm mất hút",
-    "tick the part can": "đánh dấu can lẻ",
+    "tick the part can": "đánh dấu bình lẻ",
     "B overflows ({0} L > gap ≈ {1} L): the final batch": "B tràn ({0} L > khoảng trống ≈ {1} L): mẻ cuối",
     // Dip card
     "2 · Dip": "2 · Đo",
@@ -1078,23 +1084,23 @@
     "Accept anyway ({name})": "Vẫn chấp nhận ({name})",
     "Undo last entry": "Huỷ mục cuối",
     // Pour timer and alarm
-    "Enter the can size to use the timer.": "Nhập cỡ can để dùng hẹn giờ.",
-    "Filling a {0} L can: {1} left of {2}.": "Đang bơm can {0} L: còn {1} trên {2}.",
+    "Enter the can size to use the timer.": "Nhập cỡ bình để dùng hẹn giờ.",
+    "Filling a {0} L can: {1} left of {2}.": "Đang bơm bình {0} L: còn {1} trên {2}.",
     "The alarm rings at {0} left.": "Chuông báo reo khi còn {0}.",
     "{0} to full: close the valve now.": "Còn {0} là đầy: khoá van ngay.",
-    "Can full ({0} L): the pump must be off.": "Can đầy ({0} L): bơm phải tắt.",
-    "Tap +1 can full.": "Chạm +1 can đầy.",
-    "Tap +1 can poured.": "Chạm +1 can đã đổ.",
+    "Can full ({0} L): the pump must be off.": "Bình đầy ({0} L): bơm phải tắt.",
+    "Tap +1 can full.": "Chạm +1 bình đầy.",
+    "Tap +1 can poured.": "Chạm +1 bình đã đổ.",
     "Close the valve: {0} to full": "Khoá van: còn {0} là đầy",
-    "Can full: pump off ({0} L)": "Can đầy: tắt bơm ({0} L)",
+    "Can full: pump off ({0} L)": "Bình đầy: tắt bơm ({0} L)",
     "Test alarm": "Thử báo động",
     "▶ Start fill timer ({0})": "▶ Bật hẹn giờ bơm ({0})",
-    "Fill time of one {0} L can.": "Thời gian bơm đầy một can {0} L.",
+    "Fill time of one {0} L can.": "Thời gian bơm đầy một bình {0} L.",
     "The alarm rings {0} before it is full.": "Chuông báo reo trước khi đầy {0}.",
     "The alarm lead must be 0 to 120 s.": "Thời gian báo trước phải từ 0 đến 120 s.",
     "The settle time {0} is below the 5-minute minimum of §3.5: a level that still moves gives a bad dip.": "Thời gian chờ ổn định {0} thấp hơn mức tối thiểu 5 phút của §3.5: mức còn dao động sẽ cho số đo sai.",
-    "Enter the can size in litres.": "Nhập cỡ can bằng lít.",
-    "Enter a can size on the pour card first.": "Nhập cỡ can trên thẻ đổ trước.",
+    "Enter the can size in litres.": "Nhập cỡ bình bằng lít.",
+    "Enter a can size on the pour card first.": "Nhập cỡ bình trên thẻ đổ trước.",
     "cycle {0}": "chu kỳ {0}",
     "Screen: the phone's own timeout applies.": "Màn hình: dùng thời gian tắt màn hình của điện thoại.",
     "Screen: kept on while this page is open and visible.": "Màn hình: luôn sáng khi trang này đang mở và hiển thị.",
@@ -1162,28 +1168,28 @@
     "or the pour was over-recorded: the rise came too small, less liquid went in than recorded, or liquid went somewhere (leak, film, trapped air).": "hoặc lượng đổ bị ghi thừa: mức dâng quá nhỏ, chất lỏng vào ít hơn số ghi, hoặc chất lỏng đi đâu đó (rò rỉ, màng bám, bọt khí kẹt).",
     "or LEAK?": "hoặc LEAK?",
     "or the drain was under-recorded: the fall came too large": "hoặc lượng bơm ra bị ghi thiếu: mức hạ quá lớn",
-    "a solid was exposed in this band, liquid left another way, or more left than the count says (a spill at the can counts here).": "một vật rắn lộ ra trong dải này, chất lỏng thoát ra đường khác, hoặc lượng ra nhiều hơn số đếm (tràn đổ ở can cũng tính ở đây).",
+    "a solid was exposed in this band, liquid left another way, or more left than the count says (a spill at the can counts here).": "một vật rắn lộ ra trong dải này, chất lỏng thoát ra đường khác, hoặc lượng ra nhiều hơn số đếm (tràn đổ ở bình cũng tính ở đây).",
     "or the drain was over-recorded: the fall came too small": "hoặc lượng bơm ra bị ghi thừa: mức hạ quá nhỏ",
     "liquid came back (hose drained back into the tank, wall film) or less left than the count says.": "chất lỏng chảy ngược về (ống chảy ngược vào bồn, màng bám thành) hoặc lượng ra ít hơn số đếm.",
-    "Count the cans (or read the meter) of this pour again.": "Đếm lại số can (hoặc đọc lại đồng hồ) của lần đổ này.",
-    "Count the full cans (or read the meter) of this drain again.": "Đếm lại số can đầy (hoặc đọc lại đồng hồ) của lần bơm ra này.",
+    "Count the cans (or read the meter) of this pour again.": "Đếm lại số bình (hoặc đọc lại đồng hồ) của lần đổ này.",
+    "Count the full cans (or read the meter) of this drain again.": "Đếm lại số bình đầy (hoặc đọc lại đồng hồ) của lần bơm ra này.",
     "If the count was wrong, edit the pour.": "Nếu đếm sai, hãy sửa lần đổ.",
     "If the count was wrong, edit the drain.": "Nếu đếm sai, hãy sửa lần bơm ra.",
     "If it was right, keep it: this interval stays out of the running fit and goes to the anomaly register (§{0}).": "Nếu đếm đúng, giữ nguyên: khoảng này không đưa vào phép khớp tạm và được ghi vào sổ bất thường (§{0}).",
     "A repeat pour of the same size into this band tells an object from a pour error.": "Đổ lại một lượng như vậy vào dải này sẽ phân biệt được vật cản với lỗi đổ.",
-    "Check the hose and the cans for a spill or a drain-back.": "Kiểm tra ống và các can xem có tràn đổ hoặc chảy ngược không.",
-    "Pour the next can.": "Đổ can tiếp theo.",
-    "The miss is {0} {c} of {1} L: {2} {d} {mf} than the count {p} explains it: z {3} becomes {4}.": "Sai lệch bằng {0} can loại {1} L: {2} can {mf} số đếm {p} giải thích được: z {3} thành {4}.",
-    "can": "can",
-    "cans": "can",
+    "Check the hose and the cans for a spill or a drain-back.": "Kiểm tra ống và các bình xem có tràn đổ hoặc chảy ngược không.",
+    "Pour the next can.": "Đổ bình tiếp theo.",
+    "The miss is {0} {c} of {1} L: {2} {d} {mf} than the count {p} explains it: z {3} becomes {4}.": "Sai lệch bằng {0} bình loại {1} L: {2} bình {mf} số đếm {p} giải thích được: z {3} thành {4}.",
+    "can": "bình",
+    "cans": "bình",
     "more": "nhiều hơn",
     "fewer": "ít hơn",
     "({0}, not {1})": "({0}, không phải {1})",
     "({0} L, not {1} L)": "({0} L, không phải {1} L)",
-    "Count the empty cans now, before the next pour.": "Đếm số can rỗng ngay bây giờ, trước lần đổ tiếp theo.",
-    "Count the full cans now, before the next drain.": "Đếm số can đầy ngay bây giờ, trước lần bơm ra tiếp theo.",
-    "If you count {0} cans, edit the pour to {1} L.": "Nếu đếm được {0} can, sửa lần đổ thành {1} L.",
-    "If you count {0} cans, edit the drain to {1} L.": "Nếu đếm được {0} can, sửa lần bơm ra thành {1} L.",
+    "Count the empty cans now, before the next pour.": "Đếm số bình rỗng ngay bây giờ, trước lần đổ tiếp theo.",
+    "Count the full cans now, before the next drain.": "Đếm số bình đầy ngay bây giờ, trước lần bơm ra tiếp theo.",
+    "If you count {0} cans, edit the pour to {1} L.": "Nếu đếm được {0} bình, sửa lần đổ thành {1} L.",
+    "If you count {0} cans, edit the drain to {1} L.": "Nếu đếm được {0} bình, sửa lần bơm ra thành {1} L.",
     "If the recount gives {0} L, edit the pour to match it.": "Nếu đếm lại được {0} L, sửa lần đổ cho khớp.",
     "If the recount gives {0} L, edit the drain to match it.": "Nếu đếm lại được {0} L, sửa lần bơm ra cho khớp.",
     "With the previous interval this is the pattern of a misread at {0} mm (δ ≈ {1} mm, net {2} %).": "Cùng với khoảng trước, đây là dấu hiệu đọc nhầm ở {0} mm (δ ≈ {1} mm, tổng {2} %).",
@@ -1202,41 +1208,41 @@
     "the tanks disagree": "hai bồn không khớp nhau",
     "Both tanks are at the action bar with different litres.": "Cả hai bồn đều ở ngưỡng hành động với số lít khác nhau.",
     "Superposed causes (§{0}).": "Các nguyên nhân chồng lên nhau (§{0}).",
-    "Decompose before correcting either tank: recount the cans, and re-dip any level that is still there.": "Tách các nguyên nhân trước khi sửa bồn nào: đếm lại can, và đo lại mức nào còn đó.",
+    "Decompose before correcting either tank: recount the cans, and re-dip any level that is still there.": "Tách các nguyên nhân trước khi sửa bồn nào: đếm lại bình, và đo lại mức nào còn đó.",
     "the tanks differ (watch)": "hai bồn khác nhau (theo dõi)",
     "Tank A {0} L, tank B {1} L; neither check clears its own action bar, but the tanks differ by {2} L = {3} σ.": "Bồn A {0} L, bồn B {1} L; không bồn nào vượt ngưỡng hành động của nó, nhưng hai bồn khác nhau {2} L = {3} σ.",
     "A wide band can hide a large miss in mm; watch item (§{0}).": "Một dải rộng có thể che một sai lệch lớn tính theo mm; mục theo dõi (§{0}).",
     "Pour the next batch.": "Đổ mẻ tiếp theo.",
-    "Recount the cans if a miscount could explain it.": "Đếm lại can nếu đếm nhầm có thể giải thích được.",
+    "Recount the cans if a miscount could explain it.": "Đếm lại bình nếu đếm nhầm có thể giải thích được.",
     "Tank A resid {0} L, tank B {1} L; difference {2} L = {3} σ of the two checks.": "Bồn A resid {0} L, bồn B {1} L; chênh lệch {2} L = {3} σ của hai phép kiểm tra.",
     "Tank A's band is wide here (2σ = {0} L); it can confirm nothing.": "Dải của bồn A ở đây rộng (2σ = {0} L); nó không xác nhận được gì.",
     "Tank B's band is wide here (2σ = {0} L); it can confirm nothing.": "Dải của bồn B ở đây rộng (2σ = {0} L); nó không xác nhận được gì.",
     "the same litres": "cùng số lít",
     "Both tanks missed by the same litres.": "Cả hai bồn lệch cùng số lít.",
-    "One shared cause: the can count or the can fill (§{0}), not a tank.": "Một nguyên nhân chung: số can đếm hoặc mức đổ đầy can (§{0}), không phải do bồn.",
-    "Count the cans of this batch again.": "Đếm lại số can của mẻ này.",
+    "One shared cause: the can count or the can fill (§{0}), not a tank.": "Một nguyên nhân chung: số bình đếm hoặc mức đổ đầy bình (§{0}), không phải do bồn.",
+    "Count the cans of this batch again.": "Đếm lại số bình của mẻ này.",
     "If the count was wrong, Recount edits both tanks at once.": "Nếu đếm sai, Đếm lại sẽ sửa cả hai bồn cùng lúc.",
-    "If it stands, both intervals go to the register: a can not filled to its mark does this.": "Nếu số đếm đúng, cả hai khoảng được ghi vào sổ: một can không đổ đến vạch sẽ gây ra điều này.",
+    "If it stands, both intervals go to the register: a can not filled to its mark does this.": "Nếu số đếm đúng, cả hai khoảng được ghi vào sổ: một bình không đổ đến vạch sẽ gây ra điều này.",
     "only tank A shows it": "chỉ bồn A cho thấy",
     "only tank B shows it": "chỉ bồn B cho thấy",
-    "Tank {t} missed {0} L and tank {u} shows nothing ({1} L), but its band is wide: a shared can error and {cause} both fit.": "Bồn {t} lệch {0} L và bồn {u} không cho thấy gì ({1} L), nhưng dải của nó rộng: cả lỗi can chung lẫn {cause} đều phù hợp.",
+    "Tank {t} missed {0} L and tank {u} shows nothing ({1} L), but its band is wide: a shared can error and {cause} both fit.": "Bồn {t} lệch {0} L và bồn {u} không cho thấy gì ({1} L), nhưng dải của nó rộng: cả lỗi bình chung lẫn {cause} đều phù hợp.",
     "a loss on the way (a spill at the carry)": "hao hụt trên đường (tràn đổ khi mang)",
     "an object in B in this band": "một vật cản trong B ở dải này",
     "a leak or a spill at A (§3.11)": "rò rỉ hoặc tràn đổ ở A (§3.11)",
     "liquid returned to A (the hose drained back)": "chất lỏng chảy ngược về A (ống chảy ngược)",
-    "Recount the cans of this batch first: one edit fixes both tanks.": "Đếm lại số can của mẻ này trước: một lần sửa là sửa cả hai bồn.",
+    "Recount the cans of this batch first: one edit fixes both tanks.": "Đếm lại số bình của mẻ này trước: một lần sửa là sửa cả hai bồn.",
     "If the count stands, the litres belong to tank {t}: its interval goes to the register.": "Nếu số đếm đúng, số lít đó thuộc về bồn {t}: khoảng của nó được ghi vào sổ.",
     "the same litres (watch)": "cùng số lít (theo dõi)",
     "Both tanks show the same litres, below the action bar.": "Cả hai bồn cho thấy cùng số lít, dưới ngưỡng hành động.",
     "A shared cause would show in both; a watch item (§{0}).": "Một nguyên nhân chung sẽ hiện ở cả hai; một mục theo dõi (§{0}).",
     "litres lost on the way": "số lít bị mất trên đường",
     "Tank A is clean, but tank B missed {0} L: liquid left A and did not reach B": "Bồn A sạch, nhưng bồn B lệch {0} L: chất lỏng rời A mà không tới B",
-    "a spill at the carry, or a can not emptied.": "tràn đổ khi mang, hoặc một can chưa trút hết.",
-    "Check the carry path and the cans.": "Kiểm tra đường mang và các can.",
+    "a spill at the carry, or a can not emptied.": "tràn đổ khi mang, hoặc một bình chưa trút hết.",
+    "Check the carry path and the cans.": "Kiểm tra đường mang và các bình.",
     "B's interval goes to the register as LOSS?": "Khoảng của B được ghi vào sổ là LOSS?",
     "(§{0}); A's stays in its fit.": "(§{0}); khoảng của A vẫn ở trong phép khớp của nó.",
     "Tank A missed {0} L that tank B does not show: liquid left A off the record": "Bồn A lệch {0} L mà bồn B không cho thấy: chất lỏng rời A ngoài bản ghi",
-    "the hose, the pump seal, or a spill at the can (§{0}).": "do ống, phớt bơm, hoặc tràn đổ ở can (§{0}).",
+    "the hose, the pump seal, or a spill at the can (§{0}).": "do ống, phớt bơm, hoặc tràn đổ ở bình (§{0}).",
     "Check the hose state and the pump.": "Kiểm tra trạng thái ống và bơm.",
     "A's interval goes to the register (LEAK?); B's stays in its fit.": "Khoảng của A được ghi vào sổ (LEAK?); khoảng của B vẫn ở trong phép khớp của nó.",
     "Tank A's fall came {0} L too small and tank B is clean: liquid returned to A (the hose drained back) or less left A than the count says (§{1}).": "Mức hạ của bồn A nhỏ hơn {0} L và bồn B sạch: chất lỏng chảy ngược về A (ống chảy ngược) hoặc lượng rời A ít hơn số đếm (§{1}).",
@@ -1261,7 +1267,7 @@
     "Points: pour ÷ rise for each interval, at the middle of the interval.": "Điểm: lượng đổ ÷ độ dâng của mỗi khoảng, đặt ở giữa khoảng.",
     "Points: drain ÷ fall for each interval, at the middle of the interval.": "Điểm: lượng bơm ra ÷ độ hạ của mỗi khoảng, đặt ở giữa khoảng.",
     "A point that jumps off the smooth line is not possible for this tank: a wrong pour count or a wrong dip.": "Một điểm nhảy khỏi đường trơn là không thể với bồn này: đếm sai lượng đổ hoặc đo sai.",
-    "A point that jumps off the smooth line is not possible for this tank: a wrong can count or a wrong dip.": "Một điểm nhảy khỏi đường trơn là không thể với bồn này: đếm sai số can hoặc đo sai.",
+    "A point that jumps off the smooth line is not possible for this tank: a wrong can count or a wrong dip.": "Một điểm nhảy khỏi đường trơn là không thể với bồn này: đếm sai số bình hoặc đo sai.",
     "Neck intervals have no point.": "Các khoảng qua cổ bồn không có điểm.",
     "The running sum of the residuals (pour minus predicted pour), against the running shell as it is now.": "Tổng luỹ kế của phần dư (lượng đổ trừ lượng đổ dự đoán), theo mô hình bồn tạm hiện tại.",
     "The running sum of the residuals (drain minus predicted drain), against the running shell as it is now.": "Tổng luỹ kế của phần dư (lượng bơm ra trừ lượng bơm ra dự đoán), theo mô hình bồn tạm hiện tại.",
@@ -1401,7 +1407,7 @@
     "Tank A starts at the neck entrance (brim B = {0} mm).": "Bồn A bắt đầu ở chân cổ bồn (đỉnh bồn B = {0} mm).",
     "Tank A starts in the neck.": "Bồn A bắt đầu trong cổ bồn.",
     "Tank A starts in the shell.": "Bồn A bắt đầu trong thân bồn.",
-    "This card edits the tank named above; the noise, the cans and the timers are shared.": "Thẻ này sửa bồn có tên ở trên; nhiễu, can và hẹn giờ là dùng chung.",
+    "This card edits the tank named above; the noise, the cans and the timers are shared.": "Thẻ này sửa bồn có tên ở trên; nhiễu, bình và hẹn giờ là dùng chung.",
     "Save campaign settings": "Lưu cài đặt đợt đo",
     "A change refits the running shell from the levels already accepted.": "Mỗi thay đổi sẽ khớp lại mô hình bồn tạm từ các mức đã chấp nhận.",
     "The levels keep their state; the next check uses the new values.": "Các mức giữ trạng thái; lần kiểm tra sau dùng giá trị mới.",
@@ -1433,10 +1439,28 @@
     "Settle (idle) after a batch, m:ss": "Chờ ổn định sau một mẻ, m:ss",
     "One dip and its entry, m:ss": "Một lần đo và nhập số, m:ss",
     "Alarm lead before full, s": "Báo trước khi đầy, s",
-    "Fill (pump) time per can, m:ss": "Thời gian bơm đầy mỗi can, m:ss",
-    "The time the pump needs to fill one can.": "Thời gian bơm cần để làm đầy một can.",
-    "The alarm rings this time minus the lead, so the valve is closed when the can is full.": "Chuông báo reo ở thời gian này trừ đi thời gian báo trước, để van được khoá đúng lúc can đầy.",
-    "The timer needs this number: a tap gap cannot give it, because the gap also holds the carry and the drain.": "Hẹn giờ cần con số này: khoảng cách giữa các lần chạm không cho được nó, vì khoảng đó còn gồm cả thời gian mang can và trút can.",
+    "Fill (pump) time per can, m:ss": "Thời gian bơm đầy mỗi bình, m:ss",
+    "The time the pump needs to fill one can.": "Thời gian bơm cần để làm đầy một bình.",
+    "Drain time per can, m:ss": "Thời gian trút mỗi bình, m:ss",
+    "The time to empty one can into the tank.": "Thời gian trút hết một bình vào bồn.",
+    "The time to empty one can into tank B.": "Thời gian trút hết một bình vào bồn B.",
+    "The time to empty one can.": "Thời gian trút hết một bình.",
+    "The time to half and to the brim adds it to the fill time.": "Thời gian tới nửa bồn và tới đỉnh bồn cộng thời gian này vào thời gian bơm đầy.",
+    "The time to half and to the bottom adds it to the fill time.": "Thời gian tới nửa bồn và tới đáy cộng thời gian này vào thời gian bơm đầy.",
+    "The time to the bottom of A and to the brim of B adds it to the fill time.": "Thời gian tới đáy của A và tới đỉnh của B cộng thời gian này vào thời gian bơm đầy.",
+    "The Now card shows the time between your taps as a check; its button copies it here.": "Thẻ Hiện tại hiển thị thời gian giữa các lần chạm để đối chiếu; nút của nó chép giá trị đó vào đây.",
+    "{0} per can (fill {1} + drain {2}).": "{0} mỗi bình (bơm đầy {1} + trút {2}).",
+    "{0} per can (fill time only: a floor).": "{0} mỗi bình (chỉ thời gian bơm đầy: mức tối thiểu).",
+    "{0} per can (drain time only: a floor).": "{0} mỗi bình (chỉ thời gian trút: mức tối thiểu).",
+    "Pouring time only: no settle and no dip time.": "Chỉ tính thời gian đổ: không tính thời gian chờ ổn định và đo.",
+    "From the running shell and the pour advice.": "Theo mô hình bồn tạm và lời khuyên đổ.",
+    "From the running shells and the pour advice.": "Theo các mô hình bồn tạm và lời khuyên đổ.",
+    "Both tanks take the same batches.": "Cả hai bồn dùng chung các mẻ.",
+    "Your taps: {0} per can (median of {1} gap).": "Theo các lần chạm: {0} mỗi bình (trung vị của {1} khoảng).",
+    "Your taps: {0} per can (median of {1} gaps).": "Theo các lần chạm: {0} mỗi bình (trung vị của {1} khoảng).",
+    "Use the taps: drain {0} per {1} L can": "Dùng các lần chạm: trút {0} mỗi bình {1} L",
+    "The alarm rings this time minus the lead, so the valve is closed when the can is full.": "Chuông báo reo ở thời gian này trừ đi thời gian báo trước, để van được khoá đúng lúc bình đầy.",
+    "The timer needs this number: a tap gap cannot give it, because the gap also holds the carry and the drain.": "Hẹn giờ cần con số này: khoảng cách giữa các lần chạm không cho được nó, vì khoảng đó còn gồm cả thời gian mang bình và trút bình.",
     "pour animation": "hoạt ảnh đổ",
     "sound": "âm thanh",
     "vibrate": "rung",
@@ -1444,7 +1468,7 @@
     "Save timers and device": "Lưu hẹn giờ và thiết bị",
     "A locked phone stops the page and its alarm.": "Điện thoại bị khoá màn hình sẽ dừng trang và chuông báo.",
     "If the screen still turns off, set the phone's own screen timeout longer (see How it works).": "Nếu màn hình vẫn tắt, hãy đặt thời gian tắt màn hình của điện thoại dài hơn (xem Cách hoạt động).",
-    "measured {0} per can": "đo được {0} mỗi can",
+    "measured {0} per can": "đo được {0} mỗi bình",
     // Files and replay
     "Export": "Xuất",
     "Download raw CSV": "Tải CSV thô",
@@ -1604,7 +1628,7 @@
     "Test {0}: the prediction.": "Phép thử {0}: dự đoán.",
     "The page knows your diameter and length estimates, the readings you accepted, and the pour.": "Trang biết đường kính và chiều dài ước tính, các số đo bạn đã chấp nhận, và lượng đổ.",
     "From these it learns the tank shape, and it predicts the level that this pour must give.": "Từ đó trang học hình dạng bồn và dự đoán mức mà lần đổ này phải cho.",
-    "If your reading falls inside the band, accept it and pour the next can.": "Nếu số đo nằm trong dải, hãy chấp nhận và đổ can tiếp theo.",
+    "If your reading falls inside the band, accept it and pour the next can.": "Nếu số đo nằm trong dải, hãy chấp nhận và đổ bình tiếp theo.",
     "Test {0}: the repeat reading.": "Phép thử {0}: đo lặp.",
     "If the reading misses the band, or if no prediction is possible (the first level, an unknown pour), the page asks for a second reading.": "Nếu số đo nằm ngoài dải, hoặc không thể dự đoán (mức đầu tiên, lần đổ không rõ), trang sẽ yêu cầu đo lần hai.",
     "It hides the first reading and the prediction, so that the second reading cannot copy them.": "Trang ẩn số đo đầu và dự đoán, để lần đo thứ hai không thể chép theo.",
@@ -1638,20 +1662,20 @@
     "An honest reading triggered a second dip {0}–{1} % of the time.": "Một số đo đúng phải đo lại lần hai trong {0}–{1} % số lần.",
     "Drain campaign (reverse strapping).": "Đợt bơm ra (hiệu chuẩn ngược).",
     "The tank starts full.": "Bồn bắt đầu ở trạng thái đầy.",
-    "A pump draws the water out into calibrated cans; each batch is one step, and the level falls.": "Bơm hút nước ra các can đã hiệu chuẩn; mỗi mẻ là một bước, và mức hạ dần.",
+    "A pump draws the water out into calibrated cans; each batch is one step, and the level falls.": "Bơm hút nước ra các bình đã hiệu chuẩn; mỗi mẻ là một bước, và mức hạ dần.",
     "Start at the neck entrance: pump the neck down until the level just reaches the shell crown and dip.": "Bắt đầu ở chân cổ bồn: bơm hạ cổ bồn cho tới khi mức vừa chạm đỉnh thân bồn rồi đo.",
     "That reading is the brim, and the running shell knows the top from the first level.": "Số đo đó là đỉnh bồn, và mô hình bồn tạm biết đỉnh ngay từ mức đầu.",
-    "Fill each can to its mark.": "Đổ mỗi can đến vạch.",
+    "Fill each can to its mark.": "Đổ mỗi bình đến vạch.",
     "Signs in a drain.": "Dấu của phần dư khi bơm ra.",
-    "resid < {0}: the fall came too large (an object exposed, a leak, a spill at the can, or more left than the count).": "resid < {0}: mức hạ quá lớn (vật cản lộ ra, rò rỉ, tràn đổ ở can, hoặc lượng ra nhiều hơn số đếm).",
+    "resid < {0}: the fall came too large (an object exposed, a leak, a spill at the can, or more left than the count).": "resid < {0}: mức hạ quá lớn (vật cản lộ ra, rò rỉ, tràn đổ ở bình, hoặc lượng ra nhiều hơn số đếm).",
     "resid > {0}: the fall came too small (RETURN?: the hose drained back, wall film, or less left than the count).": "resid > {0}: mức hạ quá nhỏ (RETURN?: ống chảy ngược, màng bám thành, hoặc lượng ra ít hơn số đếm).",
     "Two tanks at once (transfer).": "Hai bồn cùng lúc (chuyển bồn).",
-    "A pump draws water out of a full tank A into calibrated cans, and the same cans are emptied into tank B.": "Bơm hút nước từ bồn A đầy ra các can đã hiệu chuẩn, rồi trút chính các can đó vào bồn B.",
+    "A pump draws water out of a full tank A into calibrated cans, and the same cans are emptied into tank B.": "Bơm hút nước từ bồn A đầy ra các bình đã hiệu chuẩn, rồi trút chính các bình đó vào bồn B.",
     "One batch is one step for both tanks: A is a drain, B is a fill.": "Một mẻ là một bước cho cả hai bồn: A bơm ra, B đổ vào.",
     "Each tank keeps its own check, its own running shell and its own raw file; switch tanks in the header or in Log & charts.": "Mỗi bồn có phép kiểm tra, mô hình bồn tạm và tệp thô riêng; chuyển bồn ở thanh tiêu đề hoặc trong Nhật ký & biểu đồ.",
     "Dip A, then dip B, after each batch": "Sau mỗi mẻ, đo A rồi đo B",
     "the dip card has one field and one button per tank, so each tank is checked as soon as its reading is in.": "thẻ đo có một ô và một nút cho mỗi bồn, nên mỗi bồn được kiểm tra ngay khi có số đo.",
-    "When both dips are in, the page compares the two residuals of the same batch: the same litres in both tanks means the cans (a count or fill error)": "Khi đã có cả hai lần đo, trang so sánh hai phần dư của cùng một mẻ: cùng số lít ở cả hai bồn nghĩa là do can (lỗi đếm hoặc lỗi đổ đầy)",
+    "When both dips are in, the page compares the two residuals of the same batch: the same litres in both tanks means the cans (a count or fill error)": "Khi đã có cả hai lần đo, trang so sánh hai phần dư của cùng một mẻ: cùng số lít ở cả hai bồn nghĩa là do bình (lỗi đếm hoặc lỗi đổ đầy)",
     "one recount fixes both files; litres that only B misses means a spill on the way; a miss that only one tank shows means that tank or its hose.": "đếm lại một lần là sửa được cả hai tệp; số lít chỉ B thiếu nghĩa là tràn đổ trên đường mang; sai lệch chỉ một bồn có nghĩa là do bồn đó hoặc ống của nó.",
     "The pour noise is shared, so the comparison is as sharp as the dips alone.": "Nhiễu lượng đổ là chung, nên phép so sánh chỉ còn chịu nhiễu của các lần đo.",
     "Method: CALIBRATION_METHODOLOGY.md §{0}a.": "Phương pháp: CALIBRATION_METHODOLOGY.md §{0}a.",
@@ -1659,12 +1683,12 @@
     "resid < {0}: the rise came too cheap (object, or more liquid than recorded).": "resid < {0}: mức dâng quá dễ (vật cản, hoặc chất lỏng nhiều hơn số ghi).",
     "resid > {0}: the rise came too small (loss, or less liquid than recorded).": "resid > {0}: mức dâng quá nhỏ (hao hụt, hoặc chất lỏng ít hơn số ghi).",
     // Dialogs and errors
-    "Less than {0} s since the last can. Is this a new can?": "Chưa tới {0} s kể từ can trước. Đây có phải là can mới không?",
+    "Less than {0} s since the last can. Is this a new can?": "Chưa tới {0} s kể từ bình trước. Đây có phải là bình mới không?",
     "Why do you accept this level against the check?": "Vì sao bạn chấp nhận mức này ngược với phép kiểm tra?",
     "Replace the open session? It goes to the archive.": "Thay phiên đang mở? Phiên đó sẽ được chuyển vào kho lưu.",
     "Close this session? Export it first. It goes to this browser's archive.": "Đóng phiên này? Hãy xuất trước. Phiên sẽ được chuyển vào kho lưu của trình duyệt này.",
     "Remove the last reading (the tank dipped last), or the last batch when it has no readings?": "Xoá số đo cuối (của bồn được đo sau cùng), hoặc mẻ cuối nếu mẻ đó chưa có số đo?",
-    "Remove the last can from the count?": "Xoá can cuối khỏi số đếm?",
+    "Remove the last can from the count?": "Xoá bình cuối khỏi số đếm?",
     "Remove the last entry (the last reading, or the last pour if it has no reading)?": "Xoá mục cuối (số đo cuối, hoặc lần đổ cuối nếu chưa có số đo)?",
     "Pour after the recount, L (? = unknown, 200+? = 200 plus unknown):": "Lượng đổ sau khi đếm lại, L (? = không rõ, 200+? = 200 cộng phần không rõ):",
     "Drain after the recount, L (? = unknown, 200+? = 200 plus unknown):": "Lượng bơm ra sau khi đếm lại, L (? = không rõ, 200+? = 200 cộng phần không rõ):",
@@ -1675,8 +1699,8 @@
     "cannot read dip {s}": "không đọc được số đo {s}",
     "cannot read pour {s}": "không đọc được lượng đổ {s}",
     "a pour must be positive": "lượng đổ phải là số dương",
-    "set the can size in litres to count cans": "đặt cỡ can bằng lít để đếm can",
-    "no can is counted yet": "chưa đếm can nào",
+    "set the can size in litres to count cans": "đặt cỡ bình bằng lít để đếm bình",
+    "no can is counted yet": "chưa đếm bình nào",
     "no pour to edit": "không có lần đổ nào để sửa",
     "nothing to accept": "không có gì để chấp nhận",
     "enter at least one reading": "nhập ít nhất một số đo",
@@ -1702,6 +1726,7 @@
     "the dip time must be 0 s or more": "thời gian đo phải từ 0 s trở lên",
     "the alarm lead must be 0 to 120 s": "thời gian báo trước phải từ 0 đến 120 s",
     "a fill time must be more than 0 s": "thời gian bơm đầy phải lớn hơn 0 s",
+    "a drain time must be more than 0 s": "thời gian trút phải lớn hơn 0 s",
   };
 
   const DICTS = { vi: VI };
@@ -2032,6 +2057,7 @@
     settleSeconds: 300,         // s: idle time after a batch before the dip (§3.5)
     dipSeconds: 60,             // s: one dip and its entry, for the time estimate
     fillSeconds: null,          // { "200": 90, … }: fill one can by the pump, s
+    drainSeconds: null,         // { "200": 40, … }: empty one can (into the tank, or away), s
     alarmLead: 15,              // s before the can is full: close the valve
     learnN: 3,                  // intervals before a confirmed miss is an anomaly
     scalePrior: 4,              // pseudo-count for the noise scale estimate
@@ -2063,6 +2089,7 @@
     if (cfg.pourSeconds && !cfg.fillSeconds) cfg.fillSeconds = cfg.pourSeconds;
     delete cfg.pourSeconds;
     cfg.fillSeconds = Object.assign({}, cfg.fillSeconds || {});
+    cfg.drainSeconds = Object.assign({}, cfg.drainSeconds || {});
     if (cfg.direction == null || cfg.direction === "") cfg.direction = "fill";
     if (cfg.direction !== "fill" && cfg.direction !== "drain") throw new Error(`direction must be "fill" or "drain", not ${JSON.stringify(cfg.direction)}`);
     cfg.dir = cfg.direction === "drain" ? -1 : 1;
@@ -2817,6 +2844,12 @@
       if (!(v > 0)) throw new Error("a fill time must be more than 0 s");
       cfg.fillSeconds[sizeKey(k)] = v;
     }
+    for (const k of Object.keys(o.drainSeconds || {})) {
+      const v = o.drainSeconds[k];
+      if (v == null || v === "") { delete cfg.drainSeconds[sizeKey(k)]; continue; }
+      if (!(v > 0)) throw new Error("a drain time must be more than 0 s");
+      cfg.drainSeconds[sizeKey(k)] = v;
+    }
     return cfg;
   };
 
@@ -2849,12 +2882,25 @@
     return set > 0 ? { seconds: set, source: "set" } : null;
   };
 
-  /** Time one can costs the campaign: the measured cycle, else the fill time. */
+  /** Drain time of one can: the time to empty it.  A setting only. */
+  Session.prototype.drainSecondsFor = function (size) {
+    const set = this.cfg.drainSeconds[sizeKey(size)];
+    return set > 0 ? { seconds: set, source: "set" } : null;
+  };
+
+  /**
+   * Time one can costs the campaign: the set fill time plus the set drain
+   * time ("set"); one of them alone is a floor ("fill" or "drain").  Only
+   * the typed times count, so the estimate never changes its source by
+   * itself.  The tap gap (measuredPourSeconds) is shown beside it as a
+   * check; the operator can adopt it as the drain time.
+   */
   Session.prototype.cycleSecondsFor = function (size) {
-    const m = this.measuredPourSeconds(size);
-    if (m) return { seconds: m.seconds, source: "measured", n: m.n };
-    const f = this.fillSecondsFor(size);
-    return f ? { seconds: f.seconds, source: "fill" } : null;
+    const f = this.fillSecondsFor(size), d = this.drainSecondsFor(size);
+    if (f && d) return { seconds: f.seconds + d.seconds, source: "set", fill: f.seconds, drain: d.seconds };
+    if (f) return { seconds: f.seconds, source: "fill", fill: f.seconds };
+    if (d) return { seconds: d.seconds, source: "drain", drain: d.seconds };
+    return null;
   };
 
   /**
@@ -3364,7 +3410,7 @@
     scale: { get: function () { return this[this.active].scale; } },
   });
   for (const name of ["current", "lastGood", "advice", "preview", "status", "series",
-    "learning", "fillPlan", "measuredPourSeconds", "fillSecondsFor", "cycleSecondsFor",
+    "learning", "fillPlan", "measuredPourSeconds", "fillSecondsFor", "drainSecondsFor", "cycleSecondsFor",
     "toRawCsv"]) {
     TransferSession.prototype[name] = function (name) {
       return function () { const s = this[this.active]; return s[name].apply(s, arguments); };
@@ -5408,6 +5454,13 @@
   function fillTimeFor(u) { return S && u > 0 ? S.fillSecondsFor(u) : null; }
   function cycleFor(u) { return S && u > 0 ? S.cycleSecondsFor(u) : null; }
   function sizeId(u) { return "tm-fill-" + String(u).replace(/[^0-9]/g, "_"); }
+  function drainId(u) { return "tm-drain-" + String(u).replace(/[^0-9]/g, "_"); }
+  /** How the estimate got its time per can, for the line under the estimate. */
+  function cycleNote(d) {
+    if (d.source === "set") return ` (fill ${fmtClock(d.fill)} + drain ${fmtClock(d.drain)})`;
+    if (d.source === "drain") return " (drain time only: a floor)";
+    return " (fill time only: a floor)";
+  }
 
   // ---- sound, vibration, screen
   let actx = null, alarmOn = false, alarmUntil = 0, lastRing = 0, alarmBeeps = 3, wake = null;
@@ -5645,25 +5698,53 @@
     if (settle > 0 && T.settled !== key) { T.settled = key; saveTimer(); alarm("Settled: dip now"); }
   }
 
-  // ---- time to half and to the brim
+  // ---- time to half and to the brim.  The estimate counts only the typed
+  // fill and drain times.  The tap gap is a check beside it: the button
+  // takes it as the drain time (gap − fill), and only when you press it.
+  function tapLine(u) {
+    const m = S.measuredPourSeconds(u);
+    return m ? `<div class="muted">Your taps: ${fmtClock(m.seconds)} per can (median of ${m.n} gap${m.n > 1 ? "s" : ""}).</div>` : "";
+  }
+  /** The drain time the taps suggest, or null: the tap gap minus the fill time. */
+  function tapDrain(u) {
+    const m = S.measuredPourSeconds(u), fl = fillTimeFor(u);
+    if (!m || !fl || !(m.seconds > fl.seconds)) return null;
+    const v = Math.round(m.seconds - fl.seconds), cur = S.drainSecondsFor(u);
+    return cur && cur.seconds === v ? null : v;
+  }
+  function tapCheck(u) {
+    const v = tapDrain(u), b = $("eta-use");
+    b.classList.toggle("hidden", v == null);
+    if (v != null) { b.textContent = `Use the taps: drain ${fmtClock(v)} per ${f(u, 0)} L can`; b.dataset.u = String(u); }
+  }
+  $("eta-use").addEventListener("click", guard("p-err", () => {
+    const u = Number($("eta-use").dataset.u), v = tapDrain(u);
+    if (v == null) return;
+    S.setTimers({ drainSeconds: { [String(u)]: v } });
+    save(); timersSig = ""; render(); tickEta(Date.now());
+  }));
+
   function tickEta(now) {
     lastEta = now;
     const box = $("now-eta");
+    $("eta-use").classList.add("hidden");
     if (isTransfer()) { tickEtaTransfer(now, box); return; }
     if (!S || S.lastGood() < 0) { box.innerHTML = ""; return; }
     const list = S.canList(), last = list.length ? list[list.length - 1].u : null;
     const u = activeUnit() || last, d = cycleFor(u);
     if (!(u > 0)) { box.innerHTML = ""; return; }
+    tapCheck(u);
     if (!d) { box.innerHTML = `<div class="muted">Set the fill time for ${f(u, 0)} L cans (Timers and alarm, below) to see the time to half and to the ${isDrain() ? "bottom" : "brim"}.</div>`; return; }
     const pe = T.pour && T.pour.size === u ? (now - T.pour.start) / 1000 : 0;
-    const plan = S.fillPlan({ size: u, cycleSeconds: d.seconds, now, pourElapsed: pe });
+    const plan = S.fillPlan({ size: u, cycleSeconds: d.seconds, now, pourElapsed: pe, settleSeconds: 0, dipSeconds: 0 });
     if (!plan) { box.innerHTML = ""; return; }
     const line = (name, m, V) => !m ? `<div><b>${name}</b>: —</div>`
       : m.done ? `<div><b>${name}</b> (${f(V, 0)} L): reached</div>`
         : `<div><b>${name}</b> (${f(V, 0)} L): ≈ ${fmtSpan(m.seconds)} · done ≈ <b>${hhmm(now + 1000 * m.seconds)}</b> · ${m.levels} level${m.levels > 1 ? "s" : ""} · ${m.cans} × ${f(u, 0)} L</div>`;
     box.innerHTML = line("To half", plan.half, plan.capacity / 2)
       + (plan.end !== undefined ? line("To bottom", plan.end, plan.endVolume) : line("To brim", plan.brim, plan.capacity))
-      + `<div class="muted">${fmtClock(d.seconds)} per can${d.source === "measured" ? " (measured cycle: fill, carry, drain)" : " (fill time only: a floor)"}, settle ${fmtClock(plan.settleSeconds)}, dip ${fmtClock(plan.dipSeconds)} per level. From the running shell and the pour advice, without extra dips.</div>`;
+      + `<div class="muted">${fmtClock(d.seconds)} per can${cycleNote(d)}. Pouring time only: no settle and no dip time. From the running shell and the pour advice.</div>`
+      + tapLine(u);
   }
 
   /** A transfer shares the batches: A counts down to its bottom, B up to its brim. */
@@ -5672,21 +5753,24 @@
     const list = S.canList(), last = list.length ? list[list.length - 1].u : null;
     const u = activeUnit() || last, d = cycleFor(u);
     if (!(u > 0)) { box.innerHTML = ""; return; }
+    tapCheck(u);
     if (!d) {
       box.innerHTML = `<div class="muted">Set the fill time for ${f(u, 0)} L cans (Timers and alarm, below) to see the time to the bottom of A and to the brim of B.</div>`;
       return;
     }
     const pe = T.pour && T.pour.size === u ? (now - T.pour.start) / 1000 : 0;
     const open = { volume: S.batchVolume(), cans: S.cans() };
-    const planO = S.out.fillPlan({ size: u, cycleSeconds: d.seconds, now, pourElapsed: pe, open });
-    const planI = S.in.fillPlan({ size: u, cycleSeconds: d.seconds, now, pourElapsed: pe, open });
+    const z = { settleSeconds: 0, dipSeconds: 0 };
+    const planO = S.out.fillPlan(Object.assign({ size: u, cycleSeconds: d.seconds, now, pourElapsed: pe, open }, z));
+    const planI = S.in.fillPlan(Object.assign({ size: u, cycleSeconds: d.seconds, now, pourElapsed: pe, open }, z));
     if (!planO || !planI) { box.innerHTML = ""; return; }
     const line = (name, m, V) => !m ? `<div><b>${name}</b>: —</div>`
       : m.done ? `<div><b>${name}</b> (${f(V, 0)} L): reached</div>`
         : `<div><b>${name}</b> (${f(V, 0)} L): ≈ ${fmtSpan(m.seconds)} · done ≈ <b>${hhmm(now + 1000 * m.seconds)}</b> · ${m.levels} level${m.levels > 1 ? "s" : ""} · ${m.cans} × ${f(u, 0)} L</div>`;
     box.innerHTML = line(`A (${S.out.cfg.tank}) to bottom`, planO.end, planO.endVolume)
       + line(`B (${S.in.cfg.tank}) to brim`, planI.brim, planI.capacity)
-      + `<div class="muted">Both tanks take the same batches; the cycle now also carries the cans to B and the second dip. Settle ${fmtClock(planO.settleSeconds)}, dip ${fmtClock(planO.dipSeconds)} per tank, two dips per level. From the running shells and the pour advice, without extra dips.</div>`;
+      + `<div class="muted">${fmtClock(d.seconds)} per can${cycleNote(d)}. Both tanks take the same batches. Pouring time only: no settle and no dip time. From the running shells and the pour advice.</div>`
+      + tapLine(u);
   }
 
   // ---- settings
@@ -5696,12 +5780,13 @@
     for (const c of S.canList()) add(c.u);
     for (const L of S.levels) if (L.cans) for (const u of (L.cans.units || [L.cans.unit])) add(u);
     for (const k of Object.keys(S.cfg.fillSeconds)) add(k);
+    for (const k of Object.keys(S.cfg.drainSeconds)) add(k);
     return out.sort((a, b) => b - a);
   }
   function renderTimers() {
     if (!S) return;
     const sizes = timerSizes(), cfg = S.cfg;
-    const sig = JSON.stringify([sizes, cfg.settleSeconds, cfg.dipSeconds, cfg.alarmLead, cfg.fillSeconds,
+    const sig = JSON.stringify([sizes, cfg.settleSeconds, cfg.dipSeconds, cfg.alarmLead, cfg.fillSeconds, cfg.drainSeconds,
       P.anim, P.sound, P.vibrate, P.wake]);
     if (sig === timersSig) return;
     timersSig = sig;
@@ -5712,6 +5797,15 @@
       const set = cfg.fillSeconds[String(u)], m = S.measuredPourSeconds(u);
       return `<label>${f(u, 0)} L can<input id="${sizeId(u)}" value="${set ? fmtClock(set) : ""}" placeholder="${m ? "cycle " + fmtClock(m.seconds) : "1:30"}"></label>`;
     }).join("") : `<p class="muted">Enter a can size on the pour card first.</p>`;
+    $("tm-drains").innerHTML = sizes.map((u) => {
+      const set = cfg.drainSeconds[String(u)];
+      return `<label>${f(u, 0)} L can<input id="${drainId(u)}" value="${set ? fmtClock(set) : ""}" placeholder="0:40"></label>`;
+    }).join("");
+    $("tm-drain-help").textContent = (isTransfer()
+      ? "The time to empty one can into tank B. The time to the bottom of A and to the brim of B adds it to the fill time."
+      : isDrain() ? "The time to empty one can. The time to half and to the bottom adds it to the fill time."
+        : "The time to empty one can into the tank. The time to half and to the brim adds it to the fill time.")
+      + " The Now card shows the time between your taps as a check; its button copies it here.";
     $("tm-anim").checked = !!P.anim;
     $("tm-sound").checked = !!P.sound; $("tm-vib").checked = !!P.vibrate; $("tm-wake").checked = !!P.wake;
   }
@@ -5720,10 +5814,13 @@
     const lead = $("tm-lead").value.trim();
     const o = {
       settleSeconds: parseDur($("tm-settle").value), dipSeconds: parseDur($("tm-dip").value),
-      alarmLead: lead === "" ? 15 : Number(lead), fillSeconds: {},
+      alarmLead: lead === "" ? 15 : Number(lead), fillSeconds: {}, drainSeconds: {},
     };
     if (!(o.alarmLead >= 0 && o.alarmLead <= 120)) throw new Error("The alarm lead must be 0 to 120 s.");
-    for (const u of timerSizes()) o.fillSeconds[String(u)] = parseDur($(sizeId(u)).value);
+    for (const u of timerSizes()) {
+      o.fillSeconds[String(u)] = parseDur($(sizeId(u)).value);
+      o.drainSeconds[String(u)] = parseDur($(drainId(u)).value);
+    }
     S.setTimers(o);
     P.anim = !!$("tm-anim").checked;
     P.sound = !!$("tm-sound").checked; P.vibrate = !!$("tm-vib").checked; P.wake = !!$("tm-wake").checked;

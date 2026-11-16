@@ -80,7 +80,7 @@ uses, in four cards:
 | Display | The language of the page (English or Tiếng Việt) and the theme (Auto, Light, Dark) | Any time |
 | This campaign | Tank name, D, L, pour unit and their ± | After the first level |
 | Noise and limits | Reading σ, pour noise, datum ±, brim ± at the neck entrance (drain) | Before or during a campaign |
-| Timers, alarm and device | Settle and dip times, fill time per can, alarm lead, animation, sound, vibration, screen | After the first level |
+| Timers, alarm and device | Settle and dip times, fill and drain time per can, alarm lead, animation, sound, vibration, screen | After the first level |
 
 The noise card is also the draft for the next campaign: change it before you
 start, and *Start campaign* uses it. A change during a campaign refits the
@@ -278,19 +278,31 @@ the can into the tank has no timer.
 **Settle timer.** *Batch done* starts the settle timer from the last can.
 The dip card counts down and rings once when the level is ready to dip.
 
-**Time to half and to the brim.** The Now card shows how long it takes to
-reach half of the capacity and the brim, the clock time when you will be
-done, and the levels and cans that are left. Each level takes the advised
-number of cans for a rise of about 30 mm, so near the brim the levels get
-smaller. A milestone is done when the first level at or above it is dipped.
-The estimate follows the running shell and has no time for extra dips, so
-early in the campaign it can be off by several levels.
+**Time to half and to the brim.** The page uses two times that you type
+under *Timers, alarm and device*, for each can size:
 
-**Cycle time from the taps.** The gap between two taps of the same size in
-one batch holds the fill, the carry and the drain. The page takes the median
-of those gaps and uses it for the estimate, because that is the time one can
-costs the campaign. It cannot give the fill time alone, so it never feeds the
-timer.
+| Time | What it is | What uses it |
+|---|---|---|
+| Fill time | The pump fills one can | The fill timer and its alarm, and the estimate |
+| Drain time | You empty one can into the tank (drain: away; transfer: into B) | The estimate only |
+
+The Now card shows how long it takes to reach half of the capacity and the
+brim (a drain: the bottom), and the clock time when you will be done:
+
+    time = number of cans left × (fill time + drain time)
+
+It counts pouring time only: no settle time and no dip time. Each level takes
+the advised number of cans for a rise of about 30 mm, so near the brim the
+levels get smaller. The estimate follows the running shell, so early in the
+campaign it can be off by several levels. With only one of the two times, the
+estimate is a floor.
+
+**The tap check.** The page notes the clock at each *+1 can* tap. The median
+gap between two taps of the same size is the real time of one can: fill,
+carry and drain. The Now card shows it as *Your taps: 2:30 per can*. It never
+changes the estimate by itself. When it is longer than the fill time, the
+button *Use the taps: drain 1:00 per 200 L can* sets the drain time to the
+gap minus the fill time. The tap gap never feeds the fill timer.
 
 Sound starts only after a tap on the page. *Test alarm* checks the volume.
 The timers never go into the raw file or the fit.
