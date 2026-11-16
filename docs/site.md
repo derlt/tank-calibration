@@ -142,8 +142,9 @@ HTML of `page.html`. To list the whole texts behind the missing parts, run
 
 ## Each pour
 
-The Live tab has two modes. Use the *Simple · Verbose* switch at the top of
-the tab; the device keeps your choice. **Verbose** (the default) shows every
+The Live tab has two modes. Tap the small box at the right end of the header
+to switch: **Aa** means verbose, **A** means simple. It shows on every tab
+once a campaign is open, and the device keeps your choice. **Verbose** (the default) shows every
 explanation. **Simple** shows only what to do and the numbers to read:
 
 - the level, and where the batch in the pour panel lands:

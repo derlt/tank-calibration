@@ -251,8 +251,9 @@
   .tankicon .a-out { stroke: var(--warn); }
   .tankicon .a-in { stroke: var(--info); }
   /* Simple mode: the Live tab keeps the actions and the numbers to read. */
-  .mode-seg { width: max-content; margin: 0 0 0.5rem auto; }
-  .mode-seg button { min-height: 2rem; padding: 0.15rem 0.8rem; font-size: 0.85rem; }
+  /* The Simple · Verbose switch: one small box at the right end of the
+     header, on every tab.  "Aa" = verbose (all text), "A" = simple. */
+  header .hdr-mode { flex: 0 0 auto; min-height: 1.9rem; min-width: 2.1rem; padding: 0 0.35rem; border: 1px solid rgba(255, 255, 255, 0.45); border-radius: 6px; background: transparent; color: #fff; font-size: 0.8rem; font-weight: 700; }
   body.simple #live .vb { display: none !important; }
   body.simple #now-advice { font-size: 1.1rem; }
   /* Phone layout.  A grid item never grows past its column: a wide table
@@ -300,6 +301,7 @@
     <button id="hdr-tank-b" data-tank="in" aria-pressed="false">tank B</button>
   </nav>
   <span class="hdr-status"><span id="hdr-phase"></span><span id="hdr-count"></span><span id="hdr-cloud"></span></span>
+  <button class="hdr-mode hidden" id="hdr-mode" aria-pressed="false" aria-label="Simple mode" title="Verbose: all the text. Tap for simple.">Aa</button>
   <i class="live-bar" id="hdr-bar" aria-hidden="true"></i>
 </header>
 <main id="main">
@@ -364,10 +366,6 @@
 
   <!-- ===================================================== live -->
   <section id="live" class="hidden">
-    <nav class="seg mode-seg" id="mode" aria-label="How much text the Live tab shows">
-      <button data-mode="simple" aria-pressed="false">Simple</button>
-      <button data-mode="verbose" aria-pressed="true">Verbose</button>
-    </nav>
     <details class="card" id="now-card" open>
       <summary><h2>Now</h2><span class="now-sum" id="now-sum"></span></summary>
       <div class="kv" id="now-kv"></div>
@@ -804,7 +802,6 @@
     "live dip check": "kiểm tra đo trực tiếp",
     "Simple": "Gọn",
     "Verbose": "Chi tiết",
-    "How much text the Live tab shows": "Lượng chữ trên thẻ Trực tiếp",
     "Stop alarm": "Tắt báo động",
     // New campaign
     "New campaign": "Đợt đo mới",
@@ -865,6 +862,11 @@
     "{0} mm (row {1}, {2} reading) · in the neck": "{0} mm (hàng {1}, {2} lần đo) · trong cổ bồn",
     "{0} mm (row {1}, {2} readings) · in the neck": "{0} mm (hàng {1}, {2} lần đo) · trong cổ bồn",
     "in the neck": "trong cổ bồn",
+    // The Simple · Verbose switch in the header
+    "Aa": "Aa",
+    "Simple mode": "Chế độ gọn",
+    "Verbose: all the text. Tap for simple.": "Chi tiết: mọi dòng chữ. Chạm để chuyển sang Gọn.",
+    "Simple: the actions and the numbers only. Tap for verbose.": "Gọn: chỉ các thao tác và con số. Chạm để chuyển sang Chi tiết.",
     // A done time past midnight (the time to half and to the brim)
     "tomorrow {0}": "ngày mai {0}",
     "{0} (+{1} days)": "{0} (+{1} ngày)",
@@ -4985,6 +4987,8 @@
     renderSetup();
     renderSetupNoise();
     renderSettings();
+    $("hdr-mode").classList.toggle("hidden", !has);
+    renderMode();   // the header switch shows on every tab
     if (!has) { $("hdr-phase").textContent = ""; $("hdr-count").textContent = ""; $("hdr-title").textContent = "calib site"; $("hdr-title").classList.remove("hidden"); $("hdr-tank").classList.add("hidden"); return; }
     const st = S.status();
     // One slim line.  A transfer shows the tank switch in place of the
@@ -5028,12 +5032,13 @@
   function renderMode() {
     const on = simple();
     if (document.body && document.body.classList) document.body.classList.toggle("simple", on);
-    for (const b of $("mode").querySelectorAll("button")) b.setAttribute("aria-pressed", String((b.dataset.mode === "simple") === on));
+    const b = $("hdr-mode");
+    b.textContent = on ? "A" : "Aa";
+    b.setAttribute("aria-pressed", String(on));
+    b.setAttribute("title", on ? "Simple: the actions and the numbers only. Tap for verbose." : "Verbose: all the text. Tap for simple.");
   }
-  $("mode").addEventListener("click", (ev) => {
-    const b = ev.target && ev.target.closest ? ev.target.closest("button[data-mode]") : null;
-    if (!b) return;
-    P.mode = b.dataset.mode === "simple" ? "simple" : "verbose";
+  $("hdr-mode").addEventListener("click", () => {
+    P.mode = simple() ? "verbose" : "simple";
     localStorage.setItem(PREFS, JSON.stringify(P));
     render();
   });

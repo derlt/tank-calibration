@@ -66,7 +66,7 @@ function collect(p) {
 }
 
 const tabsOf = (p) => (t) => p.el("tabs")._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: t } }) } });
-const modeOf = (p) => (m) => p.el("mode")._listeners.click[0]({ target: { closest: () => ({ dataset: { mode: m } }) } });
+const modeOf = (p) => (m) => { if (p.el("hdr-mode")["aria-pressed"] !== String(m === "simple")) p.el("hdr-mode").click(); };
 
 /** Visit every tab, in both modes, and collect. */
 function sweep(p) {

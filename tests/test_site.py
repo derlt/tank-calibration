@@ -885,7 +885,8 @@ class TestSitePage(unittest.TestCase):
             f"const corePath = {json.dumps(CORE)};\n"
             "const out = {}, store = new Map();\n"
             "const p = stub.boot(page, corePath, store), el = p.el;\n"
-            "const mode = (m) => el('mode')._listeners.click[0]({ target: { closest: () => ({ dataset: { mode: m } }) } });\n"
+            "// The header switch toggles; aria-pressed is true in simple mode.\n"
+            "const mode = (m) => { if (el('hdr-mode')['aria-pressed'] !== String(m === 'simple')) el('hdr-mode').click(); };\n"
             "const grab = () => ({ kv: el('now-kv').innerHTML, advice: el('now-advice').textContent,"
             " target: el('t-target').textContent, verdict: el('verdict').innerHTML,"
             " expect: el('dip-expect-a').textContent, drift: el('now-drift').textContent });\n"
@@ -893,8 +894,10 @@ class TestSitePage(unittest.TestCase):
             "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
             "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
             "out.verbose = grab();\n"
+            "out.btnV = [el('hdr-mode').textContent, el('hdr-mode')['aria-pressed'], el('hdr-mode')._classes.has('hidden')];\n"
             "mode('simple');\n"
             "out.simple = grab();\n"
+            "out.btnS = [el('hdr-mode').textContent, el('hdr-mode')['aria-pressed']];\n"
             "out.saved = JSON.parse(store.get('calib-site:prefs')).mode;\n"
             "el('t-plus').click(); el('t-plus').click(); el('p-go').click();\n"
             "out.dip = grab();\n"
@@ -925,6 +928,8 @@ class TestSitePage(unittest.TestCase):
         self.assertNotIn("<p>", s["verdict"], "simple mode drops the verdict message")
         self.assertIn("<h3>", s["verdict"])
         self.assertEqual(got["saved"], "simple")
+        self.assertEqual(got["btnV"], ["Aa", "false", False], "the header switch shows Aa in verbose mode")
+        self.assertEqual(got["btnS"], ["A", "true"])
         self.assertRegex(got["dip"]["expect"], r"^Expect \d+(\.\d)? ± \d+(\.\d)? mm$")
         self.assertRegex(got["reloaded"], r"^Expect ")
         self.assertIn("liquid (running shell)", got["back"]["kv"], "verbose mode comes back in full")

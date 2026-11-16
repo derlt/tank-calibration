@@ -65,7 +65,6 @@
     "live dip check": "kiểm tra đo trực tiếp",
     "Simple": "Gọn",
     "Verbose": "Chi tiết",
-    "How much text the Live tab shows": "Lượng chữ trên thẻ Trực tiếp",
     "Stop alarm": "Tắt báo động",
     // New campaign
     "New campaign": "Đợt đo mới",
@@ -126,6 +125,11 @@
     "{0} mm (row {1}, {2} reading) · in the neck": "{0} mm (hàng {1}, {2} lần đo) · trong cổ bồn",
     "{0} mm (row {1}, {2} readings) · in the neck": "{0} mm (hàng {1}, {2} lần đo) · trong cổ bồn",
     "in the neck": "trong cổ bồn",
+    // The Simple · Verbose switch in the header
+    "Aa": "Aa",
+    "Simple mode": "Chế độ gọn",
+    "Verbose: all the text. Tap for simple.": "Chi tiết: mọi dòng chữ. Chạm để chuyển sang Gọn.",
+    "Simple: the actions and the numbers only. Tap for verbose.": "Gọn: chỉ các thao tác và con số. Chạm để chuyển sang Chi tiết.",
     // A done time past midnight (the time to half and to the brim)
     "tomorrow {0}": "ngày mai {0}",
     "{0} (+{1} days)": "{0} (+{1} ngày)",

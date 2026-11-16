@@ -29,6 +29,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The Simple · Verbose switch moved from its own row above the Now card to a
+  small box at the right end of the header, on every tab: **Aa** = verbose,
+  **A** = simple; a tap switches.
 - Header live indicator: a small can replaces the dot. It fills while the
   pump fills it and empties while it drains, in the colour of the state; it
   blinks at close-the-valve and shows a tick when full. The line along the
