@@ -9,7 +9,6 @@ out/
 *.egg-info/
 build/
 dist/
-site/public/
 .wrangler/
 .env
 wrangler.deploy.jsonc

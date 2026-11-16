@@ -1,4 +1,4 @@
-.PHONY: test lint coverage demo demo-drain gate site deploy deploy-dry deploy-config db-schema clean
+.PHONY: test lint coverage demo demo-drain gate site site-public deploy deploy-dry deploy-config db-schema clean
 
 PY ?= uv run python
 
@@ -29,8 +29,11 @@ demo-drain:
 gate:
 	$(PY) -m calib gate out/demo/demo_workbook.xlsx
 
+# Build the page for the phone (site/calib_site.html) and the Worker's assets
+# (site/public, committed: the dashboard's Workers Build deploys it).
 site:
 	$(PY) -m calib site-page
+	$(MAKE) site-public
 
 # Create the cloud tables in D1 (once; running it again changes nothing).
 db-schema: deploy-config
@@ -42,20 +45,20 @@ deploy-config:
 	@test -n "$(API_HOSTS)" || { echo "Set API_HOSTS in .env (the main host name of the page)"; exit 1; }
 	@sed 's/"D1_DATABASE_ID"/"$(D1_DATABASE_ID)"/' wrangler.jsonc > $(DEPLOY_CFG)
 
+# The Worker's static assets: the built page and _headers, in site/public
+# (built, not committed).  scripts/cloud-build.sh does the same in a
+# Cloudflare Workers Build, from the committed page.
+site-public:
+	$(PY) -m calib site-page --check
+	$(PY) -m calib site-page -o site/public/index.html
+	cp site/_headers site/public/_headers
+
 # Publish the on-site page as a Cloudflare Worker with static assets.
 # Needs a Cloudflare login: `npx wrangler login`, or CLOUDFLARE_API_TOKEN.
-deploy:
-	$(PY) -m calib site-page --check
-	$(PY) -m calib site-page -o site/public/index.html
-	cp site/_headers site/public/_headers
-	$(MAKE) deploy-config
+deploy: site-public deploy-config
 	npx wrangler@4 deploy --config $(DEPLOY_CFG) --var API_HOSTS:$(API_HOSTS)
 
-deploy-dry:
-	$(PY) -m calib site-page --check
-	$(PY) -m calib site-page -o site/public/index.html
-	cp site/_headers site/public/_headers
-	$(MAKE) deploy-config
+deploy-dry: site-public deploy-config
 	npx wrangler@4 deploy --config $(DEPLOY_CFG) --var API_HOSTS:$(API_HOSTS) --dry-run
 
 clean:

@@ -79,11 +79,13 @@ class TestNoLeaks(unittest.TestCase):
 
     @unittest.skipUnless(GIT, "git is not installed")
     def test_env_is_ignored(self):
+        # site/public is committed (the dashboard build deploys it), so it is
+        # no longer here: test_env_values_not_in_tracked_files scans it now.
         out = subprocess.run(  # noqa: S603
-            [GIT, "check-ignore", ".env", "wrangler.deploy.jsonc", "site/public/index.html"],
+            [GIT, "check-ignore", ".env", "wrangler.deploy.jsonc"],
             cwd=ROOT, capture_output=True, text=True, check=False,
         )
-        self.assertEqual(len(out.stdout.split()), 3, "these files must stay out of git")
+        self.assertEqual(len(out.stdout.split()), 2, "these files must stay out of git")
 
 
 if __name__ == "__main__":

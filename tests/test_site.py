@@ -10,6 +10,7 @@ import csv
 import io
 import itertools
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -23,6 +24,8 @@ from calib.site_page import SITE, build_page, page_is_current
 
 HERE = Path(__file__).resolve().parent.parent
 NODE = shutil.which("node")
+SH = shutil.which("sh")
+GIT = shutil.which("git")
 CORE = (SITE / "site_core.js").as_posix()
 SIM = (SITE / "simulate.js").as_posix()
 DEMO = (HERE / "examples" / "demo_raw.csv").as_posix()
@@ -76,6 +79,47 @@ class TestSitePage(unittest.TestCase):
         self.assertTrue(
             page_is_current(), "site/calib_site.html is stale: run `calib site-page`"
         )
+
+    def test_site_public_is_the_current_build(self):
+        """site/public is committed and must match the build.
+
+        The dashboard's Workers Build deploys the repository, so the assets
+        directory has to be in git.  It is a copy of the built page: this
+        test fails when the page changed and the copy did not follow.
+        """
+        built = (SITE / "public" / "index.html").read_text(encoding="utf-8")
+        self.assertEqual(built, build_page(), "site/public/index.html is stale: run `make site-public`")
+        headers = (SITE / "public" / "_headers").read_text(encoding="utf-8")
+        self.assertEqual(headers, (SITE / "_headers").read_text(encoding="utf-8"))
+
+    @unittest.skipUnless(SH, "sh is not installed")
+    def test_cloud_build_copies_the_committed_page(self):
+        """scripts/cloud-build.sh builds site/public from the committed page.
+
+        A Workers Build deploys a fresh checkout, where site/public does not
+        exist (it is built, not committed).  The script must give the same
+        bytes as the Python build, or the dashboard would serve an old page.
+        """
+        script = HERE / "scripts" / "cloud-build.sh"
+        self.assertTrue(script.exists())
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {k: v for k, v in os.environ.items() if k != "D1_DATABASE_ID"}
+            # A copy of the tree the script needs: site/, scripts/ and wrangler.jsonc.
+            run = Path(tmp) / "repo"
+            shutil.copytree(SITE, run / "site", ignore=shutil.ignore_patterns("public"))
+            shutil.copy(HERE / "wrangler.jsonc", run / "wrangler.jsonc")
+            shutil.copytree(HERE / "scripts", run / "scripts")
+            subprocess.run(  # noqa: S603 - SH is an absolute path
+                [SH, "scripts/cloud-build.sh", "site/public"], cwd=run, env=env, check=True
+            )
+            built = (run / "site" / "public" / "index.html").read_text(encoding="utf-8")
+            headers = (run / "site" / "public" / "_headers").read_text(encoding="utf-8")
+            self.assertEqual(built, build_page(), "the assets must be the current build")
+            self.assertEqual(headers, (SITE / "_headers").read_text(encoding="utf-8"))
+            self.assertFalse(
+                (run / "wrangler.deploy.jsonc").exists(),
+                "no D1 id in the environment: no deploy config, and none with a placeholder",
+            )
 
     def test_page_inlines_the_one_core(self):
         page = build_page()

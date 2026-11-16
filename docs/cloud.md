@@ -170,6 +170,32 @@ make deploy                                        # build the page, copy _heade
 
 To stop new workspaces, delete the secret: `npx wrangler@4 secret delete SIGNUP_CODE`.
 
+### Build from git (Workers Builds)
+
+The Worker is connected to the repository, and `site/public/` is committed,
+so the build finds the assets directory. It is a copy of the built page:
+
+    site/calib_site.html      the page for a phone (one file)
+    site/public/index.html    the same bytes, for the Worker's assets
+    site/public/_headers      the security headers
+
+A test fails when the copy is stale. After a change to the page, run
+`make site`: it builds `site/calib_site.html` and copies it into
+`site/public/`. Commit both.
+
+The deploy still needs the D1 id, which stays out of git: the committed
+`wrangler.jsonc` keeps the placeholder `D1_DATABASE_ID`, and a deploy with it
+fails. The dashboard build settings (Worker → Settings → Build) have no
+variables field, so the two values go into the command itself, typed there
+only (they are in `.env`):
+
+    Deploy command:
+    D1_DATABASE_ID=<id> API_HOSTS=<host> sh scripts/cloud-build.sh && npx wrangler deploy --config wrangler.deploy.jsonc --var API_HOSTS=<host>
+
+The build command stays empty. The script writes `wrangler.deploy.jsonc` with
+the id and refreshes the copy from `site/calib_site.html`. A failed build
+deploys nothing: the live site keeps the last good version.
+
 ## The API
 
 All bodies are JSON. Send `Authorization: Bearer <token>` after the login.

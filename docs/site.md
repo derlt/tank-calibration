@@ -32,7 +32,10 @@ make deploy-dry      # the same, but stop before the upload
 ```
 
 The first deploy needs a Cloudflare login: run `npx wrangler login` once, or
-set `CLOUDFLARE_API_TOKEN` in the environment. The Worker is
+set `CLOUDFLARE_API_TOKEN` in the environment. The dashboard's git build (Workers
+Builds) deploys the committed `site/public/`; after a page change run
+`make site` and commit both files, see
+[cloud.md](cloud.md#build-from-git-workers-builds). The Worker is
 `tank-calibration-site` (`wrangler.jsonc`). Its addresses are in `.env`, which
 is not committed; the custom domain is attached once in Cloudflare and is not
 part of the repository.
