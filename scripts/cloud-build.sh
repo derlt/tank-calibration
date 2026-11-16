@@ -25,4 +25,9 @@ cp site/calib_site.html "$out/index.html"
 cp site/_headers "$out/_headers"
 if [ -n "${D1_DATABASE_ID:-}" ]; then
   sed "s|\"D1_DATABASE_ID\"|\"$D1_DATABASE_ID\"|" wrangler.jsonc > wrangler.deploy.jsonc
+else
+  # The deploy needs this file; say so here, or the deploy fails with only
+  # "config file not found".
+  echo "cloud-build: D1_DATABASE_ID is not set, so wrangler.deploy.jsonc is not written." >&2
+  echo "cloud-build: set D1_DATABASE_ID and API_HOSTS in the Workers Builds variables." >&2
 fi
