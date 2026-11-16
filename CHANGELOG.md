@@ -69,6 +69,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Can size: a size typed or tapped before the first can of a batch was lost
+  on a reload, and on the return from Shortcuts (which reloads the page); the
+  field went back to the campaign's default. The chosen size is now kept on
+  the device for the campaign; a new campaign starts at its own default.
+- Vietnamese: a done time past midnight (`tomorrow 00:03`, `09:10 (+2
+  days)`) stayed in English.
 - iPhone timer: the page timer started at the tap on *Start fill timer*,
   while Safari still asked *Open in "Shortcuts"?*, so the two timers did not
   agree. The page timer now waits and starts when Shortcuts opens; the panel

@@ -222,8 +222,10 @@ the next batch.
   tap, so one batch can mix sizes: 2 × 200 L then 4 × 100 L. The buttons below
   the field give the sizes already used and the default from the setup. The
   default can size is optional: with none set, enter the size of the first
-  can and the buttons follow. After a reload the field starts at the last
-  can's size.
+  can and the buttons follow. After a reload (and after the return from
+  Shortcuts, which reloads the page) the field keeps the size you chose last,
+  even before the first can of the batch. With no size chosen on this
+  device, it starts at the last can's size, then at the default.
 - **The advice is a target, not a limit.** The page shows the advised number
   of cans for a rise of about 30 mm. It warns near the brim, and when the
   batch is more than the gap that is left in the shell.

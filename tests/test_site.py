@@ -362,6 +362,48 @@ class TestSitePage(unittest.TestCase):
         self.assertEqual(got["first"], ["live"], "the first tab is the end: no wrap")
 
     @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_can_size_survives_a_reload(self):
+        """A size chosen before the first can of a batch survives a reload.
+
+        The return from Shortcuts (x-success) reloads the page, so this is
+        also the iPhone timer path.
+        """
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "let p = stub.boot(page, corePath, store), el = p.el;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '50';\n"
+            "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "// Typed, no can counted yet.\n"
+            "el('t-unit').value = '200'; el('t-unit')._listeners.input[0]({});\n"
+            "p = stub.boot(page, corePath, store); el = p.el;\n"
+            "out.typed = el('t-unit').value;\n"
+            "// Tapped on a size button: the setup default again.\n"
+            "el('t-units')._listeners.click[0]({ target: { closest: () => ({ dataset: { unit: '50' } }) } });\n"
+            "p = stub.boot(page, corePath, store); el = p.el;\n"
+            "out.button = el('t-unit').value;\n"
+            "// A size chosen after a counted can of another size wins too.\n"
+            "el('t-plus').click(); el('t-unit').value = '100'; el('t-unit')._listeners.input[0]({});\n"
+            "p = stub.boot(page, corePath, store); el = p.el;\n"
+            "out.afterCan = el('t-unit').value;\n"
+            "// A new campaign starts at its own default.\n"
+            "el('f-new').click();\n"
+            "el('s-tank').value = 't2'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '25';\n"
+            "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "out.fresh = el('t-unit').value;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["typed"], "200", "a typed size survives a reload")
+        self.assertEqual(got["button"], "50")
+        self.assertEqual(got["afterCan"], "100")
+        self.assertEqual(got["fresh"], "25", "a new campaign takes its own default")
+
+    @unittest.skipUnless(NODE, "node is not installed")
     def test_page_dip_panel_shows_the_expected_level(self):
         stub = (HERE / "tests" / "page_stub.js").as_posix()
         got = _node(

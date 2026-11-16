@@ -126,6 +126,9 @@
     "{0} mm (row {1}, {2} reading) · in the neck": "{0} mm (hàng {1}, {2} lần đo) · trong cổ bồn",
     "{0} mm (row {1}, {2} readings) · in the neck": "{0} mm (hàng {1}, {2} lần đo) · trong cổ bồn",
     "in the neck": "trong cổ bồn",
+    // A done time past midnight (the time to half and to the brim)
+    "tomorrow {0}": "ngày mai {0}",
+    "{0} (+{1} days)": "{0} (+{1} ngày)",
     // The folded Now card's title line
     "A {0}": "A {0}",
     "near the brim": "gần đỉnh bồn",

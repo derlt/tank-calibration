@@ -865,6 +865,9 @@
     "{0} mm (row {1}, {2} reading) · in the neck": "{0} mm (hàng {1}, {2} lần đo) · trong cổ bồn",
     "{0} mm (row {1}, {2} readings) · in the neck": "{0} mm (hàng {1}, {2} lần đo) · trong cổ bồn",
     "in the neck": "trong cổ bồn",
+    // A done time past midnight (the time to half and to the brim)
+    "tomorrow {0}": "ngày mai {0}",
+    "{0} (+{1} days)": "{0} (+{1} ngày)",
     // The folded Now card's title line
     "A {0}": "A {0}",
     "near the brim": "gần đỉnh bồn",
@@ -4745,9 +4748,20 @@
     const b = ev.target.closest("button[data-unit]");
     if (!b) return;
     $("t-unit").value = b.dataset.unit;
+    keepUnit();
     render();
   });
-  $("t-unit").addEventListener("input", () => { $("p-err").textContent = ""; if (tab === "live" && S) render(); });
+  $("t-unit").addEventListener("input", () => { $("p-err").textContent = ""; keepUnit(); if (tab === "live" && S) render(); });
+  /**
+   * The chosen can size survives a reload (and the return from Shortcuts,
+   * which reloads the page).  It lives with the timers: on this device, for
+   * this campaign; a new or loaded campaign clears it.
+   */
+  function keepUnit() {
+    const v = num("t-unit");
+    if (v > 0) T.unit = v; else delete T.unit;
+    saveTimer();
+  }
   $("t-undo").addEventListener("click", guard("p-err", () => { S.untap(); save(); }));
   $("t-part").addEventListener("change", () => render());
   $("p-go").addEventListener("click", guard("p-err", () => {
@@ -5455,10 +5469,12 @@
     const def = unit(), n = S.cans();
     $("tally").classList.remove("hidden");
     $("p-manual").classList.toggle("hidden", n > 0);
-    // After a reload the field starts at the last can's size, then the default.
+    // After a reload the field starts at the size chosen last, then the last
+    // can's size, then the default.
     const last = n ? S.canList()[n - 1].u : null;
-    if (!$("t-unit").dataset.set && (last > 0 || def > 0)) {
-      $("t-unit").value = String(last > 0 ? last : def);
+    const kept = T.unit > 0 ? T.unit : null;
+    if (!$("t-unit").dataset.set && (kept || last > 0 || def > 0)) {
+      $("t-unit").value = String(kept || (last > 0 ? last : def));
       $("t-unit").dataset.set = "1";
     }
     const act = activeUnit(), part = $("t-part").checked && n > 0;
@@ -5655,7 +5671,7 @@
   // so a reload or a tab in the background shows the right time.
   const TIMER = "calib-site:timer", PREFS = "calib-site:prefs";
   function loadJSON(k, d) { try { return JSON.parse(localStorage.getItem(k) || "null") || d; } catch (e) { return d; } }
-  let T = loadJSON(TIMER, {});   // { pour: { start, dur, size, alarmed }, settled: "row@time" }
+  let T = loadJSON(TIMER, {});   // { pour: { start, dur, size, alarmed }, wait, settled: "row@time", unit: the chosen can size }
   const P = Object.assign({ anim: true, sound: true, vibrate: true, wake: true, iosTimer: false, iosShortcut: "", nowOpen: true }, loadJSON(PREFS, {}));
   // The Now card folds; the device keeps the choice.
   $("now-card").open = P.nowOpen !== false;
