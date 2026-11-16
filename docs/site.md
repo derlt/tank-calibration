@@ -222,6 +222,10 @@ the next batch.
 - **One size per can.** *Can size for the next can* sets the size of the next
   tap, so one batch can mix sizes: 2 × 200 L then 4 × 100 L. The buttons below
   the field give the sizes already used and the default from the setup. The
+  *−50 L* and *+50 L* buttons beside the field step the size by the
+  campaign's pour unit (*Settings → This campaign → Pour unit*); the size
+  never goes below one pour unit, and with no pour unit set there are no step
+  buttons. The
   default can size is optional: with none set, enter the size of the first
   can and the buttons follow. After a reload (and after the return from
   Shortcuts, which reloads the page) the field keeps the size you chose last,

@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- On-site page: − and + buttons beside the can size step it by the pour
+  unit (`−50 L`, `+50 L`); never below one pour unit.
 - On-site page: a drain time per can size (Timers, alarm and device): the
   time to empty one can. The time to half and to the brim (or the bottom) is
   the cans left × (fill time + drain time).

@@ -125,6 +125,9 @@
     "{0} mm (row {1}, {2} reading) · in the neck": "{0} mm (hàng {1}, {2} lần đo) · trong cổ bồn",
     "{0} mm (row {1}, {2} readings) · in the neck": "{0} mm (hàng {1}, {2} lần đo) · trong cổ bồn",
     "in the neck": "trong cổ bồn",
+    // The − and + buttons beside the can size (their accessible names)
+    "{0} L less": "bớt {0} L",
+    "{0} L more": "thêm {0} L",
     // The Simple · Verbose switch in the header
     "Aa": "Aa",
     "Simple mode": "Chế độ gọn",

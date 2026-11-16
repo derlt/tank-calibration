@@ -379,8 +379,10 @@
     <div class="card" id="pour-card" style="margin-top:0.8rem">
       <h2 id="pour-title">1 · Pour</h2>
       <div id="tally">
-        <div class="row" style="align-items:end">
-          <label style="min-width:7rem">Can size for the next can, L<input id="t-unit" type="number" inputmode="decimal" step="0.5"></label>
+        <div class="row" style="align-items:end;flex-wrap:nowrap">
+          <label style="min-width:0;flex:1 1 0">Can size for the next can, L<input id="t-unit" type="number" inputmode="decimal" step="0.5"></label>
+          <button class="secondary hidden" id="t-dec"></button>
+          <button class="secondary hidden" id="t-inc"></button>
         </div>
         <div class="sizes" id="t-units"></div>
         <div class="big-num" id="t-count" style="margin-top:0.6rem"></div>
@@ -1266,6 +1268,19 @@
     render();
   });
   $("t-unit").addEventListener("input", () => { $("p-err").textContent = ""; keepUnit(); if (tab === "live" && S) render(); });
+  // − and + step the size by the campaign's pour unit (Settings → Pour
+  // unit).  The size never goes below one step.  No pour unit: no buttons.
+  function stepUnit(dir) {
+    const step = unit();
+    if (!(step > 0)) return;
+    const v = num("t-unit") > 0 ? num("t-unit") : 0;
+    $("t-unit").value = String(Math.round(1000 * Math.max(step, v + dir * step)) / 1000);
+    $("p-err").textContent = "";
+    keepUnit();
+    render();
+  }
+  $("t-dec").addEventListener("click", () => stepUnit(-1));
+  $("t-inc").addEventListener("click", () => stepUnit(1));
   /**
    * The chosen can size survives a reload (and the return from Shortcuts,
    * which reloads the page).  It lives with the timers: on this device, for
@@ -1995,6 +2010,14 @@
       $("t-unit").dataset.set = "1";
     }
     const act = activeUnit(), part = $("t-part").checked && n > 0;
+    const step = def > 0 ? String(Math.round(1000 * def) / 1000) : null;
+    for (const [id, sign, word] of [["t-dec", "−", "less"], ["t-inc", "+", "more"]]) {
+      $(id).classList.toggle("hidden", !step);
+      if (!step) continue;
+      $(id).textContent = `${sign}${step} L`;
+      $(id).setAttribute("aria-label", `${step} L ${word}`);
+    }
+    $("t-dec").disabled = !(act > def);
     const vol = S.batchVolume(), known = part ? vol - S.canList()[n - 1].u : vol;
 
     $("t-count").textContent = `${n} can${n === 1 ? "" : "s"} · ${f(known, 0)} L` + (part ? " + part can" : "");

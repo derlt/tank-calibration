@@ -362,6 +362,41 @@ class TestSitePage(unittest.TestCase):
         self.assertEqual(got["first"], ["live"], "the first tab is the end: no wrap")
 
     @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_can_size_steps_by_the_pour_unit(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "let p = stub.boot(page, corePath, store), el = p.el;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '50';\n"
+            "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "out.start = [el('t-unit').value, el('t-dec').textContent, el('t-inc').textContent, el('t-dec').disabled];\n"
+            "el('t-inc').click(); el('t-inc').click(); el('t-inc').click();\n"
+            "out.up = [el('t-unit').value, el('t-plus').textContent, el('t-dec').disabled];\n"
+            "el('t-dec').click(); out.down = el('t-unit').value;\n"
+            "// A typed size off the grid steps from where it is, never below one step.\n"
+            "el('t-unit').value = '70'; el('t-unit')._listeners.input[0]({});\n"
+            "el('t-dec').click(); out.off = el('t-unit').value; el('t-dec').click(); out.floor = el('t-unit').value;\n"
+            "p = stub.boot(page, corePath, store); out.reloaded = p.el('t-unit').value;\n"
+            "// No pour unit: no step buttons.\n"
+            "const q = stub.boot(page, corePath, new Map()), e = q.el;\n"
+            "e('s-tank').value = 't2'; e('s-D').value = '1800'; e('s-L').value = '3000'; e('s-dip').value = '400';\n"
+            "e('s-go').click(); e('d-val').value = '400'; e('d-go').click();\n"
+            "out.none = [e('t-dec')._classes.has('hidden'), e('t-inc')._classes.has('hidden')];\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["start"], ["50", "−50 L", "+50 L", True], "at one step, − is off")
+        self.assertEqual(got["up"], ["200", "+1 can poured (200 L)", False])
+        self.assertEqual(got["down"], "150")
+        self.assertEqual(got["off"], "50", "70 − 50 = 20 is below one step: the floor is 50")
+        self.assertEqual(got["floor"], "50")
+        self.assertEqual(got["reloaded"], "50", "a stepped size survives a reload")
+        self.assertEqual(got["none"], [True, True])
+
+    @unittest.skipUnless(NODE, "node is not installed")
     def test_page_can_size_survives_a_reload(self):
         """A size chosen before the first can of a batch survives a reload.
 
