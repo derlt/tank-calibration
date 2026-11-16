@@ -146,8 +146,8 @@ The Live tab has two modes. Use the *Simple · Verbose* switch at the top of
 the tab; the device keeps your choice. **Verbose** (the default) shows every
 explanation. **Simple** shows only what to do and the numbers to read:
 
-- the level, and the next pour with the level to expect:
-  `Next: 2 × 200 L → expect 531.4 ± 2.3 mm`;
+- the level, and where the batch in the pour panel lands:
+  `After 400 L: 531.4 ± 2.3 mm`;
 - the can target (`Target: 2 × 200 L`) and every warning (brim, bottom,
   overflow, drift alarm);
 - a short settle line (`Settling: 3:20 left.`, `Settled: dip now.`) and the
@@ -190,9 +190,18 @@ card shows the level that pour must give, for example
 · too wide to judge: expect two readings`. Use it to choose the pour size: a
 large pour has a wide band, and a band wider than 3 mm (2σ) means the check
 will ask for a second reading. A part can, an unknown pour and an overflow
-have no prediction. The line is empty while a level waits for its dip. The
-litres field clears after a pour, so a repeated manual pour needs the value
-again, or *Use advice*.
+have no prediction. The line is empty while a level waits for its dip, and
+before the first can of a batch. The litres field clears after a pour, so a
+repeated manual pour needs the value again, or *Use advice*.
+
+This is the only prediction on the Now card: it does not predict an advised
+next pour, drain or batch. The advised size is the *Target* in the can tally.
+The Now card keeps the warnings: near the brim (halve the pour), near the
+bottom (a part can is fine), in the neck, and the drift alarm.
+
+**Fold the Now card.** Tap its title line to fold it or open it; the device
+keeps the choice. Folded, the line keeps the level and any warning in red,
+for example `NOW 1700.0 mm · near the brim`.
 
 The line shows the expected level **before** the dip, so it weakens the blind
 repeat (§10a.6). The page hides the check's own prediction while a level is
@@ -275,20 +284,21 @@ The timer does not count the can. Tap *+1 can poured* when the can is full.
 That tap is the record, and it also stops the timer and the alarm. Emptying
 the can into the tank has no timer.
 
-**Live indicator in the header.** A dot before the tank name and a thin line
-along the bottom edge of the header show the can in work, on every tab:
+**Live indicator in the header.** A small can before the tank name and a
+thin line along the bottom edge of the header show the can in work, on every
+tab:
 
-| Dot | Line | When |
+| Can | Line | When |
 |---|---|---|
-| blue, slow pulse | grows as the can fills | the fill timer runs |
-| amber, fast pulse | near the full width | the alarm lead: close the valve |
-| green, steady halo | full width | the timer is at 0:00: the can is full |
-| teal, pulse that closes in | shrinks as the can empties | after *+1 can*, for the drain time of that can size |
+| blue, fills up | grows as the can fills | the fill timer runs |
+| amber, nearly full, blinks | near the full width | the alarm lead: close the valve |
+| green, full, with a tick | full width | the timer is at 0:00: the can is full |
+| teal, empties | shrinks as the can empties | after *+1 can*, for the drain time of that can size |
 | none | none | no can is in work |
 
 The draining state needs a drain time for the can size (*Timers, alarm and
 device*): without one the page cannot know when the can is empty. A new fill
-timer ends it. Hold a finger on the dot (or hover it) for the state in words.
+timer ends it. Hold a finger on the can (or hover it) for the state in words.
 
 **iPhone timer on the lock screen.** iOS stops a page's scripts and its
 sound when the phone locks, and a page cannot show a countdown on the lock
@@ -313,6 +323,13 @@ together. While it waits, *Open Shortcuts again* asks again, *Start without
 iPhone timer* starts the page timer alone, and *Cancel* stops the wait. If
 Shortcuts does not open within 60 s, the wait ends: leaving the page later
 starts nothing.
+
+While the iPhone timer runs, the page's own fill alarms stay quiet: no
+alarm banner, no beep and no vibration at *close the valve* or at *can
+full*, because the iPhone rings. The timer panel still turns amber and
+green, and *+1 can* still pulses. A timer started with *Start without
+iPhone timer* keeps the page alarm. The settle alarm and *Test alarm* do
+not change.
 
 Shortcuts opens for a moment and Safari comes back to the page. A page opened
 from a Home Screen icon has no address iOS can open, so the link has no
@@ -546,7 +563,9 @@ the underground tank is up, into it is down.
 Each tank keeps its own check, its own running shell and its own raw file.
 The header's tank switch takes the place of the title: its two buttons name
 the tanks, with the role as the arrow of the dip card (`↑ alpha` pumps out,
-`↓ beta` pours in). A long press or hover shows the full role, and a screen
+`↓ beta` pours in). The chosen tank is bold white with a thick line under it
+in its role colour (amber for A, blue for B, as on the dip card); the other
+tank is dim. A long press or hover shows the full role, and a screen
 reader reads "Current tank: alpha, pump out". It selects the tank that the Log & charts,
 Shell and campaign cards show, and the tank that *Take another reading* and
 *Accept anyway* apply to; the Live tab marks the current tank. The switch

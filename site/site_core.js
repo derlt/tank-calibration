@@ -1202,10 +1202,12 @@
     let units = null;
     if (cfg.pourUnit) { units = Math.max(1, Math.round(target / cfg.pourUnit)); target = units * cfg.pourUnit; }
     const sdB = Math.sqrt(Math.max(this.fit.cov ? 4 * this.fit.cov[0][0] + 4 * this.fit.cov[0][2] + this.fit.cov[2][2] : 0, 0));
+    // warn: the warning alone, without the advised pour (the Now card shows it).
+    const warn = halve ? `Near the brim (≈ ${fmt(toBrim, 0)} mm, gap ≈ ${fmt(gap, 0)} L): halve the pour.` : "";
     return {
       slope: m, target, units, floor: 15 * m, ceiling: 100 * m, halve,
-      gap, toBrim, brim: brim(p), brimSd: sdB, capacity: capacity(p),
-      text: (halve ? `Near the brim (≈ ${fmt(toBrim, 0)} mm, gap ≈ ${fmt(gap, 0)} L): halve the pour. ` : "")
+      gap, toBrim, brim: brim(p), brimSd: sdB, capacity: capacity(p), warn,
+      text: (warn ? warn + " " : "")
         + `Next pour ≈ ${fmt(target, 0)} L` + (units ? ` = ${units} × ${cfg.pourUnit} L` : "")
         + ` (≈ ${fmt(target / Math.max(m, 1e-3), 0)} mm rise).`,
     };
@@ -1224,10 +1226,11 @@
     const after = levelFor(left - target, p);
     const bottom = after - p.h0 < 60 || left < 0.05 * cap;
     const sdB = Math.sqrt(Math.max(this.fit.cov ? 4 * this.fit.cov[0][0] + 4 * this.fit.cov[0][2] + this.fit.cov[2][2] : 0, 0));
+    const warn = bottom ? `Near the bottom (≈ ${fmt(toBottom, 0)} mm, ≈ ${fmt(left, 0)} L left): the pump may lose suction; a part can is fine (N+?).` : "";
     return {
       slope: m, target, units, floor: 15 * m, ceiling: 100 * m, halve: false, bottom,
-      gap, toBrim, brim: brim(p), brimSd: sdB, capacity: cap, left, toBottom,
-      text: (bottom ? `Near the bottom (≈ ${fmt(toBottom, 0)} mm, ≈ ${fmt(left, 0)} L left): the pump may lose suction; a part can is fine (N+?). ` : "")
+      gap, toBrim, brim: brim(p), brimSd: sdB, capacity: cap, left, toBottom, warn,
+      text: (warn ? warn + " " : "")
         + `Next drain ≈ ${fmt(target, 0)} L` + (units ? ` = ${units} × ${cfg.pourUnit} L` : "")
         + ` (≈ ${fmt(target / Math.max(m, 1e-3), 0)} mm fall).`,
     };
@@ -1616,11 +1619,12 @@
       : prO.empty ? "A runs dry"
         : `A ≈ ${fmt(prO.H, 1)} ± ${fmt(2 * prO.sd, 1)} mm`;
     const eI = prI.overflow ? "B reaches the neck" : `B ≈ ${fmt(prI.H, 1)} ± ${fmt(2 * prI.sd, 1)} mm`;
+    const warn = ((aI.halve ? `Tank B near the brim (≈ ${fmt(aI.toBrim, 0)} mm): small batches. ` : "")
+      + (aO.bottom ? `Tank A near the bottom (≈ ${fmt(aO.toBottom, 0)} mm): the pump may lose suction; a part can is fine. ` : "")).trim();
     return {
       target, units, out: aO, in: aI, halve: aI.halve, bottom: aO.bottom,
-      expect: { out: prO, in: prI },
-      text: (aI.halve ? `Tank B near the brim (≈ ${fmt(aI.toBrim, 0)} mm): small batches. ` : "")
-        + (aO.bottom ? `Tank A near the bottom (≈ ${fmt(aO.toBottom, 0)} mm): the pump may lose suction; a part can is fine. ` : "")
+      expect: { out: prO, in: prI }, warn,
+      text: (warn ? warn + " " : "")
         + `Next batch ≈ ${fmt(target, 0)} L` + (units ? ` = ${units} × ${fmt(unit, 0)} L` : "")
         + ` (≈ ${fmt(target / Math.max(aO.slope, 1e-3), 0)} mm out of A, ≈ ${fmt(target / Math.max(aI.slope, 1e-3), 0)} mm into B).`
         + ` Expect the next dips at ${eO} · ${eI} (2σ).`,

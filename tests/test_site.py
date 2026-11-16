@@ -195,7 +195,8 @@ class TestSitePage(unittest.TestCase):
             "beats = []; p = stub.boot(page, corePath, store, extra()); el = p.el;\n"
             "const beat = () => { for (const fn of beats) fn(); };\n"
             "const look = () => ({ dot: el('hdr-live').className, bar: el('hdr-bar').className,"
-            " w: el('hdr-bar').style.width, label: el('hdr-live')['aria-label'] });\n"
+            " w: el('hdr-bar').style.width, label: el('hdr-live')['aria-label'],"
+            " liq: el('hdr-can-liq').height, tick: !el('hdr-can-tick')._classes.has('hidden') });\n"
             "beat(); out.idle = look();\n"
             "el('pt-start').click(); clock += 15000; beat(); out.fill = look();\n"
             "clock += 35000; beat(); out.pre = look();\n"
@@ -209,6 +210,12 @@ class TestSitePage(unittest.TestCase):
         self.assertEqual(got["fill"]["bar"], "live-bar l-fill")
         self.assertEqual(got["fill"]["w"], "25%")
         self.assertEqual(got["fill"]["label"], "Filling a 200 L can")
+        self.assertEqual(got["fill"]["liq"], "3.50", "the can is a quarter full")
+        self.assertFalse(got["fill"]["tick"])
+        self.assertEqual(got["full"]["liq"], "14.00")
+        self.assertTrue(got["full"]["tick"], "a full can shows a tick")
+        self.assertEqual(got["drain"]["liq"], "7.00", "the can empties as it drains")
+        self.assertEqual(got["idle"]["liq"], "0.00")
         self.assertEqual(got["pre"]["dot"], "live l-pre", "15 s before full: close the valve")
         self.assertEqual(got["full"]["dot"], "live l-full")
         self.assertEqual(got["full"]["w"], "100%")
@@ -279,6 +286,43 @@ class TestSitePage(unittest.TestCase):
         self.assertEqual(got["cancelled"], {"pour": False, "wait": False})
         self.assertIn("text=10&", got["test"])
         self.assertTrue(got["standalone"].endswith("text=75"), got["standalone"])
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_iphone_timer_silences_the_page_alarm(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "let clock = Date.UTC(2026, 10, 16, 8, 0, 0), beats = [];\n"
+            "class FD extends Date { constructor(...a) { if (a.length) super(...a); else super(clock); } }\n"
+            "FD.now = () => clock;\n"
+            "const loc = { protocol: 'https:', href: 'https://site.test/' };\n"
+            "const extra = { Date: FD, location: loc, setInterval: (fn) => { beats.push(fn); return 1; },\n"
+            "  navigator: { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)' } };\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store, extra), el = p.el;\n"
+            "const beat = () => { for (const fn of beats) fn(); };\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "el('tm-fill-200').value = '1:00'; el('tm-lead').value = '15'; el('tm-ios-on').checked = true; el('tm-save').click();\n"
+            "const banner = () => !el('alarm')._classes.has('hidden');\n"
+            "// Shortcuts opens: the iPhone timer runs, the page stays quiet.\n"
+            "el('pt-start').click(); p.document.hidden = true; p.document.fire('visibilitychange'); p.document.hidden = false;\n"
+            "clock += 5000; beat(); out.status = el('pt-status').textContent;\n"
+            "clock += 45000; beat(); out.pre = banner();\n"
+            "clock += 15000; beat(); out.full = banner(); out.box = el('pt').className;\n"
+            "// Without the iPhone timer the page alarm rings as before.\n"
+            "el('pt-stop').click(); el('pt-start').click(); el('pt-page').click();\n"
+            "clock += 50000; beat(); out.alone = banner();\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertIn("The iPhone timer rings at 0:15 left.", got["status"])
+        self.assertFalse(got["pre"], "no close-the-valve banner: the iPhone rings")
+        self.assertFalse(got["full"], "no can-full banner either")
+        self.assertEqual(got["box"], "timer done", "the panel still shows the can is full")
+        self.assertTrue(got["alone"], "a page timer alone keeps its alarm")
 
     @unittest.skipUnless(NODE, "node is not installed")
     def test_page_swipe_changes_the_tab(self):
@@ -833,8 +877,8 @@ class TestSitePage(unittest.TestCase):
         self.assertIn("liquid (running shell)", v["kv"])
         self.assertNotIn("liquid (running shell)", s["kv"], "simple mode shows the level only")
         self.assertIn("<dt>level</dt>", s["kv"])
-        self.assertRegex(s["advice"], r"^Next: \d+ × 200 L → expect \d+(\.\d)? ± \d+(\.\d)? mm$")
-        self.assertLess(len(s["advice"]), len(v["advice"]))
+        self.assertEqual(s["advice"], "", "no advised next pour and no prediction for it")
+        self.assertEqual(v["advice"], "")
         self.assertRegex(s["target"], r"^Target: \d+ × 200 L$")
         self.assertNotIn("<p>", s["verdict"], "simple mode drops the verdict message")
         self.assertIn("<h3>", s["verdict"])
@@ -845,7 +889,37 @@ class TestSitePage(unittest.TestCase):
         self.assertRegex(got["back"]["expect"], r"^Expected level: ")
         self.assertIn("<dt>level</dt>", got["transfer"]["kv"])
         self.assertNotIn("liquid", got["transfer"]["kv"])
-        self.assertRegex(got["transfer"]["advice"], r"^(.*\. )?Next: .* → A .* · B .*")
+        self.assertNotIn("Next", got["transfer"]["advice"])
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_now_card_folds_and_keeps_warnings(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "let p = stub.boot(page, corePath, store), el = p.el;\n"
+            "out.open0 = el('now-card').open;\n"
+            "// A level 20 mm under the brim of a 1800 mm tank: the warning stays.\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '1780'; el('s-unit').value = '200';\n"
+            "el('s-go').click(); el('d-val').value = '1780'; el('d-go').click();\n"
+            "out.advice = el('now-advice').textContent;\n"
+            "out.sum = el('now-sum').textContent; out.sumClass = el('now-sum').className;\n"
+            "el('now-card').open = false; el('now-card')._listeners.toggle[0]({});\n"
+            "out.saved = JSON.parse(store.get('calib-site:prefs')).nowOpen;\n"
+            "p = stub.boot(page, corePath, store); out.reloaded = p.el('now-card').open;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertTrue(got["open0"], "the Now card starts open")
+        self.assertIn("Near the brim", got["advice"])
+        self.assertIn("halve the pour", got["advice"])
+        self.assertNotIn("Next pour", got["advice"])
+        self.assertEqual(got["sum"], "1780.0 mm · near the brim", "the folded line keeps the level and the warning")
+        self.assertEqual(got["sumClass"], "now-sum warn")
+        self.assertFalse(got["saved"])
+        self.assertFalse(got["reloaded"], "the device keeps the card folded")
 
     @unittest.skipUnless(NODE, "node is not installed")
     def test_core_exports_the_times_in_the_note(self):
@@ -1007,8 +1081,7 @@ class TestSitePage(unittest.TestCase):
         self.assertIn("from the tank", got["help"])
         self.assertIn("drain", got["phase"])
         self.assertIn("L left", got["kv"])
-        self.assertIn("Next drain", got["advice"])
-        self.assertNotIn("halve", got["advice"])
+        self.assertEqual(got["advice"], "", "the Now card predicts this batch only, not an advised next drain")
         self.assertTrue(got["pred"].startswith("After this drain (400 L):"), got["pred"])
         self.assertIn("mm fall", got["pred"])
         self.assertIn("−", got["pred"].split("(2σ)")[1], "the fall is negative")
@@ -1485,7 +1558,7 @@ console.log(JSON.stringify(out));
         self.assertTrue(got["card"]["neck"], "the neck tick shows for tank A")
         self.assertEqual(got["card"]["over"], "tank B: reached the neck / overflowed")
         self.assertEqual(got["card"]["neckText"], "tank A: level still in the neck")
-        self.assertIn("Next batch", got["card"]["advice"])
+        self.assertNotIn("Next batch", got["card"]["advice"], "the Now card predicts this batch only")
         self.assertIn("pour into B, then dip both", got["go"])
         self.assertIn("alpha", got["dip1"]["a"])
         self.assertIn("beta", got["dip1"]["b"])

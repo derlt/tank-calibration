@@ -33,7 +33,9 @@
     --model: #1a6fa8; --chart-warn: #ff9f1c; --shadow: rgba(0, 0, 0, 0.25);
     --radius: 12px; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     /* The header live indicator: the header is dark in both themes, so one set. */
-    --live-fill: #72b4ec; --live-pre: #ffb54d; --live-full: #5ec98a; --live-drain: #7fe0d6; --live-halo: rgba(94, 201, 138, 0.35);
+    --live-fill: #72b4ec; --live-pre: #ffb54d; --live-full: #5ec98a; --live-drain: #7fe0d6;
+    /* The header's tank switch: the role colours on the dark header (A pumps out, B pours in). */
+    --hdr-out: #ffb54d; --hdr-in: #72b4ec;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -65,27 +67,39 @@
   header h1 { font-size: 1rem; margin: 0; font-weight: 650; flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   header .hdr-status { margin-left: auto; font-size: 0.78rem; color: rgba(255, 255, 255, 0.8); white-space: nowrap; font-variant-numeric: tabular-nums; }
   header .hdr-status span + span:not(:empty)::before { content: " · "; }
-  /* The live indicator: a dot before the title and a line along the bottom
-     edge of the header.  The dot tells the state of the can by its colour
-     and its pulse; the line tells how far the can is filled or drained.
-     Filling = blue, close the valve = amber, can full = green, draining =
-     teal.  Nothing shows while no can is in work. */
-  header .live { flex: 0 0 auto; width: 0.7rem; height: 0.7rem; border-radius: 50%; background: var(--lc); }
+  /* The live indicator: a small can before the title and a line along the
+     bottom edge of the header.  The can fills while the pump fills it and
+     empties while it drains, in the colour of the state; full, it shows a
+     tick.  The line tells the same fraction across the whole width.
+     Filling = blue, close the valve = amber (the can blinks), can full =
+     green, draining = teal.  Nothing shows while no can is in work. */
+  header .live { flex: 0 0 auto; display: inline-flex; line-height: 0; }
+  header .live svg { width: 1.1rem; height: 1.4rem; overflow: visible; }
+  header .live .can-frame { fill: none; stroke: rgba(255, 255, 255, 0.85); stroke-width: 1.5; }
+  header .live .can-liq { fill: var(--lc); }
+  header .live .can-tick { fill: none; stroke: var(--hdr); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
   header .live-bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: var(--lc); transition: width 0.5s linear; pointer-events: none; }
   header .l-fill { --lc: var(--live-fill); }
   header .l-pre { --lc: var(--live-pre); }
   header .l-full { --lc: var(--live-full); }
   header .l-drain { --lc: var(--live-drain); }
-  header .live.l-fill { animation: live-out 1.4s ease-out infinite; }
-  header .live.l-pre { animation: live-out 0.6s ease-out infinite; }
-  header .live.l-full { box-shadow: 0 0 0 3px var(--live-halo); }
-  header .live.l-drain { animation: live-in 1.4s ease-in infinite; }
-  @keyframes live-out { 0% { box-shadow: 0 0 0 0 var(--lc); } 100% { box-shadow: 0 0 0 0.55rem transparent; } }
-  @keyframes live-in { 0% { box-shadow: 0 0 0 0.5rem transparent; } 100% { box-shadow: 0 0 0 0 var(--lc); } }
+  header .live.l-pre { animation: live-blink 0.6s steps(1) infinite; }
+  @keyframes live-blink { 50% { opacity: 0.25; } }
+  /* The Now card folds: its title line is the switch.  Folded, the line
+     keeps the level and any warning. */
+  #now-card > summary { list-style: none; display: flex; align-items: baseline; gap: 0.6rem; color: var(--ink); }
+  #now-card > summary::-webkit-details-marker { display: none; }
+  #now-card > summary h2 { margin: 0; }
+  #now-card > summary::after { content: "▾"; margin-left: auto; color: var(--muted); transition: transform 0.15s; }
+  #now-card:not([open]) > summary::after { transform: rotate(-90deg); }
+  #now-card[open] > summary { margin-bottom: 0.6rem; }
+  #now-card[open] .now-sum { display: none; }
+  .now-sum { font: 650 0.9rem var(--mono); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .now-sum.warn { color: var(--bad); }
   /* A swipe moves the tab sideways: no sideways scroll of the page. */
   main { overflow-x: clip; }
   @media (prefers-reduced-motion: reduce) {
-    header .live.l-fill, header .live.l-pre, header .live.l-drain { animation: none; }
+    header .live.l-pre { animation: none; }
     header .live-bar { transition: none; }
   }
   .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
@@ -222,6 +236,14 @@
   header .seg { margin: 0; border-color: rgba(255, 255, 255, 0.6); }
   header .seg button { min-height: 2rem; padding: 0.1rem 0.7rem; font-size: 0.88rem; font-weight: 600; }
   header .seg button + button { border-left-color: rgba(255, 255, 255, 0.6); }
+  /* The tank switch: no boxes.  The chosen tank is bold white with a thick
+     line under it in its role colour (amber A, blue B, as on the dip card);
+     the other is dim.  A filled button took the header colour and looked off. */
+  #hdr-tank { display: flex; gap: 0.2rem; border: 0; border-radius: 0; overflow: visible; }
+  #hdr-tank button { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: transparent; color: rgba(255, 255, 255, 0.5); padding: 0.1rem 0.45rem; }
+  #hdr-tank button[aria-pressed=true] { color: #fff; font-weight: 800; }
+  #hdr-tank #hdr-tank-a[aria-pressed=true] { border-bottom-color: var(--hdr-out); }
+  #hdr-tank #hdr-tank-b[aria-pressed=true] { border-bottom-color: var(--hdr-in); }
   details summary { cursor: pointer; color: var(--muted); }
   .tankicon .frame { stroke: var(--mark); }
   .tankicon .w-out { fill: var(--warn); }
@@ -270,7 +292,7 @@
 </head>
 <body>
 <header>
-  <span class="live hidden" id="hdr-live" role="img"></span>
+  <span class="live hidden" id="hdr-live" role="img"><svg viewBox="0 0 16 20" aria-hidden="true"><rect class="can-liq" id="hdr-can-liq" x="3" y="17" width="10" height="0" rx="1"/><rect class="can-frame" x="1.5" y="2.5" width="13" height="16" rx="2"/><path class="can-tick hidden" id="hdr-can-tick" d="M4.6 10.6l2.4 2.4 4.5-5"/></svg></span>
   <h1 id="hdr-title" translate="no">calib site</h1>
   <span class="sr-only" id="hdr-tank-label">Current tank</span>
   <nav class="seg hidden" id="hdr-tank" aria-labelledby="hdr-tank-label">
@@ -346,15 +368,15 @@
       <button data-mode="simple" aria-pressed="false">Simple</button>
       <button data-mode="verbose" aria-pressed="true">Verbose</button>
     </nav>
-    <div class="card" id="now-card">
-      <h2>Now</h2>
+    <details class="card" id="now-card" open>
+      <summary><h2>Now</h2><span class="now-sum" id="now-sum"></span></summary>
       <div class="kv" id="now-kv"></div>
       <p id="now-pred" class="pred"></p>
       <p id="now-advice" style="margin:0.6rem 0 0;font-weight:650"></p>
       <div id="now-eta" class="eta vb"></div>
       <button class="secondary small hidden" id="eta-use"></button>
       <p id="now-drift" class="muted" style="margin:0.3rem 0 0"></p>
-    </div>
+    </details>
 
     <div class="card" id="pour-card" style="margin-top:0.8rem">
       <h2 id="pour-title">1 · Pour</h2>
@@ -588,7 +610,7 @@
           <label>Shortcut name<input id="tm-ios-name" placeholder="Calib timer"></label>
           <button class="secondary" id="tm-ios-test">Test iPhone timer (10 s)</button>
         </div>
-        <p class="muted">The iPhone's own timer shows a countdown on the lock screen and rings when the phone is locked or silent. The page cannot do this. <i>Start fill timer</i> starts it, set to ring with the page's alarm: close the valve. <i>Stop timer</i>, <i>+20 s</i> and <i>−20 s</i> do not change it: stop it in the Clock app.</p>
+        <p class="muted">The iPhone's own timer shows a countdown on the lock screen and rings when the phone is locked or silent. The page cannot do this. <i>Start fill timer</i> starts it, set to ring with the page's alarm: close the valve. The page then shows no alarm banner and makes no sound for the fill timer: the iPhone rings. <i>Stop timer</i>, <i>+20 s</i> and <i>−20 s</i> do not change it: stop it in the Clock app.</p>
         <details>
           <summary>Make the shortcut (once per phone)</summary>
           <ol class="muted">
@@ -843,6 +865,13 @@
     "{0} mm (row {1}, {2} reading) · in the neck": "{0} mm (hàng {1}, {2} lần đo) · trong cổ bồn",
     "{0} mm (row {1}, {2} readings) · in the neck": "{0} mm (hàng {1}, {2} lần đo) · trong cổ bồn",
     "in the neck": "trong cổ bồn",
+    // The folded Now card's title line
+    "A {0}": "A {0}",
+    "near the brim": "gần đỉnh bồn",
+    "near the bottom": "gần đáy",
+    "A near the bottom": "A gần đáy",
+    "B near the brim": "B gần đỉnh bồn",
+    "DRIFT": "ĐỘ TRÔI",
     "{0} mm": "{0} mm",
     "liquid (running shell)": "chất lỏng (mô hình bồn tạm)",
     "{0} L of {1} L": "{0} L / {1} L",
@@ -1134,6 +1163,8 @@
     "Enter the can size to use the timer.": "Nhập cỡ bình để dùng hẹn giờ.",
     "Filling a {0} L can: {1} left of {2}.": "Đang bơm bình {0} L: còn {1} trên {2}.",
     "The alarm rings at {0} left.": "Chuông báo reo khi còn {0}.",
+    "The iPhone timer rings at {0} left.": "Hẹn giờ iPhone reo khi còn {0}.",
+    "The page then shows no alarm banner and makes no sound for the fill timer: the iPhone rings.": "Khi đó trang không hiện băng báo động và không phát âm thanh cho hẹn giờ bơm: iPhone sẽ reo.",
     "{0} to full: close the valve now.": "Còn {0} là đầy: khoá van ngay.",
     "Can full ({0} L): the pump must be off.": "Bình đầy ({0} L): bơm phải tắt.",
     "Tap +1 can full.": "Chạm +1 bình đầy.",
@@ -3111,10 +3142,12 @@
     let units = null;
     if (cfg.pourUnit) { units = Math.max(1, Math.round(target / cfg.pourUnit)); target = units * cfg.pourUnit; }
     const sdB = Math.sqrt(Math.max(this.fit.cov ? 4 * this.fit.cov[0][0] + 4 * this.fit.cov[0][2] + this.fit.cov[2][2] : 0, 0));
+    // warn: the warning alone, without the advised pour (the Now card shows it).
+    const warn = halve ? `Near the brim (≈ ${fmt(toBrim, 0)} mm, gap ≈ ${fmt(gap, 0)} L): halve the pour.` : "";
     return {
       slope: m, target, units, floor: 15 * m, ceiling: 100 * m, halve,
-      gap, toBrim, brim: brim(p), brimSd: sdB, capacity: capacity(p),
-      text: (halve ? `Near the brim (≈ ${fmt(toBrim, 0)} mm, gap ≈ ${fmt(gap, 0)} L): halve the pour. ` : "")
+      gap, toBrim, brim: brim(p), brimSd: sdB, capacity: capacity(p), warn,
+      text: (warn ? warn + " " : "")
         + `Next pour ≈ ${fmt(target, 0)} L` + (units ? ` = ${units} × ${cfg.pourUnit} L` : "")
         + ` (≈ ${fmt(target / Math.max(m, 1e-3), 0)} mm rise).`,
     };
@@ -3133,10 +3166,11 @@
     const after = levelFor(left - target, p);
     const bottom = after - p.h0 < 60 || left < 0.05 * cap;
     const sdB = Math.sqrt(Math.max(this.fit.cov ? 4 * this.fit.cov[0][0] + 4 * this.fit.cov[0][2] + this.fit.cov[2][2] : 0, 0));
+    const warn = bottom ? `Near the bottom (≈ ${fmt(toBottom, 0)} mm, ≈ ${fmt(left, 0)} L left): the pump may lose suction; a part can is fine (N+?).` : "";
     return {
       slope: m, target, units, floor: 15 * m, ceiling: 100 * m, halve: false, bottom,
-      gap, toBrim, brim: brim(p), brimSd: sdB, capacity: cap, left, toBottom,
-      text: (bottom ? `Near the bottom (≈ ${fmt(toBottom, 0)} mm, ≈ ${fmt(left, 0)} L left): the pump may lose suction; a part can is fine (N+?). ` : "")
+      gap, toBrim, brim: brim(p), brimSd: sdB, capacity: cap, left, toBottom, warn,
+      text: (warn ? warn + " " : "")
         + `Next drain ≈ ${fmt(target, 0)} L` + (units ? ` = ${units} × ${cfg.pourUnit} L` : "")
         + ` (≈ ${fmt(target / Math.max(m, 1e-3), 0)} mm fall).`,
     };
@@ -3525,11 +3559,12 @@
       : prO.empty ? "A runs dry"
         : `A ≈ ${fmt(prO.H, 1)} ± ${fmt(2 * prO.sd, 1)} mm`;
     const eI = prI.overflow ? "B reaches the neck" : `B ≈ ${fmt(prI.H, 1)} ± ${fmt(2 * prI.sd, 1)} mm`;
+    const warn = ((aI.halve ? `Tank B near the brim (≈ ${fmt(aI.toBrim, 0)} mm): small batches. ` : "")
+      + (aO.bottom ? `Tank A near the bottom (≈ ${fmt(aO.toBottom, 0)} mm): the pump may lose suction; a part can is fine. ` : "")).trim();
     return {
       target, units, out: aO, in: aI, halve: aI.halve, bottom: aO.bottom,
-      expect: { out: prO, in: prI },
-      text: (aI.halve ? `Tank B near the brim (≈ ${fmt(aI.toBrim, 0)} mm): small batches. ` : "")
-        + (aO.bottom ? `Tank A near the bottom (≈ ${fmt(aO.toBottom, 0)} mm): the pump may lose suction; a part can is fine. ` : "")
+      expect: { out: prO, in: prI }, warn,
+      text: (warn ? warn + " " : "")
         + `Next batch ≈ ${fmt(target, 0)} L` + (units ? ` = ${units} × ${fmt(unit, 0)} L` : "")
         + ` (≈ ${fmt(target / Math.max(aO.slope, 1e-3), 0)} mm out of A, ≈ ${fmt(target / Math.max(aI.slope, 1e-3), 0)} mm into B).`
         + ` Expect the next dips at ${eO} · ${eI} (2σ).`,
@@ -4973,7 +5008,7 @@
 
   // ------------------------------------------------------------ simple mode
   // Simple mode keeps the Live tab to the actions and the numbers to read:
-  // the level, the next pour with its expected level, warnings, the settle
+  // the level, warnings, where the batch in the pour panel lands, the settle
   // state, and each verdict's title and action.  Verbose is the full text.
   function simple() { return P.mode === "simple"; }
   function renderMode() {
@@ -4989,31 +5024,30 @@
     render();
   });
 
-  /** The expected level in few words: "125.1 ± 1.9 mm", or why there is none. */
-  function shortExpect(pr, dir) {
-    if (!pr) return "no level (neck)";
-    if (dir > 0 && pr.overflow) return "reaches the neck";
-    if (dir < 0 && pr.empty) return "runs dry";
-    return `${f(pr.H)} ± ${f(2 * pr.sd)} mm`;
-  }
-  /** The litres of an advice: "2 × 100 L" with a can size, else "≈ 200 L". */
-  function shortLitres(target, units, u) { return units ? `${units} × ${f(u, 0)} L` : `≈ ${f(target, 0)} L`; }
-
-  /** The Now line in simple mode: warnings first, then what to pour and where it lands. */
+  /**
+   * The Now line in simple mode: the warnings only.  The Now card gives no
+   * prediction for an advised next pour: the prediction line is for the
+   * batch in the pour panel now (renderNowPrediction).
+   */
   function shortAdvice(adv, G) {
     if (G && G.neck) return "In the neck: drain on.";
-    const warn = adv.halve ? "Near the brim: half pour. " : adv.bottom ? "Near the bottom: a part can is fine. " : "";
-    return `${warn}Next: ${shortLitres(adv.target, adv.units, S.cfg.pourUnit)} → expect ${shortExpect(adv.expect, S.cfg.dir)}`;
+    return adv.halve ? "Near the brim: half pour." : adv.bottom ? "Near the bottom: a part can is fine." : "";
   }
   function shortAdviceBatch(adv) {
-    const warn = (adv.in.halve ? "B near the brim: small batches. " : "") + (adv.bottom ? "A near the bottom: a part can is fine. " : "");
-    return `${warn}Next: ${shortLitres(adv.target, adv.units, S.out.cfg.pourUnit)} → A ${shortExpect(adv.expect.out, -1)} · B ${shortExpect(adv.expect.in, 1)}`;
+    return ((adv.in.halve ? "B near the brim: small batches. " : "") + (adv.bottom ? "A near the bottom: a part can is fine." : "")).trim();
   }
 
   /** One verdict in simple mode: the title and the action, plus an unknown pour's estimate. */
   function shortVerdict(v, name, pend) {
     const x = v.unknown && !pend ? `<p class="mono">x = ${f(v.unknown.x)} ± ${f(2 * v.unknown.sigma)} L</p>` : "";
     return `<h3>${name ? esc(name) + " — " : ""}${esc(v.title)}</h3>${x}${v.advice ? `<p class="advice">${esc(v.advice)}</p>` : ""}`;
+  }
+
+  /** The folded Now card's title line: the level, then any warning in red. */
+  function nowSummary(level, warns) {
+    const w = warns.filter(Boolean);
+    $("now-sum").textContent = [level].concat(w).filter(Boolean).join(" · ");
+    $("now-sum").className = w.length ? "now-sum warn" : "now-sum";
   }
 
   function renderLive(st) {
@@ -5059,13 +5093,17 @@
     ].filter(Boolean).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("") : "";
     $("now-advice").textContent = adv && !pend
       ? (sm ? shortAdvice(adv, G)
-        : G.neck ? "The level is in the neck. Drain until the level is back in the shell. Tick 'level still in the neck' while it stays in the neck." : adv.text)
+        : G.neck ? "The level is in the neck. Drain until the level is back in the shell. Tick 'level still in the neck' while it stays in the neck." : adv.warn)
       : "";
     $("now-drift").textContent = sm ? (st.driftAlarm ? `DRIFT ${sg(st.drift)} L: stop and audit.` : "")
       : st.intervals > 2
         ? `Running books − shell: ${sg(st.drift)} L (alarm beyond ±${f(st.driftLimit, 0)} L)${st.driftAlarm ? " — DRIFT: stop and audit (tilt? can size? leak?)" : ""}`
         : "";
     $("now-drift").className = st.driftAlarm ? "error" : "muted";
+    nowSummary(G ? `${f(G.H)} mm` : "", [
+      G && G.neck ? "in the neck" : "", adv && adv.halve ? "near the brim" : "",
+      adv && adv.bottom ? "near the bottom" : "", st.driftAlarm ? "DRIFT" : "",
+    ]);
 
     // pour and dip cards
     $("pour-card").classList.toggle("hidden", !!pend);
@@ -5155,13 +5193,17 @@
     // below shift one row and the right column rides high.
     $("now-kv").innerHTML = `<dt class="hd">${esc(nameO)} — pump out${cur("out")}</dt>` + tankKv(GO, adv && adv.out, stO, "pump out")
       + `<dt class="hd">${esc(nameI)} — pour in${cur("in")}</dt>` + tankKv(GI, adv && adv.in, stI, "pour in");
-    $("now-advice").textContent = adv && !pend ? (simple() ? shortAdviceBatch(adv) : adv.text) : "";
+    $("now-advice").textContent = adv && !pend ? (simple() ? shortAdviceBatch(adv) : adv.warn) : "";
     const drifts = [];
     if (stO.intervals > 2) drifts.push(`${nameO} ${sg(stO.drift)} L (alarm beyond ±${f(stO.driftLimit, 0)} L)`);
     if (stI.intervals > 2) drifts.push(`${nameI} ${sg(stI.drift)} L (alarm beyond ±${f(stI.driftLimit, 0)} L)`);
     $("now-drift").textContent = simple() ? ((stO.driftAlarm || stI.driftAlarm) ? "DRIFT: stop and audit." : "")
       : drifts.join(" · ") + ((stO.driftAlarm || stI.driftAlarm) ? " — DRIFT: stop and audit (tilt? can size? leak?)" : "");
     $("now-drift").className = stO.driftAlarm || stI.driftAlarm ? "error" : "muted";
+    nowSummary(GO && GI ? `A ${f(GO.H)} · B ${f(GI.H)} mm` : "", [
+      adv && adv.bottom ? "A near the bottom" : "", adv && adv.halve ? "B near the brim" : "",
+      stO.driftAlarm || stI.driftAlarm ? "DRIFT" : "",
+    ]);
 
     $("pour-card").classList.toggle("hidden", !!pend);
     $("dip-card").classList.toggle("hidden", !pend);
@@ -5614,7 +5656,14 @@
   const TIMER = "calib-site:timer", PREFS = "calib-site:prefs";
   function loadJSON(k, d) { try { return JSON.parse(localStorage.getItem(k) || "null") || d; } catch (e) { return d; } }
   let T = loadJSON(TIMER, {});   // { pour: { start, dur, size, alarmed }, settled: "row@time" }
-  const P = Object.assign({ anim: true, sound: true, vibrate: true, wake: true, iosTimer: false, iosShortcut: "" }, loadJSON(PREFS, {}));
+  const P = Object.assign({ anim: true, sound: true, vibrate: true, wake: true, iosTimer: false, iosShortcut: "", nowOpen: true }, loadJSON(PREFS, {}));
+  // The Now card folds; the device keeps the choice.
+  $("now-card").open = P.nowOpen !== false;
+  $("now-card").addEventListener("toggle", () => {
+    if (P.nowOpen === $("now-card").open) return;
+    P.nowOpen = $("now-card").open;
+    localStorage.setItem(PREFS, JSON.stringify(P));
+  });
   P.noise = Object.assign({ sigmaRead: 0.4, pourRel: 0.005, pourAbs: 3, h0pm: 80, brimPm: 6 }, P.noise || {});
   let timersSig = "", lastEta = 0;
   function saveTimer() { localStorage.setItem(TIMER, JSON.stringify(T)); }
@@ -5778,7 +5827,7 @@
     }
     stopAlarm(); unlockAudio();
     const run = { dur: d.seconds, size: u, lead: S.cfg.alarmLead };
-    if (!P.iosTimer) { startPour(run, Date.now()); return; }
+    if (!P.iosTimer) { startPour(run, Date.now(), false); return; }
     // Safari first asks "Open in Shortcuts?".  The iPhone timer starts only
     // when the operator taps Open, so the page waits for that moment: iOS
     // hides the page when Shortcuts opens, and the page timer starts then.
@@ -5787,23 +5836,24 @@
     // The iPhone timer rings with the page's first alarm: close the valve.
     iosTimer(run.dur - Math.min(run.lead, run.dur - 1), P.iosShortcut);
   }));
-  function startPour(run, now) {
+  /** ios: the iPhone timer runs too, so the page's fill alarms stay quiet. */
+  function startPour(run, now, ios) {
     delete T.wait;
-    T.pour = { start: now, dur: run.dur, size: run.size, lead: run.lead, preAlarmed: false, fullAlarmed: false };
+    T.pour = { start: now, dur: run.dur, size: run.size, lead: run.lead, preAlarmed: false, fullAlarmed: false, ios: !!ios };
     saveTimer(); keepAwake(); render();
   }
   /** Shortcuts must open within this time of the tap, or the wait is over. */
   const IOS_WAIT_MS = 60000;
   function iosWaiting(now) { return !!T.wait && now - T.wait.at < IOS_WAIT_MS; }
   function onPageHidden() {
-    if (document.hidden && T.wait && !T.pour && iosWaiting(Date.now())) startPour(T.wait, Date.now());
+    if (document.hidden && T.wait && !T.pour && iosWaiting(Date.now())) startPour(T.wait, Date.now(), true);
   }
   if (document.addEventListener) {
     document.addEventListener("visibilitychange", onPageHidden);
     // A page that unloads (x-success may reload it) saves the start first.
-    if (window.addEventListener) window.addEventListener("pagehide", () => { if (T.wait && !T.pour && iosWaiting(Date.now())) startPour(T.wait, Date.now()); });
+    if (window.addEventListener) window.addEventListener("pagehide", () => { if (T.wait && !T.pour && iosWaiting(Date.now())) startPour(T.wait, Date.now(), true); });
   }
-  $("pt-page").addEventListener("click", () => { if (T.wait) startPour(T.wait, Date.now()); });
+  $("pt-page").addEventListener("click", () => { if (T.wait) startPour(T.wait, Date.now(), false); });
   $("pt-stop").addEventListener("click", () => { delete T.pour; delete T.wait; saveTimer(); stopAlarm(); render(); });
   $("pt-more").addEventListener("click", () => {
     if (!T.pour) return;
@@ -5859,7 +5909,7 @@
       if (left > lead) {
         box.className = "timer run";
         $("pt-clock").textContent = fmtClock(Math.ceil(left));
-        $("pt-status").textContent = `Filling a ${f(pt.size, 0)} L can: ${fmtClock(Math.ceil(left))} left of ${fmtClock(pt.dur)}. The alarm rings at ${fmtClock(lead)} left.`;
+        $("pt-status").textContent = `Filling a ${f(pt.size, 0)} L can: ${fmtClock(Math.ceil(left))} left of ${fmtClock(pt.dur)}. ${pt.ios ? "The iPhone timer rings" : "The alarm rings"} at ${fmtClock(lead)} left.`;
         $("t-plus").classList.remove("pulse");
       } else if (left > 0) {
         box.className = "timer pre";
@@ -5868,7 +5918,8 @@
         $("t-plus").classList.remove("pulse");
         if (!pt.preAlarmed) {
           pt.preAlarmed = true; saveTimer();
-          alarm(`Close the valve: ${fmtClock(Math.ceil(left))} to full`, 30, 2);
+          // With the iPhone timer, the phone rings: no banner, no sound here.
+          if (!pt.ios) alarm(`Close the valve: ${fmtClock(Math.ceil(left))} to full`, 30, 2);
         }
       } else {
         box.className = "timer done";
@@ -5877,7 +5928,7 @@
         $("t-plus").classList.add("pulse");
         if (!pt.fullAlarmed) {
           pt.fullAlarmed = true; saveTimer();
-          alarm(`Can full: pump off (${f(pt.size, 0)} L)`, 180, 3);
+          if (!pt.ios) alarm(`Can full: pump off (${f(pt.size, 0)} L)`, 180, 3);
         }
       }
     }
@@ -5932,6 +5983,11 @@
       dot.setAttribute("title", label);
     }
     bar.style.width = ls ? `${100 * ls.frac}%` : "0";
+    // The can: the liquid stands 14 units tall when full, on the can's floor.
+    const h = ls ? 14 * ls.frac : 0;
+    $("hdr-can-liq").setAttribute("height", h.toFixed(2));
+    $("hdr-can-liq").setAttribute("y", (17 - h).toFixed(2));
+    $("hdr-can-tick").classList.toggle("hidden", !ls || ls.state !== "full");
   }
 
   // The drawing is made from JavaScript, not CSS: CSS transforms on an SVG

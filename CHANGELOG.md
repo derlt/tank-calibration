@@ -29,6 +29,21 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Header live indicator: a small can replaces the dot. It fills while the
+  pump fills it and empties while it drains, in the colour of the state; it
+  blinks at close-the-valve and shows a tick when full. The line along the
+  header's bottom edge stays.
+- Header tank switch (transfer): the chosen tank is bold white with a thick
+  line under it in its role colour (amber A, blue B); the other is dim. The
+  chosen button used to take the header colour, so it looked off and the
+  other one looked chosen.
+- Now card: no prediction for an advised next pour, drain or batch (`Next
+  pour ≈ …`, `Expect the next dip at …`, simple mode `Next: … → expect …`).
+  The only prediction is the one for the batch in the pour panel (`After
+  this pour …`). The warnings stay (near the brim, near the bottom, in the
+  neck, drift). The core's advice has a new `warn` field: the warning alone.
+- Now card: it folds. Tap the title line; the device keeps the choice. The
+  folded line shows the level and any warning.
 - The time to half and to the brim counts pouring time only (no settle, no
   dip) and uses only the typed times: the tap gap no longer replaces them
   without notice.
@@ -58,6 +73,9 @@ All notable changes to this project are documented here. The format follows
   while Safari still asked *Open in "Shortcuts"?*, so the two timers did not
   agree. The page timer now waits and starts when Shortcuts opens; the panel
   offers *Open Shortcuts again*, *Start without iPhone timer* and *Cancel*.
+- iPhone timer: the page no longer shows its alarm banner (and makes no
+  sound) for the fill timer while the iPhone timer runs; the two alarms
+  rang together. A page timer alone keeps its alarm.
 
 ### Added
 
