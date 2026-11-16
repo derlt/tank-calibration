@@ -251,7 +251,7 @@
     <button id="hdr-tank-a" data-tank="out" aria-pressed="true">tank A</button>
     <button id="hdr-tank-b" data-tank="in" aria-pressed="false">tank B</button>
   </nav>
-  <span class="hdr-status"><span id="hdr-phase"></span><span id="hdr-count"></span></span>
+  <span class="hdr-status"><span id="hdr-phase"></span><span id="hdr-count"></span><span id="hdr-cloud"></span></span>
 </header>
 <main>
   <nav class="tabs" id="tabs">
@@ -571,6 +571,44 @@
     <textarea id="f-text" class="hidden" readonly></textarea>
     <h2 style="margin-top:0.9rem">Import</h2>
     <label>Session JSON<input type="file" id="f-import" accept=".json,application/json"></label>
+    <h2 style="margin-top:0.9rem">Cloud</h2>
+    <p class="muted" style="margin-top:0">Optional. The page always saves in this browser first and works without a network. Logged in to a workspace, it also keeps a copy of the campaign in the cloud, so the team can open it on other devices. Changes made offline upload when the network is back.</p>
+    <div id="c-out">
+      <div class="grid">
+        <label>Server address<input id="c-base" inputmode="url" autocomplete="url" placeholder="blank = this site" translate="no"></label>
+        <label>Workspace<input id="c-ws" autocomplete="username" autocapitalize="none" translate="no"></label>
+        <label>Secret keyword<input id="c-key" type="password" autocomplete="current-password"></label>
+        <label>Your name<input id="c-user" autocomplete="name" translate="no"></label>
+      </div>
+      <p class="muted" id="c-base-note"></p>
+      <div class="row" style="margin-top:0.6rem"><button id="c-login">Log in</button></div>
+      <details style="margin-top:0.6rem">
+        <summary>New workspace</summary>
+        <p class="muted">Choose a workspace name and a secret keyword of 12 characters or more. Give both to your team: they are the login. The signup code comes from the person who runs the server.</p>
+        <div class="grid"><label>Signup code<input id="c-code" type="password" autocomplete="off"></label></div>
+        <div class="row" style="margin-top:0.6rem"><button class="secondary" id="c-create">Create workspace</button></div>
+      </details>
+    </div>
+    <div id="c-in" class="hidden">
+      <p>Logged in: <span id="c-who" translate="no"></span></p>
+      <label class="check"><input type="checkbox" id="c-auto"> upload new campaigns to the cloud</label>
+      <div class="row" style="margin-top:0.6rem">
+        <button id="c-up">Upload this campaign</button>
+        <button class="secondary" id="c-sync">Sync now</button>
+        <button class="secondary" id="c-logout">Log out</button>
+      </div>
+      <div id="c-conflict" class="hidden">
+        <p class="error">Someone else saved this campaign first. Nothing was overwritten. Choose one:</p>
+        <div class="row">
+          <button id="c-take">Take the cloud copy (mine goes to the archive)</button>
+          <button class="secondary" id="c-fork">Keep mine as a new cloud campaign</button>
+        </div>
+      </div>
+      <h2 style="margin-top:0.9rem">Campaigns in the cloud</h2>
+      <div id="c-list"></div>
+    </div>
+    <p id="c-state" class="muted"></p>
+    <p id="c-err" class="error"></p>
     <h2 style="margin-top:0.9rem">New campaign</h2>
     <div class="row"><button class="danger" id="f-new">Close this session and start a new one</button></div>
     <p class="muted">The closed session stays in this browser's archive. Export it first.</p>
@@ -631,6 +669,9 @@
 <script id="site-core">
 /*@CORE@*/
 </script>
+<script id="site-cloud">
+/*@CLOUD@*/
+</script>
 <div id="alarm" class="alarm hidden" role="alert"><b id="alarm-text"></b><button id="alarm-stop">Stop alarm</button></div>
 <script>
 (function () {
@@ -648,7 +689,7 @@
   let sel = null;         // the selected level in Log & charts: { tank, row }, shared by the table and the chart
 
   // ------------------------------------------------------------ storage
-  function save() { if (S) localStorage.setItem(KEY, JSON.stringify(S.toJSON())); }
+  function save() { if (S) { localStorage.setItem(KEY, JSON.stringify(S.toJSON())); cloudChanged(); } }
   function fromJSON(obj) {
     return obj && obj.kind === "transfer" ? C.TransferSession.fromJSON(obj) : C.Session.fromJSON(obj);
   }
@@ -658,6 +699,208 @@
     try { return fromJSON(JSON.parse(t)); } catch (e) { console.error(e); return null; }
   }
   function archive() { try { return JSON.parse(localStorage.getItem(ARCH) || "[]"); } catch (e) { return []; } }
+
+  // ------------------------------------------------------------ cloud
+  // Optional (site/cloud.js, worker/index.js).  The browser stays the first
+  // store: save() writes here before anything else, with or without a
+  // network.  Logged in, the open session is linked to one cloud campaign;
+  // each save marks it dirty, and the upload follows a moment later, or
+  // when the network is back.  A clean link asks for newer versions, so a
+  // team can follow one campaign on several devices.
+  const CC = window.CalibCloud || null;
+  const pageOrigin = typeof location !== "undefined" && /^https?:$/.test(location.protocol || "") ? location.origin : "";
+  const CL = CC ? new CC.Client({
+    storage: localStorage,
+    fetch: typeof fetch === "function" ? (u, i) => fetch(u, i) : null,
+    origin: pageOrigin,
+    onClosed: closedDone,
+  }) : null;
+  let cloudMsg = "", cloudList = null, syncTimer = null;
+  /** Write the session to this browser without a new cloud change (it came from the cloud). */
+  function keepLocal() { if (S) localStorage.setItem(KEY, JSON.stringify(S.toJSON())); }
+  /** A new open session: link it to a new cloud campaign when that is on, else unlink. */
+  function cloudNew() {
+    if (!CL) return;
+    cloudMsg = "";
+    if (S && CL.loggedIn() && CL.auto()) CL.linkNew(); else CL.unlink();
+  }
+  /**
+   * The open session closes: call before S changes.  Its changes that the
+   * cloud does not have wait in the outbox and upload later.  -> its link,
+   * for the archive entry.
+   */
+  function cloudClose() {
+    if (!CL) return null;
+    const l = CL.detach(S ? S.toJSON() : null);
+    if (CL.outbox().length) scheduleSync();
+    return l;
+  }
+  /** A closed copy finished its upload: its archive entries take the new link. */
+  function closedDone(e) {
+    const a = archive();
+    let hit = false;
+    for (const it of a) if (it.cloud && it.cloud.copy === e.link.copy) { it.cloud = e.link; hit = true; }
+    if (!hit && e.state !== "saved") {
+      // The archive dropped it meanwhile: keep the copy, it is not in the cloud.
+      const d = e.data;
+      a.unshift({ when: new Date().toISOString(), tank: d.kind === "transfer" ? `${d.out.config.tank}→${d.in.config.tank}` : d.config.tank, session: d, cloud: e.link });
+    }
+    localStorage.setItem(ARCH, JSON.stringify(a.slice(0, 20)));
+    if (e.state === "conflict") cloudMsg = "A closed campaign did not upload: someone else saved it first. Open it from the archive to choose.";
+    else if (e.state === "gone") cloudMsg = "A closed campaign was deleted from the cloud. It stays in the archive.";
+    else if (e.state === "error") cloudMsg = e.message;
+  }
+  /** Put a campaign from the cloud in the page.  A transfer keeps this device's tank view. */
+  function applyCloud(c) {
+    const s = fromJSON(c.data);
+    if (S && S.active && s.active) s.active = S.active;
+    S = s; keepLocal();
+  }
+  function cloudChanged() { if (CL && CL.link()) { CL.markDirty(); scheduleSync(); } }
+  function scheduleSync() {
+    if (syncTimer != null) clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => { syncTimer = null; cloudSync(); }, 1500);
+  }
+  const SYNC_TEXT = {
+    pending: "Uploading the latest changes.",
+    gone: "This campaign was deleted from the cloud. It stays in this browser.",
+    offline: "Offline: the changes wait in this browser. They upload when the network is back.",
+    conflict: "Someone else saved this campaign first. Choose below.",
+    login: "Log in to upload the changes. They wait in this browser.",
+  };
+  function cloudSync() {
+    if (!CL) return Promise.resolve(null);
+    const before = cloudMsg;
+    return CL.sync(() => (S ? S.toJSON() : null)).then((r) => {
+      // A message from a closed copy (closedDone) wins over "saved".
+      if (cloudMsg !== before) { /* keep it */ }
+      else if (r.state === "saved") cloudMsg = `Saved in the cloud at ${C.clock(Date.now())}.`;
+      else if (r.state === "error") cloudMsg = r.message;
+      else if (SYNC_TEXT[r.state]) cloudMsg = SYNC_TEXT[r.state];
+      renderArchive();
+      renderCloud();
+      return r;
+    });
+  }
+  function refreshList() {
+    if (!CL || !CL.loggedIn()) { cloudList = null; return Promise.resolve(); }
+    return CL.list().then((r) => { cloudList = r.campaigns; }, (e) => { if (e.status !== 0) throw e; });
+  }
+  /** One cloud action from a button: errors show under the card, never throw. */
+  function cloudDo(fn) {
+    return function () {
+      $("c-err").textContent = "";
+      Promise.resolve().then(fn).catch((e) => { $("c-err").textContent = e.message; console.error(e); }).then(() => render());
+    };
+  }
+  function cloudTick() {
+    if (!CL || !CL.loggedIn()) return;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+    if (CL.state() === "dirty" || CL.waiting().length) { cloudSync(); return; }
+    // Follow the cloud only while nothing is half typed: an open note edit stays.
+    if (!S || !CL.link() || editRow != null) return;
+    if (typeof document !== "undefined" && document.hidden) return;
+    CL.poll(applyCloud).then((c) => {
+      if (!c) return;
+      if (!c.gone) cloudMsg = `Updated from the cloud at ${C.clock(Date.now())}.`;
+      render();
+    }).catch((e) => console.error(e));
+  }
+  function stamp(ms) { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${C.clock(ms)}`; }
+  function renderCloud() {
+    if (!CL) { $("hdr-cloud").textContent = ""; return; }
+    const a = CL.auth(), on = CL.loggedIn(), l = S ? CL.link() : null, st = CL.state(l), wait = CL.outbox().length;
+    const loose = st === "elsewhere" || st === "gone";   // the link cannot sync here: offer a new campaign
+    $("c-out").classList.toggle("hidden", on);
+    $("c-in").classList.toggle("hidden", !on);
+    if (!on) {
+      // Fill the form once from the last login; never overwrite typing.
+      for (const [id, v] of [["c-base", a.base], ["c-ws", a.workspace], ["c-user", a.user]]) if (!$(id).value && v) $(id).value = v;
+      $("c-base-note").textContent = pageOrigin ? "" : "This page is a local file: enter the address of the hosted page as the server.";
+    }
+    $("c-who").innerHTML = on ? `<b>${esc(a.workspace)}</b> · ${esc(a.user)}` : "";
+    $("c-auto").checked = CL.auto();
+    $("c-up").disabled = !S || !(st === "none" || loose);
+    $("c-up").textContent = loose ? "Upload as a new cloud campaign" : l ? "This campaign is in the cloud" : "Upload this campaign";
+    $("c-sync").disabled = !l && !wait;
+    $("c-conflict").classList.toggle("hidden", st !== "conflict");
+    const here = st === "elsewhere" ? `This campaign belongs to workspace ${l.ws}. Log in there to sync it.`
+      : st === "gone" ? SYNC_TEXT.gone : "";
+    $("c-state").textContent = [!S ? cloudMsg
+      : !l ? cloudMsg || "This campaign is only in this browser."
+        : here || cloudMsg || (st === "conflict" ? SYNC_TEXT.conflict : st === "dirty" ? "Changes wait for upload." : "In step with the cloud."),
+    wait ? `Closed campaigns that wait for upload: ${wait}.` : ""].filter(Boolean).join(" ");
+    $("hdr-cloud").textContent = !l ? "" : st === "elsewhere" ? "cloud: other workspace" : st === "gone" ? "cloud: deleted"
+      : st === "conflict" ? "cloud: conflict" : !on && st === "dirty" ? "cloud: log in"
+        : st === "dirty" ? "cloud: waiting" : "cloud: saved";
+    const list = cloudList || [];
+    $("c-list").innerHTML = !on ? "" : !cloudList ? "<p class='muted'>Press Sync now to see the list.</p>"
+      : !list.length ? "<p class='muted'>No campaigns yet.</p>"
+        : list.map((c) => `<div class="row" style="margin:0.3rem 0"><span class="muted">${esc(stamp(c.updated_at))} · <span translate="no">${esc(c.tank)}</span> · ${c.levels} levels · <span translate="no">${esc(c.updated_by)}</span>${l && l.id === c.id ? " · open" : ""}</span>`
+          + `<button class="secondary small" data-cid="${esc(c.id)}" data-act="open">Open</button>`
+          + `<button class="secondary small" data-cid="${esc(c.id)}" data-v="${c.version}" data-act="del">Delete</button></div>`).join("");
+  }
+  /** After a login: link the open campaign when that is on, upload, list. */
+  async function afterLogin() {
+    $("c-key").value = ""; $("c-code").value = "";
+    cloudMsg = "";
+    if (S && !CL.link() && CL.auto()) CL.linkNew();
+    await cloudSync();
+    await refreshList();
+  }
+  if (CL) {
+    $("c-login").addEventListener("click", cloudDo(async () => {
+      await CL.login($("c-base").value, $("c-ws").value, $("c-key").value, $("c-user").value);
+      await afterLogin();
+    }));
+    $("c-create").addEventListener("click", cloudDo(async () => {
+      if (!$("c-code").value) throw new Error("Enter the signup code.");
+      await CL.signup($("c-base").value, $("c-ws").value, $("c-key").value, $("c-user").value, $("c-code").value);
+      await afterLogin();
+    }));
+    $("c-logout").addEventListener("click", cloudDo(async () => { await CL.logout(); cloudList = null; cloudMsg = ""; }));
+    $("c-auto").addEventListener("change", () => { CL.setAuto($("c-auto").checked); render(); });
+    $("c-up").addEventListener("click", cloudDo(async () => {
+      const st = CL.state();
+      if (S && (st === "none" || st === "elsewhere" || st === "gone")) { CL.linkNew(); await cloudSync(); await refreshList(); }
+    }));
+    $("c-sync").addEventListener("click", cloudDo(async () => { await cloudSync(); cloudTick(); await refreshList(); }));
+    $("c-take").addEventListener("click", cloudDo(async () => {
+      // My copy goes to the archive with its conflicted link: opened again,
+      // it shows the same choice, and never overwrites the cloud copy.
+      await CL.takeCloud((c) => {
+        const s = fromJSON(c.data);
+        pushArchive(cloudClose());
+        S = s;
+      });
+      keepLocal();
+      cloudMsg = "The cloud copy is open. Your copy is in the archive.";
+    }));
+    $("c-fork").addEventListener("click", cloudDo(async () => { CL.fork(); await cloudSync(); await refreshList(); }));
+    $("c-list").addEventListener("click", (ev) => {
+      const b = ev.target.closest("button[data-cid]");
+      if (!b) return;
+      const id = b.dataset.cid;
+      cloudDo(async () => {
+        if (b.dataset.act === "del") {
+          if (!confirm(tr("Delete this campaign from the cloud, for the whole workspace? The copy in this browser stays."))) return;
+          await CL.remove(id, Number(b.dataset.v));
+          const l = CL.link();
+          if (l && l.id === id) CL.unlink();
+          await refreshList();
+          return;
+        }
+        const c = await CL.fetchCampaign(id);
+        const s = fromJSON(c.data);
+        if (S && !confirm(tr("Replace the open session? It goes to the archive."))) return;
+        if (S) pushArchive(cloudClose());
+        resetTallySize();
+        S = s; CL.linkTo(c); keepLocal();
+        cloudMsg = ""; tab = "live";
+      })();
+    });
+    if (window.addEventListener) window.addEventListener("online", () => { cloudSync(); });
+  }
 
   // ------------------------------------------------------------ helpers
   const num = (id) => { const v = $(id).value.trim().replace(",", "."); return v === "" ? null : parseFloat(v); };
@@ -703,14 +946,14 @@
   $("hdr-tank").addEventListener("click", (ev) => {
     const b = ev.target.closest("button[data-tank]");
     if (!b || !isTransfer()) return;
-    S.active = b.dataset.tank; editRow = null; save(); render();
+    S.active = b.dataset.tank; editRow = null; keepLocal(); render();   // a view: not a cloud change
   });
   // The same switch inside Log & charts: the table and the chart are that
   // tank's own, so the operator never has to leave the tab to change them.
   $("log-tank").addEventListener("click", (ev) => {
     const b = ev.target.closest("button[data-tank]");
     if (!b || !isTransfer()) return;
-    S.active = b.dataset.tank; editRow = null; save(); render();
+    S.active = b.dataset.tank; editRow = null; keepLocal(); render();   // a view: not a cloud change
   });
 
   // ------------------------------------------------------------ setup
@@ -779,7 +1022,7 @@
       s.out.levels[0].pourTime = null;
       s.in.levels[0].pourTime = null;
       $("d-val").value = ""; $("d-val-b").value = "";
-      S = s; save(); tab = "live";
+      S = s; cloudNew(); save(); tab = "live";
       P.noise = n;
       localStorage.setItem(PREFS, JSON.stringify(P));
       return;
@@ -798,7 +1041,7 @@
     const s = new C.Session(cfg);
     s.start($("s-step").value.trim() || "?", dip, "", Date.now(), setupDir === "drain" ? { at: setupAt } : undefined);
     s.levels[0].pourTime = null;
-    S = s; save(); tab = "live";
+    S = s; cloudNew(); save(); tab = "live";
     // The noise card is the draft: keep the next campaign in step with it.
     P.noise = n;
     localStorage.setItem(PREFS, JSON.stringify(P));
@@ -943,11 +1186,11 @@
     if (isTransfer()) {
       const a = S.out.current(), b = S.in.current();
       if (S.out.levels.length === 1 && S.in.levels.length === 1
-        && (!a || !a.dips.length) && (!b || !b.dips.length)) { S = null; localStorage.removeItem(KEY); return; }
+        && (!a || !a.dips.length) && (!b || !b.dips.length)) { S = null; localStorage.removeItem(KEY); cloudNew(); return; }
       S.undo(); save();
       return;
     }
-    if (S.levels.length === 1 && S.levels[0].dips.length <= 1) { S = null; localStorage.removeItem(KEY); return; }
+    if (S.levels.length === 1 && S.levels[0].dips.length <= 1) { S = null; localStorage.removeItem(KEY); cloudNew(); return; }
     S.undo(); save();
   }));
 
@@ -967,35 +1210,43 @@
       try {
         const s = fromJSON(JSON.parse(t));
         if (S && !confirm(tr("Replace the open session? It goes to the archive."))) return;
-        if (S) pushArchive();
+        if (S) pushArchive(cloudClose());
         resetTallySize();
-        S = s; save(); tab = "live"; render();
+        S = s; cloudNew(); save(); tab = "live"; render();
       } catch (e) { $("f-err").textContent = "Cannot read that file: " + e.message; }
     });
   });
-  function pushArchive() {
+  /** The open session to the archive.  link: from cloudClose(), called first. */
+  function pushArchive(link) {
     const a = archive();
     a.unshift({
       when: new Date().toISOString(),
       tank: isTransfer() ? `${S.out.cfg.tank}→${S.in.cfg.tank}` : S.cfg.tank,
       session: S.toJSON(),
+      cloud: link || null,
     });
     localStorage.setItem(ARCH, JSON.stringify(a.slice(0, 20)));
   }
   $("f-new").addEventListener("click", () => {
     if (S && !confirm(tr("Close this session? Export it first. It goes to this browser's archive."))) return;
-    if (S) pushArchive();
+    if (S) pushArchive(cloudClose());
     resetTallySize();
-    S = null; localStorage.removeItem(KEY); render();
+    S = null; localStorage.removeItem(KEY); cloudNew(); render();
   });
   $("f-archive").addEventListener("click", (ev) => {
     const b = ev.target.closest("button[data-i]"); if (!b) return;
     const item = archive()[+b.dataset.i];
     if (b.dataset.act === "open") {
       if (S && !confirm(tr("Replace the open session? It goes to the archive."))) return;
-      if (S) pushArchive();
+      const s = fromJSON(item.session);
+      if (S) pushArchive(cloudClose());
       resetTallySize();
-      S = fromJSON(item.session); save(); tab = "live"; render();
+      S = s;
+      // A session that was in the cloud goes back to its cloud campaign, in
+      // the state it closed with: no new change, so a clean copy only
+      // follows the cloud, and a stale one gets a conflict, never an overwrite.
+      if (CL && item.cloud) { CL.attach(item.cloud); keepLocal(); if (CL.dirty()) scheduleSync(); } else { cloudNew(); save(); }
+      tab = "live"; render();
     } else {
       download(`${item.tank}_site.json`, JSON.stringify(item.session, null, 2), "application/json");
     }
@@ -1052,6 +1303,7 @@
     }
     for (const id of ["f-csv", "f-csv-b", "f-json", "f-show", "f-new"]) $(id).disabled = !has;
     renderArchive();
+    renderCloud();
     renderSetup();
     renderSetupNoise();
     renderSettings();
@@ -2553,6 +2805,8 @@
   startLang();
   applyTheme();
   render();
+  // Upload what waits from an earlier visit; then look for newer versions.
+  if (CL) { setInterval(cloudTick, 30000); cloudTick(); }
 })();
 </script>
 </body>

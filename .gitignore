@@ -12,3 +12,4 @@ dist/
 site/public/
 .wrangler/
 .env
+wrangler.deploy.jsonc

@@ -41,7 +41,7 @@ function makeElement(id) {
 }
 
 /** Load the page script with a stub DOM.  store is shared to simulate a reload. */
-function boot(pagePath, corePath, store) {
+function boot(pagePath, corePath, store, extra) {
   const core = require(corePath);
   const html = fs.readFileSync(pagePath, "utf8");
   const blocks = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
@@ -57,7 +57,7 @@ function boot(pagePath, corePath, store) {
   const mem = store || new Map();
   const downloads = [];   // every <a> the page makes: { download: filename, href }
   const context = {
-    window: { CalibSite: core, CalibI18n: require(require("path").join(require("path").dirname(corePath), "i18n.js")), addEventListener: () => {} },
+    window: { CalibSite: core, CalibI18n: require(require("path").join(require("path").dirname(corePath), "i18n.js")), CalibCloud: require(require("path").join(require("path").dirname(corePath), "cloud.js")), addEventListener: () => {} },
     document: { getElementById: el, createElement: () => { const a = makeElement("a"); downloads.push(a); return a; }, body: { appendChild: () => {} } },
     localStorage: {
       getItem: (k) => (mem.has(k) ? mem.get(k) : null),
@@ -85,6 +85,7 @@ function boot(pagePath, corePath, store) {
     parseFloat,
     Error,
   };
+  Object.assign(context, extra || {});
   context.window.document = context.document;
   vm.createContext(context);
   vm.runInContext(pageScript, context);

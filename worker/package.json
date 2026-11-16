@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "Cloud store Worker for the on-site page. No dependencies."
+}

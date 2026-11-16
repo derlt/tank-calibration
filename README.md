@@ -168,6 +168,12 @@ The page is also published as a Worker. Its address is in `.env`, which is
 not committed.
 See [docs/site.md](docs/site.md) and §10a of the method.
 
+A team can share campaigns through an optional cloud store (a Worker on
+Cloudflare D1): log in to a workspace with its secret keyword in
+**Files → Cloud**. Each entry still saves in the browser first, so the page
+works offline, and changes upload when the network is back. Two saves of one
+campaign never overwrite each other. See [docs/cloud.md](docs/cloud.md).
+
 ## Commands
 
 | Command | Purpose |

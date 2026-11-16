@@ -29,6 +29,45 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Cloud store for the on-site page (optional): a Worker API on Cloudflare D1
+  (`worker/index.js`, `worker/schema.sql`) and a client in the page
+  (`site/cloud.js`, **Files → Cloud**). A team logs in to a workspace with
+  its name and secret keyword; campaigns upload about 1.5 s after each
+  entry, wait in the browser while offline, and upload when the network is
+  back. Each save carries a version: a stale save is a conflict, never an
+  overwrite, and the user takes the cloud copy (theirs goes to the archive)
+  or keeps theirs as a new campaign. A device with no changes follows a
+  campaign every 30 s. The header shows the cloud state.
+- Cloud sync keeps every change: a campaign closed with changes that wait
+  uploads them later from an outbox in the browser; a copy taken out of a
+  conflict keeps the conflict in the archive; a save whose answer was lost
+  is recognised at the next try, not taken as a conflict; a campaign of
+  another workspace or one deleted in the cloud is never uploaded on its
+  own (the page offers to upload it as a new campaign); a save never brings
+  a deleted campaign back; the tank A/B view of a transfer is not a cloud
+  change.
+- Security: keyword as PBKDF2-SHA256 (100 000 rounds), tokens stored as
+  SHA-256 and valid 30 days, new workspaces only with the `SIGNUP_CODE`
+  secret, every query scoped to the token's workspace, no cookies, CSP and
+  no framing for the hosted page (`site/_headers`).
+- Flood limits: 300 API requests and 10 logins per minute per IP address
+  (rate limit bindings), failed-login lockout per address and per workspace,
+  1 MB bodies, 2000 campaigns per workspace. Only `/api/*` runs the Worker,
+  so the page stays up and offline-capable under an API flood.
+- Zone firewall for the page's host (Cloudflare WAF, Free plan): only `/`
+  and `/api/*` pass, only the API methods, no crawlers on the API, and a
+  rate limit of 50 API requests per 10 s per IP address. The API answers
+  only on the hosts in `API_HOSTS`, so the workers.dev address cannot skip
+  the firewall (its page stays, offline only).
+- Secrets stay in `.env`: the D1 id left `wrangler.jsonc`; `make deploy`
+  writes `wrangler.deploy.jsonc` (ignored by git) and sets `API_HOSTS`.
+  `tests/test_secrets.py` fails when a `.env` value is in the page or in a
+  file that git tracks, or when server code reaches the page.
+- `make db-schema`; `make deploy` copies `site/_headers`.
+- Tests: `tests/test_cloud.py` runs the Worker on an in-memory SQLite D1
+  (`tests/cloud_harness.mjs`), the client offline and online, conflicts
+  between two users, and two page devices that follow one campaign.
+
 - Dark mode for the on-site page. **Settings → Display → Theme**: *Auto*
   (the default, follows the phone), *Light* or *Dark*. The choice stays on the
   device and applies before the first paint. Every colour is a CSS variable

@@ -37,8 +37,14 @@ set `CLOUDFLARE_API_TOKEN` in the environment. The Worker is
 is not committed; the custom domain is attached once in Cloudflare and is not
 part of the repository.
 
-The hosted page still works offline after it loads: it makes no network
-requests. To keep the one file on a phone, use `site/calib_site.html`.
+The same Worker runs the optional cloud store on D1 (`/api/*`): a team can log
+in to a workspace with a secret keyword and share campaigns. See
+[cloud.md](cloud.md). The deploy also needs the D1 database and the
+`SIGNUP_CODE` secret; that page has the steps.
+
+The hosted page still works offline after it loads. It makes network requests
+only when you log in to the cloud, and every entry saves in the browser first.
+To keep the one file on a phone, use `site/calib_site.html`.
 
 ## Before the first pour
 
@@ -549,6 +555,8 @@ for example `1,2`) and `--neck-entrance` (row 1 is the brim reading). Without
 |---|---|
 | `site/site_core.js` | The rules and the maths. One source for the page and the tests. |
 | `site/i18n.js` | The page translator and the Vietnamese dictionary. |
+| `site/cloud.js` | The optional cloud client: login, sync, conflicts ([cloud.md](cloud.md)). |
+| `site/_headers` | Security headers for the hosted page. |
 | `site/page.html` | The page template. |
 | `site/calib_site.html` | The built page. Copy this file to the device. |
 | `site/replay.js` | Replay a raw CSV from a terminal. |

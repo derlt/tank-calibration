@@ -251,7 +251,7 @@
     <button id="hdr-tank-a" data-tank="out" aria-pressed="true">tank A</button>
     <button id="hdr-tank-b" data-tank="in" aria-pressed="false">tank B</button>
   </nav>
-  <span class="hdr-status"><span id="hdr-phase"></span><span id="hdr-count"></span></span>
+  <span class="hdr-status"><span id="hdr-phase"></span><span id="hdr-count"></span><span id="hdr-cloud"></span></span>
 </header>
 <main>
   <nav class="tabs" id="tabs">
@@ -571,6 +571,44 @@
     <textarea id="f-text" class="hidden" readonly></textarea>
     <h2 style="margin-top:0.9rem">Import</h2>
     <label>Session JSON<input type="file" id="f-import" accept=".json,application/json"></label>
+    <h2 style="margin-top:0.9rem">Cloud</h2>
+    <p class="muted" style="margin-top:0">Optional. The page always saves in this browser first and works without a network. Logged in to a workspace, it also keeps a copy of the campaign in the cloud, so the team can open it on other devices. Changes made offline upload when the network is back.</p>
+    <div id="c-out">
+      <div class="grid">
+        <label>Server address<input id="c-base" inputmode="url" autocomplete="url" placeholder="blank = this site" translate="no"></label>
+        <label>Workspace<input id="c-ws" autocomplete="username" autocapitalize="none" translate="no"></label>
+        <label>Secret keyword<input id="c-key" type="password" autocomplete="current-password"></label>
+        <label>Your name<input id="c-user" autocomplete="name" translate="no"></label>
+      </div>
+      <p class="muted" id="c-base-note"></p>
+      <div class="row" style="margin-top:0.6rem"><button id="c-login">Log in</button></div>
+      <details style="margin-top:0.6rem">
+        <summary>New workspace</summary>
+        <p class="muted">Choose a workspace name and a secret keyword of 12 characters or more. Give both to your team: they are the login. The signup code comes from the person who runs the server.</p>
+        <div class="grid"><label>Signup code<input id="c-code" type="password" autocomplete="off"></label></div>
+        <div class="row" style="margin-top:0.6rem"><button class="secondary" id="c-create">Create workspace</button></div>
+      </details>
+    </div>
+    <div id="c-in" class="hidden">
+      <p>Logged in: <span id="c-who" translate="no"></span></p>
+      <label class="check"><input type="checkbox" id="c-auto"> upload new campaigns to the cloud</label>
+      <div class="row" style="margin-top:0.6rem">
+        <button id="c-up">Upload this campaign</button>
+        <button class="secondary" id="c-sync">Sync now</button>
+        <button class="secondary" id="c-logout">Log out</button>
+      </div>
+      <div id="c-conflict" class="hidden">
+        <p class="error">Someone else saved this campaign first. Nothing was overwritten. Choose one:</p>
+        <div class="row">
+          <button id="c-take">Take the cloud copy (mine goes to the archive)</button>
+          <button class="secondary" id="c-fork">Keep mine as a new cloud campaign</button>
+        </div>
+      </div>
+      <h2 style="margin-top:0.9rem">Campaigns in the cloud</h2>
+      <div id="c-list"></div>
+    </div>
+    <p id="c-state" class="muted"></p>
+    <p id="c-err" class="error"></p>
     <h2 style="margin-top:0.9rem">New campaign</h2>
     <div class="row"><button class="danger" id="f-new">Close this session and start a new one</button></div>
     <p class="muted">The closed session stays in this browser's archive. Export it first.</p>
@@ -1426,6 +1464,106 @@
     "Export it first.": "Hãy xuất trước.",
     "Archive": "Kho lưu",
     "Open": "Mở",
+    // Cloud
+    "Cloud": "Đám mây",
+    "Optional.": "Không bắt buộc.",
+    "The page always saves in this browser first and works without a network.": "Trang luôn lưu vào trình duyệt này trước và chạy được khi không có mạng.",
+    "Logged in to a workspace, it also keeps a copy of the campaign in the cloud, so the team can open it on other devices.": "Khi đã đăng nhập vào một không gian nhóm, trang còn giữ một bản sao của đợt đo trên đám mây, để cả nhóm mở được trên các thiết bị khác.",
+    "Changes made offline upload when the network is back.": "Các thay đổi khi không có mạng sẽ được tải lên khi có mạng lại.",
+    "Server address": "Địa chỉ máy chủ",
+    "blank = this site": "để trống = trang này",
+    "Workspace": "Không gian nhóm",
+    "Secret keyword": "Từ khoá bí mật",
+    "Your name": "Tên của bạn",
+    "Log in": "Đăng nhập",
+    "Log out": "Đăng xuất",
+    "Logged in:": "Đã đăng nhập:",
+    "New workspace": "Không gian nhóm mới",
+    "Choose a workspace name and a secret keyword of 12 characters or more.": "Chọn tên không gian nhóm và một từ khoá bí mật dài từ 12 ký tự trở lên.",
+    "Give both to your team: they are the login.": "Đưa cả hai cho nhóm của bạn: đó là thông tin đăng nhập.",
+    "The signup code comes from the person who runs the server.": "Mã đăng ký do người quản lý máy chủ cung cấp.",
+    "Signup code": "Mã đăng ký",
+    "Create workspace": "Tạo không gian nhóm",
+    "upload new campaigns to the cloud": "tải các đợt đo mới lên đám mây",
+    "Upload this campaign": "Tải đợt đo này lên",
+    "This campaign is in the cloud": "Đợt đo này đã có trên đám mây",
+    "Sync now": "Đồng bộ ngay",
+    "Someone else saved this campaign first.": "Người khác đã lưu đợt đo này trước.",
+    "Nothing was overwritten.": "Không có gì bị ghi đè.",
+    "Choose one:": "Chọn một:",
+    "Choose below.": "Hãy chọn bên dưới.",
+    "Take the cloud copy (mine goes to the archive)": "Lấy bản trên đám mây (bản của tôi vào kho lưu)",
+    "Keep mine as a new cloud campaign": "Giữ bản của tôi thành một đợt đo mới trên đám mây",
+    "Campaigns in the cloud": "Các đợt đo trên đám mây",
+    "Press Sync now to see the list.": "Bấm Đồng bộ ngay để xem danh sách.",
+    "No campaigns yet.": "Chưa có đợt đo nào.",
+    "Delete": "Xoá",
+    "open": "đang mở",
+    "This campaign is only in this browser.": "Đợt đo này chỉ có trong trình duyệt này.",
+    "This page is a local file: enter the address of the hosted page as the server.": "Trang này là một tệp trên máy: hãy nhập địa chỉ của trang trực tuyến làm máy chủ.",
+    "Changes wait for upload.": "Các thay đổi đang chờ tải lên.",
+    "In step with the cloud.": "Đã khớp với đám mây.",
+    "Uploading the latest changes.": "Đang tải lên các thay đổi mới nhất.",
+    "Offline: the changes wait in this browser.": "Không có mạng: các thay đổi chờ trong trình duyệt này.",
+    "They upload when the network is back.": "Chúng sẽ được tải lên khi có mạng lại.",
+    "Log in to upload the changes.": "Hãy đăng nhập để tải các thay đổi lên.",
+    "They wait in this browser.": "Chúng chờ trong trình duyệt này.",
+    "Saved in the cloud at {0}.": "Đã lưu lên đám mây lúc {0}.",
+    "Updated from the cloud at {0}.": "Đã cập nhật từ đám mây lúc {0}.",
+    "The cloud copy is open.": "Bản trên đám mây đang mở.",
+    "Your copy is in the archive.": "Bản của bạn ở trong kho lưu.",
+    "cloud: saved": "đám mây: đã lưu",
+    "cloud: waiting": "đám mây: đang chờ",
+    "cloud: conflict": "đám mây: xung đột",
+    "cloud: log in": "đám mây: cần đăng nhập",
+    "cloud: other workspace": "đám mây: không gian nhóm khác",
+    "cloud: deleted": "đám mây: đã xoá",
+    "Upload as a new cloud campaign": "Tải lên thành một đợt đo mới trên đám mây",
+    "This campaign belongs to workspace {0}.": "Đợt đo này thuộc không gian nhóm {0}.",
+    "Log in there to sync it.": "Hãy đăng nhập vào đó để đồng bộ.",
+    "This campaign was deleted from the cloud.": "Đợt đo này đã bị xoá khỏi đám mây.",
+    "It stays in this browser.": "Nó vẫn còn trong trình duyệt này.",
+    "Closed campaigns that wait for upload: {0}.": "Các đợt đo đã đóng đang chờ tải lên: {0}.",
+    "A closed campaign did not upload: someone else saved it first.": "Một đợt đo đã đóng không tải lên được: người khác đã lưu trước.",
+    "Open it from the archive to choose.": "Hãy mở nó từ kho lưu để chọn.",
+    "A closed campaign was deleted from the cloud.": "Một đợt đo đã đóng đã bị xoá khỏi đám mây.",
+    "It stays in the archive.": "Nó vẫn còn trong kho lưu.",
+    "No campaign is open.": "Không có đợt đo nào đang mở.",
+    "The open campaign changed.": "Đợt đo đang mở đã thay đổi.",
+    "Try again.": "Hãy thử lại.",
+    "The upload did not settle.": "Việc tải lên chưa hoàn tất.",
+    "Bad campaign id.": "Mã đợt đo không hợp lệ.",
+    "Enter the signup code.": "Hãy nhập mã đăng ký.",
+    "Delete this campaign from the cloud, for the whole workspace? The copy in this browser stays.": "Xoá đợt đo này khỏi đám mây, cho cả không gian nhóm? Bản trong trình duyệt này vẫn được giữ.",
+    // Cloud: server and network answers
+    "No network: the change waits in this browser.": "Không có mạng: thay đổi chờ trong trình duyệt này.",
+    "No network.": "Không có mạng.",
+    "Enter the server address: this page is a local file.": "Hãy nhập địa chỉ máy chủ: trang này là một tệp trên máy.",
+    "The server address must start with https:// and hold no path.": "Địa chỉ máy chủ phải bắt đầu bằng https:// và không có đường dẫn.",
+    "Wrong workspace or secret keyword.": "Sai không gian nhóm hoặc từ khoá bí mật.",
+    "Wrong signup code.": "Sai mã đăng ký.",
+    "That workspace name is taken.": "Tên không gian nhóm này đã có người dùng.",
+    "Choose another, or log in.": "Hãy chọn tên khác, hoặc đăng nhập.",
+    "Workspace: 3 to 40 characters, letters, digits, - or _.": "Không gian nhóm: 3 đến 40 ký tự, gồm chữ, số, - hoặc _.",
+    "The secret keyword needs {0} characters or more.": "Từ khoá bí mật cần {0} ký tự trở lên.",
+    "The secret keyword is too long.": "Từ khoá bí mật quá dài.",
+    "Enter your name.": "Hãy nhập tên của bạn.",
+    "Log in first.": "Hãy đăng nhập trước.",
+    "The login has expired.": "Phiên đăng nhập đã hết hạn.",
+    "Log in again.": "Hãy đăng nhập lại.",
+    "Too many requests.": "Quá nhiều yêu cầu.",
+    "Wait one minute.": "Hãy chờ một phút.",
+    "Too many failed attempts.": "Quá nhiều lần thử sai.",
+    "Try again in {0} min.": "Hãy thử lại sau {0} phút.",
+    "New workspaces are switched off on this server.": "Máy chủ này đã tắt việc tạo không gian nhóm mới.",
+    "This workspace is full.": "Không gian nhóm này đã đầy.",
+    "Delete old campaigns first.": "Hãy xoá các đợt đo cũ trước.",
+    "No such campaign in this workspace.": "Không có đợt đo này trong không gian nhóm.",
+    "The cloud store is not set up on this server.": "Máy chủ này chưa cài đặt kho lưu đám mây.",
+    "The request is too large.": "Yêu cầu quá lớn.",
+    "Server error.": "Lỗi máy chủ.",
+    "The cloud works only at the main address of the page.": "Đám mây chỉ hoạt động ở địa chỉ chính của trang.",
+    "Server answer {0}.": "Máy chủ trả lời {0}.",
     "Download": "Tải về",
     "Cannot read that file: {why}": "Không đọc được tệp đó: {why}",
     "Replay a raw file": "Phát lại một tệp thô",
@@ -3507,6 +3645,419 @@
   else root.CalibSite = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);
 </script>
+<script id="site-cloud">
+/* calib site cloud — the optional shared copy of a campaign.
+ *
+ * One source for the browser page and the Node tests.  No DOM.
+ *
+ * The browser stays the first store: the page saves every entry there, with
+ * or without a network.  This client keeps a second copy on the cloud store
+ * (worker/index.js) when the user is logged in to a workspace:
+ *
+ *   login     workspace name + secret keyword -> a token for 30 days
+ *   link      the open session <-> one cloud campaign {id, version}
+ *   dirty     the browser copy has changes that the cloud does not have
+ *   sync      upload the changes; offline -> they wait, and upload later,
+ *             also after the session is closed (the outbox)
+ *   conflict  someone else saved first; nothing is overwritten, the user
+ *             chooses: take the cloud copy, or keep theirs as a new campaign
+ *   poll      a clean link asks for a newer version, so a team can follow
+ *             one campaign live
+ *
+ * Storage keys (localStorage):
+ *   calib-site:cloud   {base, token, workspace, user, expires, auto}
+ *   calib-site:link    the link of the open session (see "the link" below)
+ *   calib-site:outbox  [{link, data}]: closed sessions whose changes wait for upload
+ */
+(function (root) {
+  "use strict";
+
+  const AUTH = "calib-site:cloud", LINK = "calib-site:link", OUTBOX = "calib-site:outbox";
+  const TIMEOUT = 15000;
+
+  /** An error with the HTTP status; status 0 = no network. */
+  class CloudError extends Error {
+    constructor(status, message, body) { super(message); this.status = status; this.body = body || {}; }
+    get offline() { return this.status === 0; }
+  }
+
+  function newId() {
+    const c = typeof crypto !== "undefined" ? crypto : null;
+    if (c && c.randomUUID) return c.randomUUID();
+    const a = new Uint8Array(16);
+    if (c && c.getRandomValues) c.getRandomValues(a);
+    else for (let i = 0; i < 16; i++) a[i] = Math.floor(Math.random() * 256);
+    return [...a].map((b) => b.toString(16).padStart(2, "0")).join("").replace(/^(.{8})(.{4})(.{4})(.{4})/, "$1-$2-$3-$4-");
+  }
+
+  /** "" (this site) or an https address without a trailing slash. */
+  function normBase(v) {
+    const s = String(v == null ? "" : v).trim().replace(/\/+$/, "");
+    if (!s) return "";
+    if (!/^https:\/\/[^\s/]+$/i.test(s) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(s)) {
+      throw new CloudError(-1, "The server address must start with https:// and hold no path.");
+    }
+    return s;
+  }
+
+  /**
+   * opts.storage  localStorage or a stub with getItem/setItem/removeItem
+   * opts.fetch    the fetch function; none -> every call is offline
+   * opts.origin   the page's own origin when it is served over http(s)
+   * opts.now      a clock, for the tests
+   */
+  function Client(opts) {
+    this.store = opts.storage;
+    this.fetchFn = opts.fetch || null;
+    this.origin = opts.origin || "";
+    this.now = opts.now || (() => Date.now());
+    this.onClosed = opts.onClosed || null;
+    this.busy = null;
+  }
+
+  Client.prototype._get = function (k) { try { return JSON.parse(this.store.getItem(k) || "null"); } catch (e) { return null; } };
+  Client.prototype._set = function (k, v) { if (v == null) this.store.removeItem(k); else this.store.setItem(k, JSON.stringify(v)); };
+
+  Client.prototype.auth = function () { return this._get(AUTH) || {}; };
+  Client.prototype.loggedIn = function () { const a = this.auth(); return !!(a.token && a.expires > this.now()); };
+  Client.prototype.auto = function () { return this.auth().auto !== false; };
+  Client.prototype.setAuto = function (on) { this._set(AUTH, Object.assign(this.auth(), { auto: !!on })); };
+  /** The server: the saved address, else the page's own site. */
+  Client.prototype.base = function () { return this.auth().base || this.origin; };
+
+  /** base != null: a login or signup call, sent without the token. */
+  Client.prototype.request = async function (method, path, body, base) {
+    const b = base != null ? base : this.base();
+    if (!b) throw new CloudError(-1, "Enter the server address: this page is a local file.");
+    if (!this.fetchFn) throw new CloudError(0, "No network.");
+    const headers = { "Content-Type": "application/json" };
+    const tok = base == null ? this.auth().token : null;
+    if (tok) headers.Authorization = "Bearer " + tok;
+    const ctl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer = ctl && typeof setTimeout !== "undefined" ? setTimeout(() => ctl.abort(), TIMEOUT) : null;
+    let res;
+    try {
+      res = await this.fetchFn(b + path, {
+        method, headers, body: body == null ? undefined : JSON.stringify(body),
+        signal: ctl ? ctl.signal : undefined, cache: "no-store", credentials: "omit",
+      });
+    } catch (e) {
+      throw new CloudError(0, "No network: the change waits in this browser.");
+    } finally { if (timer != null) clearTimeout(timer); }
+    let out = {};
+    try { out = await res.json(); } catch (e) { out = {}; }
+    if (res.status === 401 && tok) {
+      // The token is gone or expired: keep the server address and the name.
+      const a = this.auth();
+      this._set(AUTH, { base: a.base, workspace: a.workspace, user: a.user, auto: a.auto });
+    }
+    if (!res.ok) throw new CloudError(res.status, out.error || `Server answer ${res.status}.`, out);
+    return out;
+  };
+
+  Client.prototype._keep = function (base, r) {
+    const a = this.auth();
+    this._set(AUTH, { base, token: r.token, workspace: r.workspace, user: r.user, expires: r.expires, auto: a.auto });
+    return r;
+  };
+  Client.prototype.login = async function (base, workspace, keyword, user) {
+    const b = normBase(base);
+    const r = await this.request("POST", "/api/login", { workspace, keyword, user }, b || this.origin);
+    return this._keep(b, r);
+  };
+  Client.prototype.signup = async function (base, workspace, keyword, user, code) {
+    const b = normBase(base);
+    const r = await this.request("POST", "/api/workspaces", { workspace, keyword, user, signup_code: code }, b || this.origin);
+    return this._keep(b, r);
+  };
+  Client.prototype.logout = async function () {
+    const a = this.auth();
+    try { if (a.token) await this.request("POST", "/api/logout", {}); } catch (e) { /* offline: forget it here anyway */ }
+    this._set(AUTH, { base: a.base, workspace: a.workspace, user: a.user, auto: a.auto });
+  };
+  Client.prototype.list = function () { return this.request("GET", "/api/campaigns"); };
+  Client.prototype.fetchCampaign = function (id, have) {
+    return this.request("GET", `/api/campaigns/${encodeURIComponent(id)}${have != null ? "?have=" + have : ""}`);
+  };
+  Client.prototype.remove = function (id, version) {
+    return this.request("DELETE", `/api/campaigns/${encodeURIComponent(id)}?base_version=${version}`);
+  };
+
+  // ---------------------------------------------------------------- the link
+  //
+  // A link joins one copy of a session in this browser to one cloud campaign:
+  //   id        the cloud campaign
+  //   copy      a tag of this browser copy; a closed copy keeps its tag in
+  //             the archive and in the outbox, so the two stay in step
+  //   ws, base  the workspace and the server of the campaign
+  //   version   the cloud version this copy builds on
+  //   rev       local changes so far; synced: the changes the cloud has
+  //   sent      uploads whose answer did not come back (lost on the way);
+  //             a 409 checks them before it calls a conflict
+  //   conflict  someone else saved first: the user chooses
+  //   gone      the campaign was deleted in the cloud
+  //
+  // The open session has one link (LINK).  A closed session with changes
+  // that the cloud does not have waits in the outbox (OUTBOX) with its data,
+  // and uploads at the next sync.
+
+  const GONE = "This campaign was deleted from the cloud. It stays in this browser.";
+  const STOP = { offline: 1, login: 1 };
+
+  /** A short signature of a text: an upload is recognised by it after a lost answer. */
+  function sig(text) {
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < text.length; i++) {
+      const c = text.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return text.length.toString(36) + ":" + (h2 >>> 0).toString(36) + (h1 >>> 0).toString(36);
+  }
+
+  Client.prototype.link = function () { return this._get(LINK); };
+  Client.prototype.setLink = function (l) { this._set(LINK, l); };
+  Client.prototype.unlink = function () { this._set(LINK, null); };
+  Client.prototype.outbox = function () { const o = this._get(OUTBOX); return Array.isArray(o) ? o : []; };
+
+  /** The workspace and server of the login (kept after a logout). */
+  Client.prototype.where = function () { return { ws: this.auth().workspace || "", base: this.base() }; };
+  /** The link belongs to the workspace of this login. */
+  Client.prototype.here = function (l) {
+    if (!l) return false;
+    if (l.ws == null) return true;
+    const w = this.where();
+    return l.ws === w.ws && (l.base || "") === w.base;
+  };
+  /** "none" | "elsewhere" | "gone" | "conflict" | "dirty" | "clean" */
+  Client.prototype.state = function (l) {
+    if (l === undefined) l = this.link();
+    if (!l) return "none";
+    if (!this.here(l)) return "elsewhere";
+    if (l.gone) return "gone";
+    if (l.conflict) return "conflict";
+    return l.rev > l.synced ? "dirty" : "clean";
+  };
+  Client.prototype.dirty = function () { const l = this.link(); return !!l && l.rev > l.synced; };
+  /** Closed copies that wait for upload to this workspace. */
+  Client.prototype.waiting = function () { return this.outbox().filter((e) => this.here(e.link)); };
+
+  Client.prototype._make = function (o) {
+    const w = this.where();
+    const l = Object.assign({ copy: newId(), ws: w.ws, base: w.base, rev: 0, synced: 0 }, o);
+    this._set(LINK, l);
+    return l;
+  };
+  /** Link the open session to a new cloud campaign; the next sync uploads it. */
+  Client.prototype.linkNew = function () { return this._make({ id: newId(), version: 0, rev: 1 }); };
+  /** Link to a campaign just read from the cloud: clean. */
+  Client.prototype.linkTo = function (c) { return this._make({ id: c.id, version: c.version, by: c.updated_by, at: c.updated_at }); };
+  /** The page saved the session: the cloud copy is behind by one more change. */
+  Client.prototype.markDirty = function () {
+    const l = this.link();
+    if (!l) return;
+    l.rev += 1;
+    this._set(LINK, l);
+  };
+
+  /**
+   * The open session closes (archive, new campaign, another one opens).
+   * Its changes that the cloud does not have go to the outbox with data,
+   * the session JSON at this moment.  -> the link, for the archive entry.
+   */
+  Client.prototype.detach = function (data) {
+    const l = this.link();
+    if (!l) return null;
+    this._set(LINK, null);
+    if (l.rev > l.synced && !l.conflict && !l.gone && data) {
+      const box = this.outbox().filter((e) => e.link.copy !== l.copy);
+      box.push({ link: l, data });
+      this._set(OUTBOX, box);
+    }
+    return l;
+  };
+  /**
+   * A closed copy opens again, with the link of its archive entry.  When its
+   * changes still wait in the outbox, they leave the outbox: the open link
+   * uploads them.  The reopened copy gets a new tag, so older archive
+   * entries of the same campaign never take its state.
+   */
+  Client.prototype.attach = function (l) {
+    const box = this.outbox(), e = l.copy ? box.find((x) => x.link.copy === l.copy) : null;
+    if (e) this._set(OUTBOX, box.filter((x) => x !== e));
+    return this._make(Object.assign({}, e ? e.link : l, { copy: newId() }));
+  };
+
+  /** Change the link with this tag, open or in the outbox.  -> the link, or null when it is gone. */
+  Client.prototype._update = function (copy, fn) {
+    const l = this.link();
+    if (l && l.copy === copy) { fn(l); this._set(LINK, l); return l; }
+    const box = this.outbox(), e = box.find((x) => x.link.copy === copy);
+    if (!e) return null;
+    fn(e.link);
+    this._set(OUTBOX, box);
+    return e.link;
+  };
+  Client.prototype._find = function (copy) {
+    const l = this.link();
+    if (l && l.copy === copy) return l;
+    const e = this.outbox().find((x) => x.link.copy === copy);
+    return e ? e.link : null;
+  };
+
+  /** One PUT.  -> {state: "saved" | "recovered" | "conflict" | "gone" | "offline" | "login" | "error", message} */
+  Client.prototype._upload = async function (l, data) {
+    const try1 = { rev: l.rev, sig: sig(JSON.stringify(data)) };
+    const base = l.version;
+    // Keep the try before the request: when the answer is lost, the next
+    // 409 finds it.
+    this._update(l.copy, (x) => { x.sent = (x.sent || []).concat([try1]).slice(-5); });
+    try {
+      const r = await this.request("PUT", `/api/campaigns/${encodeURIComponent(l.id)}`, { data, base_version: base });
+      this._update(l.copy, (x) => {
+        x.version = r.version; x.synced = Math.max(x.synced, try1.rev); x.by = r.updated_by; x.at = r.updated_at;
+        delete x.sent;
+      });
+      return { state: "saved" };
+    } catch (e) {
+      if (e.status === 409) return this._conflict(l.copy, l.id, base, e);
+      if (e.status === 0) return { state: "offline", message: e.message };
+      if (e.status === 401) return { state: "login", message: e.message };
+      return { state: "error", status: e.status, message: e.message };
+    }
+  };
+  /** A 409: our own save whose answer was lost, a deleted campaign, or a real conflict. */
+  Client.prototype._conflict = async function (copy, id, base, e) {
+    const cur = e.body.current || null;
+    const l = this._find(copy);
+    if (cur && cur.deleted_at == null && cur.version === base + 1 && l && l.sent && l.sent.length) {
+      let c = null;
+      try { c = await this.fetchCampaign(id); } catch (x) { c = null; }
+      const s = c && c.version === base + 1 ? sig(JSON.stringify(c.data)) : null;
+      const hit = s && l.sent.find((t) => t.sig === s);
+      if (hit) {
+        this._update(copy, (x) => {
+          x.version = c.version; x.synced = Math.max(x.synced, hit.rev); x.by = c.updated_by; x.at = c.updated_at;
+          delete x.sent;
+        });
+        return { state: "recovered" };
+      }
+    }
+    if (!cur || cur.deleted_at != null) {
+      this._update(copy, (x) => { x.gone = true; delete x.sent; });
+      return { state: "gone", message: GONE };
+    }
+    this._update(copy, (x) => { x.conflict = cur; delete x.sent; });
+    return { state: "conflict", message: e.message };
+  };
+  /** Upload one copy until the cloud has it: after a lost answer, once more with the right version. */
+  Client.prototype._push = async function (copy, getData) {
+    for (let i = 0; i < 3; i++) {
+      const l = this._find(copy);
+      if (!l) return { state: "moved" };   // the copy was closed or opened again meanwhile
+      if (l.rev <= l.synced) return { state: "saved" };
+      const data = getData();
+      if (data == null) return { state: "idle" };
+      const r = await this._upload(l, data);
+      if (r.state !== "recovered") return r;
+    }
+    return { state: "error", message: "The upload did not settle. Try again." };
+  };
+
+  /**
+   * Upload what waits: first the closed copies in the outbox, then the open
+   * session.  getData() returns the open session JSON at the moment of the
+   * upload.  One sync at a time; a change made while one runs is sent by the
+   * next.  opts.onClosed({state, link, data, message}) hears the end of each
+   * closed copy: saved, conflict, gone or error.
+   *
+   * -> {state: "idle" | "saved" | "pending" | "offline" | "conflict" | "gone"
+   *            | "elsewhere" | "login" | "error", message}
+   */
+  Client.prototype.sync = function (getData) {
+    if (this.busy) return this.busy.then(() => this.sync(getData));
+    this.busy = this._sync(getData).finally(() => { this.busy = null; });
+    return this.busy;
+  };
+  Client.prototype._sync = async function (getData) {
+    const box = this.waiting();
+    const open = this.state();
+    if (!box.length && open !== "dirty") {
+      if (open === "conflict") return { state: "conflict", message: "Someone else saved this campaign first." };
+      if (open === "gone") return { state: "gone", message: GONE };
+      if (open === "elsewhere") return { state: "elsewhere" };
+      return { state: "idle" };
+    }
+    if (!this.loggedIn()) return { state: "login", message: "Log in to upload the changes." };
+    for (const e of box) {
+      const r = await this._push(e.link.copy, () => e.data);
+      if (STOP[r.state] || (r.state === "error" && r.status === 429)) return r;
+      if (r.state === "idle" || r.state === "moved") continue;
+      const link = this._find(e.link.copy) || e.link;
+      this._set(OUTBOX, this.outbox().filter((x) => x.link.copy !== e.link.copy));
+      if (this.onClosed) this.onClosed({ state: r.state, link, data: e.data, message: r.message });
+    }
+    const l = this.link();
+    if (!l || this.state(l) !== "dirty") {
+      const st = this.state(l);
+      return { state: st === "conflict" || st === "gone" ? st : "saved", message: st === "gone" ? GONE : undefined };
+    }
+    const r = await this._push(l.copy, getData);
+    if (r.state === "moved") return { state: "idle" };
+    if (r.state !== "saved") return r;
+    const cur = this.link();
+    return { state: cur && cur.copy === l.copy && cur.rev > cur.synced ? "pending" : "saved" };
+  };
+
+  /**
+   * Ask for a newer cloud version of a clean link.  apply(campaign) puts it
+   * in the page; when apply throws, the link stays as it was.
+   * -> null (nothing new, offline, or local changes wait) | {gone: true} | the campaign {id, version, data, …}
+   */
+  Client.prototype.poll = async function (apply) {
+    const l = this.link();
+    if (!l || this.state(l) !== "clean" || l.version < 1 || !this.loggedIn() || this.busy) return null;
+    let r;
+    try { r = await this.fetchCampaign(l.id, l.version); } catch (e) {
+      if (e.status === 404 && this._update(l.copy, (x) => { x.gone = true; })) return { gone: true };
+      return null;
+    }
+    if (r.same || !r.data || r.version <= l.version) return null;
+    const cur = this.link();
+    if (!cur || cur.copy !== l.copy || this.state(cur) !== "clean") return null;   // the user typed meanwhile
+    if (apply) apply(r);
+    this._update(l.copy, (x) => { x.version = r.version; x.by = r.updated_by; x.at = r.updated_at; });
+    return r;
+  };
+
+  /**
+   * Conflict, choice 1: the cloud copy replaces the browser copy.
+   * apply(campaign) puts it in the page (and archives the browser copy,
+   * with its conflicted link); then the session links to the cloud copy.
+   */
+  Client.prototype.takeCloud = async function (apply) {
+    const l = this.link();
+    if (!l) throw new CloudError(-1, "No campaign is open.");
+    let r;
+    try { r = await this.fetchCampaign(l.id); } catch (e) {
+      if (e.status === 404) { this._update(l.copy, (x) => { x.gone = true; delete x.conflict; }); throw new CloudError(404, GONE); }
+      throw e;
+    }
+    const cur = this.link();
+    if (!cur || cur.copy !== l.copy) throw new CloudError(-1, "The open campaign changed. Try again.");
+    if (apply) apply(r, cur);
+    this.linkTo(r);
+    return r;
+  };
+  /** Conflict, choice 2 (also for a deleted campaign or another workspace): the browser copy becomes a new cloud campaign. */
+  Client.prototype.fork = function () { return this.linkNew(); };
+
+  const api = { Client, CloudError, newId, normBase, sig, AUTH, LINK, OUTBOX };
+  if (typeof module !== "undefined" && module.exports) module.exports = api;
+  else root.CalibCloud = api;
+})(typeof globalThis !== "undefined" ? globalThis : this);
+</script>
 <div id="alarm" class="alarm hidden" role="alert"><b id="alarm-text"></b><button id="alarm-stop">Stop alarm</button></div>
 <script>
 (function () {
@@ -3524,7 +4075,7 @@
   let sel = null;         // the selected level in Log & charts: { tank, row }, shared by the table and the chart
 
   // ------------------------------------------------------------ storage
-  function save() { if (S) localStorage.setItem(KEY, JSON.stringify(S.toJSON())); }
+  function save() { if (S) { localStorage.setItem(KEY, JSON.stringify(S.toJSON())); cloudChanged(); } }
   function fromJSON(obj) {
     return obj && obj.kind === "transfer" ? C.TransferSession.fromJSON(obj) : C.Session.fromJSON(obj);
   }
@@ -3534,6 +4085,208 @@
     try { return fromJSON(JSON.parse(t)); } catch (e) { console.error(e); return null; }
   }
   function archive() { try { return JSON.parse(localStorage.getItem(ARCH) || "[]"); } catch (e) { return []; } }
+
+  // ------------------------------------------------------------ cloud
+  // Optional (site/cloud.js, worker/index.js).  The browser stays the first
+  // store: save() writes here before anything else, with or without a
+  // network.  Logged in, the open session is linked to one cloud campaign;
+  // each save marks it dirty, and the upload follows a moment later, or
+  // when the network is back.  A clean link asks for newer versions, so a
+  // team can follow one campaign on several devices.
+  const CC = window.CalibCloud || null;
+  const pageOrigin = typeof location !== "undefined" && /^https?:$/.test(location.protocol || "") ? location.origin : "";
+  const CL = CC ? new CC.Client({
+    storage: localStorage,
+    fetch: typeof fetch === "function" ? (u, i) => fetch(u, i) : null,
+    origin: pageOrigin,
+    onClosed: closedDone,
+  }) : null;
+  let cloudMsg = "", cloudList = null, syncTimer = null;
+  /** Write the session to this browser without a new cloud change (it came from the cloud). */
+  function keepLocal() { if (S) localStorage.setItem(KEY, JSON.stringify(S.toJSON())); }
+  /** A new open session: link it to a new cloud campaign when that is on, else unlink. */
+  function cloudNew() {
+    if (!CL) return;
+    cloudMsg = "";
+    if (S && CL.loggedIn() && CL.auto()) CL.linkNew(); else CL.unlink();
+  }
+  /**
+   * The open session closes: call before S changes.  Its changes that the
+   * cloud does not have wait in the outbox and upload later.  -> its link,
+   * for the archive entry.
+   */
+  function cloudClose() {
+    if (!CL) return null;
+    const l = CL.detach(S ? S.toJSON() : null);
+    if (CL.outbox().length) scheduleSync();
+    return l;
+  }
+  /** A closed copy finished its upload: its archive entries take the new link. */
+  function closedDone(e) {
+    const a = archive();
+    let hit = false;
+    for (const it of a) if (it.cloud && it.cloud.copy === e.link.copy) { it.cloud = e.link; hit = true; }
+    if (!hit && e.state !== "saved") {
+      // The archive dropped it meanwhile: keep the copy, it is not in the cloud.
+      const d = e.data;
+      a.unshift({ when: new Date().toISOString(), tank: d.kind === "transfer" ? `${d.out.config.tank}→${d.in.config.tank}` : d.config.tank, session: d, cloud: e.link });
+    }
+    localStorage.setItem(ARCH, JSON.stringify(a.slice(0, 20)));
+    if (e.state === "conflict") cloudMsg = "A closed campaign did not upload: someone else saved it first. Open it from the archive to choose.";
+    else if (e.state === "gone") cloudMsg = "A closed campaign was deleted from the cloud. It stays in the archive.";
+    else if (e.state === "error") cloudMsg = e.message;
+  }
+  /** Put a campaign from the cloud in the page.  A transfer keeps this device's tank view. */
+  function applyCloud(c) {
+    const s = fromJSON(c.data);
+    if (S && S.active && s.active) s.active = S.active;
+    S = s; keepLocal();
+  }
+  function cloudChanged() { if (CL && CL.link()) { CL.markDirty(); scheduleSync(); } }
+  function scheduleSync() {
+    if (syncTimer != null) clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => { syncTimer = null; cloudSync(); }, 1500);
+  }
+  const SYNC_TEXT = {
+    pending: "Uploading the latest changes.",
+    gone: "This campaign was deleted from the cloud. It stays in this browser.",
+    offline: "Offline: the changes wait in this browser. They upload when the network is back.",
+    conflict: "Someone else saved this campaign first. Choose below.",
+    login: "Log in to upload the changes. They wait in this browser.",
+  };
+  function cloudSync() {
+    if (!CL) return Promise.resolve(null);
+    const before = cloudMsg;
+    return CL.sync(() => (S ? S.toJSON() : null)).then((r) => {
+      // A message from a closed copy (closedDone) wins over "saved".
+      if (cloudMsg !== before) { /* keep it */ }
+      else if (r.state === "saved") cloudMsg = `Saved in the cloud at ${C.clock(Date.now())}.`;
+      else if (r.state === "error") cloudMsg = r.message;
+      else if (SYNC_TEXT[r.state]) cloudMsg = SYNC_TEXT[r.state];
+      renderArchive();
+      renderCloud();
+      return r;
+    });
+  }
+  function refreshList() {
+    if (!CL || !CL.loggedIn()) { cloudList = null; return Promise.resolve(); }
+    return CL.list().then((r) => { cloudList = r.campaigns; }, (e) => { if (e.status !== 0) throw e; });
+  }
+  /** One cloud action from a button: errors show under the card, never throw. */
+  function cloudDo(fn) {
+    return function () {
+      $("c-err").textContent = "";
+      Promise.resolve().then(fn).catch((e) => { $("c-err").textContent = e.message; console.error(e); }).then(() => render());
+    };
+  }
+  function cloudTick() {
+    if (!CL || !CL.loggedIn()) return;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+    if (CL.state() === "dirty" || CL.waiting().length) { cloudSync(); return; }
+    // Follow the cloud only while nothing is half typed: an open note edit stays.
+    if (!S || !CL.link() || editRow != null) return;
+    if (typeof document !== "undefined" && document.hidden) return;
+    CL.poll(applyCloud).then((c) => {
+      if (!c) return;
+      if (!c.gone) cloudMsg = `Updated from the cloud at ${C.clock(Date.now())}.`;
+      render();
+    }).catch((e) => console.error(e));
+  }
+  function stamp(ms) { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${C.clock(ms)}`; }
+  function renderCloud() {
+    if (!CL) { $("hdr-cloud").textContent = ""; return; }
+    const a = CL.auth(), on = CL.loggedIn(), l = S ? CL.link() : null, st = CL.state(l), wait = CL.outbox().length;
+    const loose = st === "elsewhere" || st === "gone";   // the link cannot sync here: offer a new campaign
+    $("c-out").classList.toggle("hidden", on);
+    $("c-in").classList.toggle("hidden", !on);
+    if (!on) {
+      // Fill the form once from the last login; never overwrite typing.
+      for (const [id, v] of [["c-base", a.base], ["c-ws", a.workspace], ["c-user", a.user]]) if (!$(id).value && v) $(id).value = v;
+      $("c-base-note").textContent = pageOrigin ? "" : "This page is a local file: enter the address of the hosted page as the server.";
+    }
+    $("c-who").innerHTML = on ? `<b>${esc(a.workspace)}</b> · ${esc(a.user)}` : "";
+    $("c-auto").checked = CL.auto();
+    $("c-up").disabled = !S || !(st === "none" || loose);
+    $("c-up").textContent = loose ? "Upload as a new cloud campaign" : l ? "This campaign is in the cloud" : "Upload this campaign";
+    $("c-sync").disabled = !l && !wait;
+    $("c-conflict").classList.toggle("hidden", st !== "conflict");
+    const here = st === "elsewhere" ? `This campaign belongs to workspace ${l.ws}. Log in there to sync it.`
+      : st === "gone" ? SYNC_TEXT.gone : "";
+    $("c-state").textContent = [!S ? cloudMsg
+      : !l ? cloudMsg || "This campaign is only in this browser."
+        : here || cloudMsg || (st === "conflict" ? SYNC_TEXT.conflict : st === "dirty" ? "Changes wait for upload." : "In step with the cloud."),
+    wait ? `Closed campaigns that wait for upload: ${wait}.` : ""].filter(Boolean).join(" ");
+    $("hdr-cloud").textContent = !l ? "" : st === "elsewhere" ? "cloud: other workspace" : st === "gone" ? "cloud: deleted"
+      : st === "conflict" ? "cloud: conflict" : !on && st === "dirty" ? "cloud: log in"
+        : st === "dirty" ? "cloud: waiting" : "cloud: saved";
+    const list = cloudList || [];
+    $("c-list").innerHTML = !on ? "" : !cloudList ? "<p class='muted'>Press Sync now to see the list.</p>"
+      : !list.length ? "<p class='muted'>No campaigns yet.</p>"
+        : list.map((c) => `<div class="row" style="margin:0.3rem 0"><span class="muted">${esc(stamp(c.updated_at))} · <span translate="no">${esc(c.tank)}</span> · ${c.levels} levels · <span translate="no">${esc(c.updated_by)}</span>${l && l.id === c.id ? " · open" : ""}</span>`
+          + `<button class="secondary small" data-cid="${esc(c.id)}" data-act="open">Open</button>`
+          + `<button class="secondary small" data-cid="${esc(c.id)}" data-v="${c.version}" data-act="del">Delete</button></div>`).join("");
+  }
+  /** After a login: link the open campaign when that is on, upload, list. */
+  async function afterLogin() {
+    $("c-key").value = ""; $("c-code").value = "";
+    cloudMsg = "";
+    if (S && !CL.link() && CL.auto()) CL.linkNew();
+    await cloudSync();
+    await refreshList();
+  }
+  if (CL) {
+    $("c-login").addEventListener("click", cloudDo(async () => {
+      await CL.login($("c-base").value, $("c-ws").value, $("c-key").value, $("c-user").value);
+      await afterLogin();
+    }));
+    $("c-create").addEventListener("click", cloudDo(async () => {
+      if (!$("c-code").value) throw new Error("Enter the signup code.");
+      await CL.signup($("c-base").value, $("c-ws").value, $("c-key").value, $("c-user").value, $("c-code").value);
+      await afterLogin();
+    }));
+    $("c-logout").addEventListener("click", cloudDo(async () => { await CL.logout(); cloudList = null; cloudMsg = ""; }));
+    $("c-auto").addEventListener("change", () => { CL.setAuto($("c-auto").checked); render(); });
+    $("c-up").addEventListener("click", cloudDo(async () => {
+      const st = CL.state();
+      if (S && (st === "none" || st === "elsewhere" || st === "gone")) { CL.linkNew(); await cloudSync(); await refreshList(); }
+    }));
+    $("c-sync").addEventListener("click", cloudDo(async () => { await cloudSync(); cloudTick(); await refreshList(); }));
+    $("c-take").addEventListener("click", cloudDo(async () => {
+      // My copy goes to the archive with its conflicted link: opened again,
+      // it shows the same choice, and never overwrites the cloud copy.
+      await CL.takeCloud((c) => {
+        const s = fromJSON(c.data);
+        pushArchive(cloudClose());
+        S = s;
+      });
+      keepLocal();
+      cloudMsg = "The cloud copy is open. Your copy is in the archive.";
+    }));
+    $("c-fork").addEventListener("click", cloudDo(async () => { CL.fork(); await cloudSync(); await refreshList(); }));
+    $("c-list").addEventListener("click", (ev) => {
+      const b = ev.target.closest("button[data-cid]");
+      if (!b) return;
+      const id = b.dataset.cid;
+      cloudDo(async () => {
+        if (b.dataset.act === "del") {
+          if (!confirm(tr("Delete this campaign from the cloud, for the whole workspace? The copy in this browser stays."))) return;
+          await CL.remove(id, Number(b.dataset.v));
+          const l = CL.link();
+          if (l && l.id === id) CL.unlink();
+          await refreshList();
+          return;
+        }
+        const c = await CL.fetchCampaign(id);
+        const s = fromJSON(c.data);
+        if (S && !confirm(tr("Replace the open session? It goes to the archive."))) return;
+        if (S) pushArchive(cloudClose());
+        resetTallySize();
+        S = s; CL.linkTo(c); keepLocal();
+        cloudMsg = ""; tab = "live";
+      })();
+    });
+    if (window.addEventListener) window.addEventListener("online", () => { cloudSync(); });
+  }
 
   // ------------------------------------------------------------ helpers
   const num = (id) => { const v = $(id).value.trim().replace(",", "."); return v === "" ? null : parseFloat(v); };
@@ -3579,14 +4332,14 @@
   $("hdr-tank").addEventListener("click", (ev) => {
     const b = ev.target.closest("button[data-tank]");
     if (!b || !isTransfer()) return;
-    S.active = b.dataset.tank; editRow = null; save(); render();
+    S.active = b.dataset.tank; editRow = null; keepLocal(); render();   // a view: not a cloud change
   });
   // The same switch inside Log & charts: the table and the chart are that
   // tank's own, so the operator never has to leave the tab to change them.
   $("log-tank").addEventListener("click", (ev) => {
     const b = ev.target.closest("button[data-tank]");
     if (!b || !isTransfer()) return;
-    S.active = b.dataset.tank; editRow = null; save(); render();
+    S.active = b.dataset.tank; editRow = null; keepLocal(); render();   // a view: not a cloud change
   });
 
   // ------------------------------------------------------------ setup
@@ -3655,7 +4408,7 @@
       s.out.levels[0].pourTime = null;
       s.in.levels[0].pourTime = null;
       $("d-val").value = ""; $("d-val-b").value = "";
-      S = s; save(); tab = "live";
+      S = s; cloudNew(); save(); tab = "live";
       P.noise = n;
       localStorage.setItem(PREFS, JSON.stringify(P));
       return;
@@ -3674,7 +4427,7 @@
     const s = new C.Session(cfg);
     s.start($("s-step").value.trim() || "?", dip, "", Date.now(), setupDir === "drain" ? { at: setupAt } : undefined);
     s.levels[0].pourTime = null;
-    S = s; save(); tab = "live";
+    S = s; cloudNew(); save(); tab = "live";
     // The noise card is the draft: keep the next campaign in step with it.
     P.noise = n;
     localStorage.setItem(PREFS, JSON.stringify(P));
@@ -3819,11 +4572,11 @@
     if (isTransfer()) {
       const a = S.out.current(), b = S.in.current();
       if (S.out.levels.length === 1 && S.in.levels.length === 1
-        && (!a || !a.dips.length) && (!b || !b.dips.length)) { S = null; localStorage.removeItem(KEY); return; }
+        && (!a || !a.dips.length) && (!b || !b.dips.length)) { S = null; localStorage.removeItem(KEY); cloudNew(); return; }
       S.undo(); save();
       return;
     }
-    if (S.levels.length === 1 && S.levels[0].dips.length <= 1) { S = null; localStorage.removeItem(KEY); return; }
+    if (S.levels.length === 1 && S.levels[0].dips.length <= 1) { S = null; localStorage.removeItem(KEY); cloudNew(); return; }
     S.undo(); save();
   }));
 
@@ -3843,35 +4596,43 @@
       try {
         const s = fromJSON(JSON.parse(t));
         if (S && !confirm(tr("Replace the open session? It goes to the archive."))) return;
-        if (S) pushArchive();
+        if (S) pushArchive(cloudClose());
         resetTallySize();
-        S = s; save(); tab = "live"; render();
+        S = s; cloudNew(); save(); tab = "live"; render();
       } catch (e) { $("f-err").textContent = "Cannot read that file: " + e.message; }
     });
   });
-  function pushArchive() {
+  /** The open session to the archive.  link: from cloudClose(), called first. */
+  function pushArchive(link) {
     const a = archive();
     a.unshift({
       when: new Date().toISOString(),
       tank: isTransfer() ? `${S.out.cfg.tank}→${S.in.cfg.tank}` : S.cfg.tank,
       session: S.toJSON(),
+      cloud: link || null,
     });
     localStorage.setItem(ARCH, JSON.stringify(a.slice(0, 20)));
   }
   $("f-new").addEventListener("click", () => {
     if (S && !confirm(tr("Close this session? Export it first. It goes to this browser's archive."))) return;
-    if (S) pushArchive();
+    if (S) pushArchive(cloudClose());
     resetTallySize();
-    S = null; localStorage.removeItem(KEY); render();
+    S = null; localStorage.removeItem(KEY); cloudNew(); render();
   });
   $("f-archive").addEventListener("click", (ev) => {
     const b = ev.target.closest("button[data-i]"); if (!b) return;
     const item = archive()[+b.dataset.i];
     if (b.dataset.act === "open") {
       if (S && !confirm(tr("Replace the open session? It goes to the archive."))) return;
-      if (S) pushArchive();
+      const s = fromJSON(item.session);
+      if (S) pushArchive(cloudClose());
       resetTallySize();
-      S = fromJSON(item.session); save(); tab = "live"; render();
+      S = s;
+      // A session that was in the cloud goes back to its cloud campaign, in
+      // the state it closed with: no new change, so a clean copy only
+      // follows the cloud, and a stale one gets a conflict, never an overwrite.
+      if (CL && item.cloud) { CL.attach(item.cloud); keepLocal(); if (CL.dirty()) scheduleSync(); } else { cloudNew(); save(); }
+      tab = "live"; render();
     } else {
       download(`${item.tank}_site.json`, JSON.stringify(item.session, null, 2), "application/json");
     }
@@ -3928,6 +4689,7 @@
     }
     for (const id of ["f-csv", "f-csv-b", "f-json", "f-show", "f-new"]) $(id).disabled = !has;
     renderArchive();
+    renderCloud();
     renderSetup();
     renderSetupNoise();
     renderSettings();
@@ -5429,6 +6191,8 @@
   startLang();
   applyTheme();
   render();
+  // Upload what waits from an earlier visit; then look for newer versions.
+  if (CL) { setInterval(cloudTick, 30000); cloudTick(); }
 })();
 </script>
 </body>

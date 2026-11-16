@@ -7,7 +7,8 @@ and the tests can never carry two versions of the rules.
 
     site/site_core.js   rules and maths (one source)
     site/i18n.js        the page translator and its dictionaries (Vietnamese)
-    site/page.html      page template with a /*@CORE@*/ and an /*@I18N@*/ marker
+    site/cloud.js       the optional cloud client (worker/index.js is its server)
+    site/page.html      page template with /*@CORE@*/, /*@I18N@*/ and /*@CLOUD@*/ markers
     site/calib_site.html  the built page: copy this one file to the device
 """
 
@@ -18,6 +19,7 @@ from pathlib import Path
 SITE = Path(__file__).resolve().parent.parent / "site"
 MARKER = "/*@CORE@*/"
 I18N_MARKER = "/*@I18N@*/"
+CLOUD_MARKER = "/*@CLOUD@*/"
 
 
 def build_page(site: Path = SITE) -> str:
@@ -25,6 +27,7 @@ def build_page(site: Path = SITE) -> str:
     parts = {
         MARKER: (site / "site_core.js").read_text(encoding="utf-8"),
         I18N_MARKER: (site / "i18n.js").read_text(encoding="utf-8"),
+        CLOUD_MARKER: (site / "cloud.js").read_text(encoding="utf-8"),
     }
     for marker, text in parts.items():
         if template.count(marker) != 1:

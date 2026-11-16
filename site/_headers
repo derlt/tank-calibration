@@ -1,0 +1,13 @@
+# Security headers for the hosted page (Workers static assets).
+# make deploy copies this file to site/public/_headers.
+# The page is one file with inline script and style; it calls only its own
+# site (/api/*).  connect-src 'self' stops fetch and XHR to other sites; it
+# does not stop a navigation away from the page.  'unsafe-inline' scripts are
+# allowed, so the real guard against script injection is that the page puts
+# no user text into HTML without escaping it.
+/*
+  Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  X-Frame-Options: DENY
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
