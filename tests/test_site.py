@@ -217,6 +217,48 @@ class TestSitePage(unittest.TestCase):
         self.assertIn("hidden", got["after"]["dot"], "the drain time is over")
 
     @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_starts_the_iphone_timer(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const start = (el) => {\n"
+            "  el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "  el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "  el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "};\n"
+            "// A desktop browser: no Shortcuts, so no setting.\n"
+            "let p = stub.boot(page, corePath, new Map()); start(p.el);\n"
+            "out.desktop = p.el('tm-ios')._classes.has('hidden');\n"
+            "const loc = { protocol: 'https:', href: 'https://site.test/' };\n"
+            "const iphone = { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)' };\n"
+            "p = stub.boot(page, corePath, store, { location: loc, navigator: iphone }); let el = p.el; start(el);\n"
+            "out.iphone = el('tm-ios')._classes.has('hidden');\n"
+            "// 90 s fill, 15 s lead: the iPhone timer rings at 75 s, with the page's first alarm.\n"
+            "el('tm-fill-200').value = '1:30'; el('tm-lead').value = '15';\n"
+            "el('tm-ios-on').checked = true; el('tm-ios-name').value = 'Bồn timer';\n"
+            "el('tm-save').click();\n"
+            "el('pt-start').click(); out.url = loc.href;\n"
+            "el('tm-ios-test').click(); out.test = loc.href;\n"
+            "// A Home Screen app gets no x-success: iOS cannot open it by address.\n"
+            "loc.href = 'https://site.test/';\n"
+            "p = stub.boot(page, corePath, store, { location: loc, navigator: Object.assign({ standalone: true }, iphone) });\n"
+            "p.el('pt-stop').click(); p.el('pt-start').click(); out.standalone = loc.href;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertTrue(got["desktop"], "no Shortcuts setting off iOS")
+        self.assertFalse(got["iphone"])
+        self.assertEqual(
+            got["url"],
+            "shortcuts://x-callback-url/run-shortcut?name=B%E1%BB%93n%20timer&input=text&text=75"
+            "&x-success=https%3A%2F%2Fsite.test%2F",
+        )
+        self.assertIn("text=10&", got["test"])
+        self.assertTrue(got["standalone"].endswith("text=75"), got["standalone"])
+
+    @unittest.skipUnless(NODE, "node is not installed")
     def test_page_swipe_changes_the_tab(self):
         stub = (HERE / "tests" / "page_stub.js").as_posix()
         got = _node(

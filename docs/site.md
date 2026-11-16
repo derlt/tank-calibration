@@ -290,6 +290,26 @@ The draining state needs a drain time for the can size (*Timers, alarm and
 device*): without one the page cannot know when the can is empty. A new fill
 timer ends it. Hold a finger on the dot (or hover it) for the state in words.
 
+**iPhone timer on the lock screen.** iOS stops a page's scripts and its
+sound when the phone locks, and a page cannot show a countdown on the lock
+screen. The iPhone's own Clock timer can do both. On an iPhone or iPad,
+*Timers, alarm and device* has the switch *also start the iPhone timer
+(Shortcuts)*. With it on, *Start fill timer* also runs a Shortcut that starts
+the Clock timer. That timer rings with the page's first alarm (fill time −
+alarm lead: close the valve), on the lock screen too, and in silent mode.
+
+Make the Shortcut once per phone: in the Shortcuts app, add the action
+*Start Timer*, set its duration to *Shortcut Input* in seconds, and name it
+`Calib timer` (or the name you type in the setting). Then tap *Test iPhone
+timer (10 s)*. The page opens
+
+    shortcuts://x-callback-url/run-shortcut?name=Calib%20timer&input=text&text=75&x-success=<page address>
+
+Shortcuts opens for a moment and Safari comes back to the page. A page opened
+from a Home Screen icon has no address iOS can open, so the link has no
+`x-success`: swipe back to the page. *Stop timer*, *+20 s* and *−20 s* do
+not change the iPhone timer; stop it in the Clock app.
+
 **Swipe between tabs.** On a touch screen, swipe left in the middle of the
 screen for the next tab (Live → Log & charts → Shell → …) and right for the
 one before. The tab changes when the finger lifts; the row stops at the first

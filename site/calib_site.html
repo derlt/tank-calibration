@@ -586,6 +586,25 @@
         <label class="check"><input type="checkbox" id="tm-vib"> vibrate</label>
         <label class="check"><input type="checkbox" id="tm-wake"> keep the screen on while the campaign is open</label>
       </div>
+      <div id="tm-ios" class="hidden" style="margin-top:0.6rem">
+        <label class="check"><input type="checkbox" id="tm-ios-on"> also start the iPhone timer (Shortcuts)</label>
+        <div class="row" style="margin-top:0.4rem">
+          <label>Shortcut name<input id="tm-ios-name" placeholder="Calib timer"></label>
+          <button class="secondary" id="tm-ios-test">Test iPhone timer (10 s)</button>
+        </div>
+        <p class="muted">The iPhone's own timer shows a countdown on the lock screen and rings when the phone is locked or silent. The page cannot do this. <i>Start fill timer</i> starts it, set to ring with the page's alarm: close the valve. <i>Stop timer</i>, <i>+20 s</i> and <i>−20 s</i> do not change it: stop it in the Clock app.</p>
+        <details>
+          <summary>Make the shortcut (once per phone)</summary>
+          <ol class="muted">
+            <li>Open the Shortcuts app and tap <b>+</b>.</li>
+            <li>Add the action <b>Start Timer</b>.</li>
+            <li>Tap its duration, choose <b>Shortcut Input</b>, and set the unit to <b>seconds</b>.</li>
+            <li>Name the shortcut with the name above (Calib timer) and tap Done.</li>
+            <li>Tick the box above, tap <b>Save timers and device</b>, then <b>Test iPhone timer</b>. Allow the shortcut when iOS asks.</li>
+          </ol>
+          <p class="muted">The phone opens Shortcuts for a moment and comes back to the page. From a Home Screen icon it cannot come back by itself: swipe back to the page.</p>
+        </details>
+      </div>
       <div class="row" style="margin-top:0.6rem"><button id="tm-save">Save timers and device</button><button class="secondary" id="tm-test">Test alarm</button></div>
       <p id="tm-msg" class="muted"></p>
       <p id="tm-err" class="error"></p>
@@ -1125,6 +1144,33 @@
     "Tap +1 can poured.": "Chạm +1 bình đã đổ.",
     "Close the valve: {0} to full": "Khoá van: còn {0} là đầy",
     "Can full: pump off ({0} L)": "Bình đầy: tắt bơm ({0} L)",
+    // The iPhone timer through Shortcuts.  The bold words are the names iOS
+    // shows in Vietnamese: Phím tắt, Bắt đầu hẹn giờ, Đầu vào phím tắt.
+    "also start the iPhone timer (Shortcuts)": "đồng thời bật hẹn giờ của iPhone (Phím tắt)",
+    "Shortcut name": "Tên phím tắt",
+    "Calib timer": "Calib timer",
+    "Test iPhone timer (10 s)": "Thử hẹn giờ iPhone (10 s)",
+    "Test iPhone timer": "Thử hẹn giờ iPhone",
+    "The iPhone's own timer shows a countdown on the lock screen and rings when the phone is locked or silent.":
+      "Hẹn giờ riêng của iPhone hiện đếm ngược trên màn hình khoá và reo cả khi điện thoại bị khoá hoặc đang im lặng.",
+    "The page cannot do this.": "Trang không làm được việc này.",
+    "Start fill timer": "Bật hẹn giờ bơm",
+    "starts it, set to ring with the page's alarm: close the valve.": "sẽ bật nó, đặt reo cùng lúc với báo động của trang: khoá van.",
+    "do not change it: stop it in the Clock app.": "không thay đổi nó: dừng nó trong ứng dụng Đồng hồ.",
+    "Make the shortcut (once per phone)": "Tạo phím tắt (một lần cho mỗi điện thoại)",
+    "Open the Shortcuts app and tap": "Mở ứng dụng Phím tắt và chạm",
+    "Add the action": "Thêm tác vụ",
+    "Start Timer": "Bắt đầu hẹn giờ",
+    "Tap its duration, choose": "Chạm vào thời lượng, chọn",
+    "Shortcut Input": "Đầu vào phím tắt",
+    ", and set the unit to": ", và đặt đơn vị là",
+    "seconds": "giây",
+    "Name the shortcut with the name above (Calib timer) and tap Done.": "Đặt tên phím tắt bằng tên ở trên (Calib timer) và chạm Xong.",
+    "Tick the box above, tap": "Đánh dấu ô ở trên, chạm",
+    ", then": ", rồi",
+    "Allow the shortcut when iOS asks.": "Cho phép phím tắt khi iOS hỏi.",
+    "The phone opens Shortcuts for a moment and comes back to the page.": "Điện thoại mở Phím tắt trong giây lát rồi quay lại trang.",
+    "From a Home Screen icon it cannot come back by itself: swipe back to the page.": "Khi mở từ biểu tượng trên Màn hình chính, nó không tự quay lại được: hãy vuốt để trở về trang.",
     // The live indicator in the header (its tooltip and accessible name)
     "Filling a {0} L can": "Đang bơm bình {0} L",
     "Close the valve: {0} L can almost full": "Khoá van: bình {0} L sắp đầy",
@@ -5513,7 +5559,7 @@
   const TIMER = "calib-site:timer", PREFS = "calib-site:prefs";
   function loadJSON(k, d) { try { return JSON.parse(localStorage.getItem(k) || "null") || d; } catch (e) { return d; } }
   let T = loadJSON(TIMER, {});   // { pour: { start, dur, size, alarmed }, settled: "row@time" }
-  const P = Object.assign({ anim: true, sound: true, vibrate: true, wake: true }, loadJSON(PREFS, {}));
+  const P = Object.assign({ anim: true, sound: true, vibrate: true, wake: true, iosTimer: false, iosShortcut: "" }, loadJSON(PREFS, {}));
   P.noise = Object.assign({ sigmaRead: 0.4, pourRel: 0.005, pourAbs: 3, h0pm: 80, brimPm: 6 }, P.noise || {});
   let timersSig = "", lastEta = 0;
   function saveTimer() { localStorage.setItem(TIMER, JSON.stringify(T)); }
@@ -5639,6 +5685,29 @@
     $("tm-wake-state").textContent = msg;
   }
 
+  // ---- the iPhone's own timer, through a Shortcut.  A page cannot show a
+  // countdown on the lock screen, and iOS stops its scripts and its sound
+  // when the phone locks.  The Clock timer does both, so the page starts it
+  // with a shortcuts:// link.  x-success brings Safari back to the page; a
+  // Home Screen app has no address iOS can open, so it gets none.
+  function isIOS() {
+    const n = typeof navigator !== "undefined" ? navigator : {};
+    const ua = n.userAgent || "";
+    return /iPhone|iPad|iPod/.test(ua) || (n.platform === "MacIntel" && n.maxTouchPoints > 1);
+  }
+  const IOS_SHORTCUT = "Calib timer";
+  /** The link that runs the shortcut with `seconds` as its input. */
+  function iosTimerUrl(seconds, name) {
+    const q = [`name=${encodeURIComponent(name || IOS_SHORTCUT)}`, `input=text`, `text=${Math.max(1, Math.round(seconds))}`];
+    const loc = typeof location !== "undefined" ? location : null;
+    const standalone = typeof navigator !== "undefined" && navigator.standalone === true;
+    if (loc && /^https?:$/.test(loc.protocol) && !standalone) q.push(`x-success=${encodeURIComponent(loc.href)}`);
+    return `shortcuts://x-callback-url/run-shortcut?${q.join("&")}`;
+  }
+  function iosTimer(seconds, name) {
+    if (typeof location !== "undefined") location.href = iosTimerUrl(seconds, name);
+  }
+
   // ---- fill timer: the pump fills one can.  The alarm rings `lead` seconds
   // before the can is full, so the valve is closed when it is full.  Emptying
   // the can into the tank has no timer.
@@ -5655,6 +5724,8 @@
     stopAlarm(); unlockAudio();
     T.pour = { start: Date.now(), dur: d.seconds, size: u, lead: S.cfg.alarmLead, preAlarmed: false, fullAlarmed: false };
     saveTimer(); keepAwake();
+    // The iPhone timer rings with the page's first alarm: close the valve.
+    if (P.iosTimer) iosTimer(d.seconds - Math.min(S.cfg.alarmLead, d.seconds - 1), P.iosShortcut);
   }));
   $("pt-stop").addEventListener("click", () => { delete T.pour; saveTimer(); stopAlarm(); render(); });
   $("pt-more").addEventListener("click", () => {
@@ -5927,7 +5998,7 @@
     if (!S) return;
     const sizes = timerSizes(), cfg = S.cfg;
     const sig = JSON.stringify([sizes, cfg.settleSeconds, cfg.dipSeconds, cfg.alarmLead, cfg.fillSeconds, cfg.drainSeconds,
-      P.anim, P.sound, P.vibrate, P.wake]);
+      P.anim, P.sound, P.vibrate, P.wake, P.iosTimer, P.iosShortcut]);
     if (sig === timersSig) return;
     timersSig = sig;
     $("tm-settle").value = fmtClock(cfg.settleSeconds);
@@ -5948,6 +6019,11 @@
       + " The Now card shows the time between your taps as a check; its button copies it here.";
     $("tm-anim").checked = !!P.anim;
     $("tm-sound").checked = !!P.sound; $("tm-vib").checked = !!P.vibrate; $("tm-wake").checked = !!P.wake;
+    // Shortcuts is on iPhone and iPad only; a switch that is on stays in
+    // view everywhere, so it can be turned off.
+    $("tm-ios").classList.toggle("hidden", !isIOS() && !P.iosTimer);
+    $("tm-ios-on").checked = !!P.iosTimer;
+    $("tm-ios-name").value = P.iosShortcut || "";
   }
   $("tm-save").addEventListener("click", guard("tm-err", () => {
     $("tm-msg").textContent = "";
@@ -5964,6 +6040,7 @@
     S.setTimers(o);
     P.anim = !!$("tm-anim").checked;
     P.sound = !!$("tm-sound").checked; P.vibrate = !!$("tm-vib").checked; P.wake = !!$("tm-wake").checked;
+    P.iosTimer = !!$("tm-ios-on").checked; P.iosShortcut = $("tm-ios-name").value.trim();
     if (!P.anim) { stopPourAnim(); resetPourDraw(); }
     localStorage.setItem(PREFS, JSON.stringify(P));
     if (!P.wake) releaseWake();
@@ -5973,6 +6050,10 @@
     unlockAudio();
   }));
   $("tm-test").addEventListener("click", () => { unlockAudio(); alarm("Test alarm"); });
+  $("tm-ios-test").addEventListener("click", () => {
+    $("tm-msg").textContent = "";
+    iosTimer(10, $("tm-ios-name").value.trim());
+  });
 
   // ---- one clock for every timer
   function heartbeat() {

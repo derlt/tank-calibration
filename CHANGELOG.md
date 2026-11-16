@@ -17,6 +17,11 @@ All notable changes to this project are documented here. The format follows
   the tank name and a progress line along the header's bottom edge. Blue
   while the can fills, amber at the close-the-valve alarm, green when the
   can is full, teal while it drains (for the set drain time after *+1 can*).
+- On-site page on iPhone and iPad: *also start the iPhone timer
+  (Shortcuts)*. *Start fill timer* runs a Shortcut that starts the Clock
+  timer, set to ring with the close-the-valve alarm. It shows a countdown on
+  the lock screen and rings when the phone is locked. Setup steps and a
+  10 s test are in *Timers, alarm and device*.
 - On-site page on a touch screen: swipe left or right in the middle of the
   screen to go to the next or the previous tab.
 
