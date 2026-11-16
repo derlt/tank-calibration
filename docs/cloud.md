@@ -185,16 +185,23 @@ A test fails when the copy is stale. After a change to the page, run
 
 The deploy still needs the D1 id, which stays out of git: the committed
 `wrangler.jsonc` keeps the placeholder `D1_DATABASE_ID`, and a deploy with it
-fails. The dashboard build settings (Worker → Settings → Build) have no
-variables field, so the two values go into the command itself, typed there
-only (they are in `.env`):
+fails with `binding DB of type d1 must have a valid database_id specified`
+(code 10021). So the dashboard sets (Worker → Settings → Build):
 
-    Deploy command:
-    D1_DATABASE_ID=<id> API_HOSTS=<host> sh scripts/cloud-build.sh && npx wrangler deploy --config wrangler.deploy.jsonc --var API_HOSTS=<host>
+| Setting | Value |
+|---|---|
+| Build command | empty |
+| Deploy command | `sh scripts/cloud-build.sh && npx wrangler deploy --config wrangler.deploy.jsonc --var API_HOSTS:$API_HOSTS` |
+| Variables and Secrets | `D1_DATABASE_ID` and `API_HOSTS`, the values from `.env` |
 
-The build command stays empty. The script writes `wrangler.deploy.jsonc` with
-the id and refreshes the copy from `site/calib_site.html`. A failed build
-deploys nothing: the live site keeps the last good version.
+Put the two variables in the **Workers Builds** section. The Worker's own
+*Variables and Secrets* (Settings → Variables and Secrets) are runtime
+values: the build cannot see them, and a `D1_DATABASE_ID` there does nothing
+but add a Worker variable.
+
+The script writes `wrangler.deploy.jsonc` with the id and refreshes the copy
+from `site/calib_site.html`. A failed build deploys nothing: the live site
+keeps the last good version.
 
 ## The API
 
