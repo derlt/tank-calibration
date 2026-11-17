@@ -58,6 +58,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Pour card: the batch tally is quantized. One cell per can of the batch
+  replaces the continuous fill bar, so the count reads as cans done over
+  cans planned (`3 / 5 cans · 600 L`). The cell width is the can size, so a
+  300 L can takes half again the room of a 200 L can, and the size sits in
+  the cell. The can in work fills inside its own cell. The finish time
+  moves from the tag below the +1 button to a green pill under its own
+  cell; the can in work gets a grey pill, and a can past the plan keeps its
+  cell in the warning colour. Without a plan the denominator counts the
+  litres already poured at their own size, so changing the can size
+  mid-batch does not redraw a poured can as planned or over.
 - The Simple · Verbose switch moved from its own row above the Now card to a
   small box at the right end of the header, on every tab: **Aa** = verbose,
   **A** = simple; a tap switches.

@@ -380,7 +380,7 @@ coreTexts(readRows("demo_drain_raw.csv"), { D: 2480, Lest: 5280, pourUnit: 200, 
     sweep(p);
     for (let b = 0; b < 40; b++) {
       if (!el("pour-card")._classes.has("hidden")) {
-        for (let k = 0; k < 8 && el("t-bar").style.width !== "100%"; k++) tryClick(p, "t-plus");
+        for (let k = 0; k < 8 && el("t-bar").dataset.done !== "1"; k++) tryClick(p, "t-plus");
         if (b === 2) { tryClick(p, "t-plus"); collect(p); tryClick(p, "t-undo"); }
         collect(p);
       }

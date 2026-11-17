@@ -167,6 +167,26 @@
   #chart { touch-action: pan-y; min-height: 260px; }
   .tally-bar { height: 0.7rem; background: var(--info-bg); border-radius: 999px; overflow: hidden; margin: 0.5rem 0; }
   .tally-bar i { display: block; height: 100%; background: var(--info); }
+  /* The batch tally is quantized: one cell per can of the batch, its width
+     the can size, so a 300 L can takes half again the room of a 200 L can.
+     The cell carries the size; the line under it the finish time.  A counted
+     can is solid; the can in work fills inside its own cell; a can past the
+     plan shows in the warning colour.  No cell when there is no batch size
+     to tally against (no plan and no advice). */
+  .tally-seg { display: flex; gap: 3px; height: 1.25rem; margin: 0.5rem 0 0; }
+  .tally-seg > i { flex: 1 1 0; min-width: 0; border-radius: 3px; background: var(--info-bg); position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+  .tally-seg > i > span { position: relative; z-index: 1; font: 650 0.66rem var(--mono); color: var(--ink); opacity: 0.85; white-space: nowrap; }
+  .tally-seg > i.done { background: var(--info); }
+  .tally-seg > i.done > span { color: var(--bg); opacity: 1; }
+  .tally-seg > i.now { box-shadow: inset 0 0 0 2px var(--info); }
+  .tally-seg > i.now > b { display: block; position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--now, 0) * 100%); background: var(--info); opacity: 0.5; transition: width 0.5s linear; }
+  @media (prefers-reduced-motion: reduce) { .tally-seg > i.now > b { transition: none; } }
+  .tally-seg > i.over { background: var(--warn); }
+  .tally-seg > i.over > span { color: var(--bg); opacity: 1; }
+  .tally-lab { display: flex; gap: 3px; margin: 0.3rem 0 0.55rem; }
+  .tally-lab > div { min-width: 0; text-align: center; overflow: hidden; min-height: 1.15rem; }
+  .tally-lab .pill { display: inline-block; background: var(--ok-bg); color: var(--ok); border-radius: 6px; padding: 0 0.25rem; font: 600 0.66rem var(--mono); white-space: nowrap; max-width: 100%; overflow: hidden; }
+  .tally-lab .pill.none { background: var(--todo-bg); color: var(--todo); }
   button.huge { width: 100%; min-height: 4.8rem; font-size: 1.3rem; margin-top: 0.3rem; }
   .chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.5rem 0; }
   .chips span { background: var(--ok-bg); color: var(--ok); border-radius: 6px; padding: 0 0.4rem; font: 600 0.78rem var(--mono); }
@@ -423,7 +443,8 @@
         </div>
         <div class="sizes" id="t-units"></div>
         <div class="big-num" id="t-count" style="margin-top:0.6rem"></div>
-        <div class="tally-bar"><i id="t-bar"></i></div>
+        <div class="tally-seg" id="t-bar" role="progressbar" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div>
+        <div class="tally-lab" id="t-times" role="group" aria-label="Finish times"></div>
         <p class="muted" id="t-target" style="margin:0"></p>
         <div class="timer" id="pt">
           <svg class="pour-anim" id="pt-anim" viewBox="0 0 120 90" aria-hidden="true">
@@ -455,7 +476,6 @@
           </div>
         </div>
         <button class="huge" id="t-plus"></button>
-        <div class="chips" id="t-chips"></div>
         <div class="row">
           <button class="secondary small" id="t-undo">Undo last can</button>
           <label class="check"><input type="checkbox" id="t-part"> <span id="t-part-text">last can not fully poured</span></label>
@@ -2236,8 +2256,28 @@
     }
     $("t-dec").disabled = !(act > def);
     const vol = S.batchVolume(), known = part ? vol - S.canList()[n - 1].u : vol;
+    const list = S.canList();
 
-    $("t-count").textContent = `${n} can${n === 1 ? "" : "s"} · ${f(known, 0)} L` + (part ? " + part can" : "");
+    // The batch size in cans: the plan's next batch, else the cans the advice
+    // needs at the sizes already poured and the size in work.  The walk counts
+    // the litres poured at their own size, so editing the size field mid-batch
+    // does not redraw a poured can as planned or over.
+    let cans = planned ? planned.length : 0;
+    if (!planned && adv && adv.target > 0 && act > 0) {
+      let cum = 0;
+      for (let i = 0; cum < adv.target && i < 1000; i++) {
+        cum += i < n ? (list[i].u > 0 ? list[i].u : act) : act;
+        cans = i + 1;
+      }
+    }
+    // The advice in whole cans of one size, when it divides evenly: the note
+    // says "= 2 × 200 L" only when that arithmetic holds.
+    const per = adv && cans > 0 ? adv.target / cans : 0;
+    const even = !planned && cans > 1 && per > 0 && Math.abs(per - Math.round(per)) < 0.05;
+    const tally = cans > 1 ? `${n} / ${cans} cans`
+      : cans === 1 && n > 1 ? `${n} / 1 can`
+      : `${n} can${n === 1 ? "" : "s"}`;
+    $("t-count").textContent = `${tally} · ${f(known, 0)} L` + (part ? " + part can" : "");
 
     const sizes = [];
     for (const u of [def, act].concat(S.cfg.canSizes || [], S.canUnits().map((x) => x.unit))) if (u > 0 && sizes.indexOf(u) < 0) sizes.push(u);
@@ -2250,15 +2290,41 @@
     $("t-plus").textContent = act > 0 ? `+1 can ${transfer || drain ? "full" : "poured"} (${f(act, 0)} L)` : "Enter the can size, L";
     wordPourCard(drain);
 
-    const cans = planned ? planned.length : adv && act ? Math.max(1, Math.round(adv.target / act)) : 0;
-    $("t-bar").style.width = `${cans ? Math.min(100, 100 * n / cans) : 0}%`;
+    // One cell per can of the batch, its width the can size.  The cell
+    // carries the size, the line under it the finish time; no can number,
+    // because the order is the bar's order.  A can past the plan keeps its
+    // cell, in the warning colour.
+    const total = Math.max(cans, n);
+    const hhmm = (x) => { const d = new Date(x); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+    const seg = $("t-bar"), lab = $("t-times");
+    seg.classList.toggle("hidden", !total);
+    lab.classList.toggle("hidden", !total);
+    seg.setAttribute("aria-valuemax", String(total));
+    seg.setAttribute("aria-valuenow", String(n));
+    seg.setAttribute("aria-label", `${n} of ${total} cans counted`);
+    seg.dataset.done = total > 0 && n >= total ? "1" : "0";
+    let cells = "", times = "";
+    for (let i = 0; i < total; i++) {
+      const over = cans > 0 && i >= cans;
+      const state = i < n ? (over ? "over" : "done") : i === n ? "now" : "todo";
+      const raw = i < n ? list[i].u : planned && planned[i] ? planned[i] : act;
+      const size = raw > 0 ? raw : 1;
+      const t = i < n && list[i].t ? hhmm(list[i].t) : null;
+      cells += `<i class="${state === "todo" ? "" : state}" data-state="${state}" style="flex:${size} 1 0">`
+        + `<span aria-hidden="true">${raw > 0 ? f(raw, 0) : "—"}</span>${state === "now" ? "<b></b>" : ""}</i>`;
+      times += `<div style="flex:${size} 1 0">`
+        + (t ? `<span class="pill">${t}</span>` : state === "now" ? `<span class="pill none" aria-hidden="true">—</span>` : "")
+        + `</div>`;
+    }
+    seg.innerHTML = cells;
+    lab.innerHTML = times;
     let note = "", warn = false;
     // The recommended batch: the plan's next batch in its cans, or the
     // 30 mm advice.  The warnings are the same for both.
     const mixT = pb && pb.mix ? `${C.mixText(pb.mix)} L = ` : "";
     const rec = (tail) => (pb
       ? `Plan: ${mixT}${f(pb.size, 0)} L` + (transfer ? "." : ` (≈ ${f(adv.travel, 0)} mm ${drain ? "fall" : "rise"}).`) + (adv.riseNote ? " " + adv.riseNote : "")
-      : `Advice ≈ ${f(adv.target, 0)} L` + (cans ? ` = ${cans} × ${f(act, 0)} L` : "") + tail);
+      : `Advice ≈ ${f(adv.target, 0)} L` + (even ? ` = ${cans} × ${f(Math.round(per), 0)} L` : "") + tail);
     const more = cans && n > cans ? ` ${n - cans} more than the ${pb ? "plan" : "advice"}.` : "";
     if (transfer && adv && adv.out && adv.in) {
       const aO = adv.out, aI = adv.in;
@@ -2283,20 +2349,11 @@
     if (simple() && !warn) {
       const tgt = adv ? adv.target : null;
       note = pb && pb.mix ? `Target: ${C.mixText(pb.mix)} L`
-        : tgt ? `Target: ${cans ? `${cans} × ${f(act, 0)} L` : `≈ ${f(tgt, 0)} L`}` : "";
+        : tgt ? `Target: ${even ? `${cans} × ${f(Math.round(per), 0)} L` : `≈ ${f(tgt, 0)} L`}` : "";
     }
     $("t-target").textContent = note;
     $("t-target").className = warn ? "error" : "muted";
 
-    const hhmm = (x) => { const d = new Date(x); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
-    const list = S.canList(), want = Math.max(n, cans);
-    let chips = "";
-    for (let i = 0; i < want; i++) {
-      chips += i < n
-        ? `<span>${i + 1} · ${list[i].t ? hhmm(list[i].t) : ""} · ${f(list[i].u, 0)}</span>`
-        : `<span class="todo">${i + 1}${planned && planned[i] ? ` · ${f(planned[i], 0)}` : ""}</span>`;
-    }
-    $("t-chips").innerHTML = chips;
     $("t-undo").disabled = n === 0;
     $("t-part").disabled = n === 0;
     $("p-go").textContent = transfer
@@ -2784,6 +2841,9 @@
       }
     }
     $("pt-bar").style.width = `${100 * frac}%`;
+    // The can in work fills inside its own cell of the batch tally.
+    const seg = $("t-bar");
+    if (seg.style.setProperty) seg.style.setProperty("--now", String(frac));
     // The animation is optional: with it off the panel keeps the clock, the
     // bar and the alarm, and drops the drawing.
     $("pt-anim").classList.toggle("hidden", !P.anim);

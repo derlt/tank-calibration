@@ -197,24 +197,79 @@ class TestSitePage(unittest.TestCase):
             "out.shown = !el('tally')._classes.has('hidden');\n"
             "out.unit0 = el('t-unit').value;\n"
             "el('t-plus').click();\n"
+            "out.seg1 = el('t-bar').innerHTML;\n"
+            "out.times1 = el('t-times').innerHTML;\n"
             "el('t-unit').value = '100';\n"
             "el('t-plus').click();\n"
             "out.count = el('t-count').textContent;\n"
             "out.plus = el('t-plus').textContent;\n"
-            "out.width = el('t-bar').style.width;\n"
+            "out.seg = el('t-bar').innerHTML;\n"
+            "out.times = el('t-times').innerHTML;\n"
+            "out.done = el('t-bar').dataset.done;\n"
             "// A reload starts the size field at the last can, not the setup default.\n"
             "const p2 = stub.boot(page, corePath, store);\n"
             "out.reloaded = p2.el('t-unit').value;\n"
             "out.reloadedCount = p2.el('t-count').textContent;\n"
+            "// One can past the advice keeps its cell, in the warning colour.\n"
+            "p2.el('t-plus').click();\n"
+            "out.overSeg = p2.el('t-bar').innerHTML;\n"
+            "out.overCount = p2.el('t-count').textContent;\n"
             "console.log(JSON.stringify(out));"
         )
         self.assertTrue(got["shown"], "the tally must be visible after the session starts")
         self.assertEqual(got["unit0"], "200", "the setup default fills the size field")
-        self.assertEqual(got["count"], "2 cans · 300 L")
+        self.assertEqual(got["count"], "2 / 1 can · 300 L",
+                         "the poured can keeps its own size in the denominator")
         self.assertEqual(got["plus"], "+1 can poured (100 L)")
-        self.assertNotIn(got["width"], ("0%", ""), "the progress bar follows the advice")
+        self.assertEqual(got["seg1"].count('data-state="done"'), 1, "the first can fills its cell")
+        self.assertNotIn('data-state="now"', got["seg1"], "one can of the advice closes the batch")
+        self.assertIn('class="pill"', got["times1"], "a counted can shows its finish time")
+        self.assertRegex(got["times1"], r'class="pill">\d\d:\d\d<', "the pill carries the tap time")
+        self.assertEqual(got["seg"].count('data-state="done"'), 1, "the first can stays done")
+        self.assertEqual(got["seg"].count('data-state="over"'), 1,
+                         "a can past the advice shows in the warning colour")
+        self.assertEqual(got["times"].count('class="pill"'), 2, "each counted can keeps its time")
+        self.assertEqual(got["done"], "1", "the tally closes on the last can of the batch")
         self.assertEqual(got["reloaded"], "100", "a reload keeps the last can's size")
-        self.assertEqual(got["reloadedCount"], "2 cans · 300 L")
+        self.assertEqual(got["reloadedCount"], "2 / 1 can · 300 L")
+        self.assertEqual(got["overSeg"].count('data-state="over"'), 2,
+                         "every can past the advice shows in the warning colour")
+        self.assertEqual(got["overCount"], "3 / 1 can · 400 L")
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_tally_counts_poured_litres_at_their_own_size(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1000'; el('s-L').value = '12000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "out.count0 = el('t-count').textContent;\n"
+            "out.note0 = el('t-target').textContent;\n"
+            "el('t-plus').click();\n"
+            "out.count1 = el('t-count').textContent;\n"
+            "// A smaller can mid-batch: the poured 200 L keeps its own size, and the\n"
+            "// two 100 L cans that complete the advice are counted, not four.\n"
+            "el('t-unit').value = '100';\n"
+            "el('t-plus').click();\n"
+            "out.count2 = el('t-count').textContent;\n"
+            "out.note2 = el('t-target').textContent;\n"
+            "out.seg = el('t-bar').innerHTML;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["count0"], "0 / 2 cans · 0 L")
+        self.assertEqual(got["note0"], "Advice ≈ 400 L = 2 × 200 L (≈ 30 mm rise).")
+        self.assertEqual(got["count1"], "1 / 2 cans · 200 L")
+        self.assertEqual(got["count2"], "2 / 3 cans · 300 L",
+                         "the poured can keeps its own size in the denominator")
+        self.assertEqual(got["seg"].count('data-state="done"'), 2, "both counted cans stay done")
+        self.assertNotIn('data-state="over"', got["seg"], "the batch is not over the advice")
+        self.assertEqual(got["note2"], "Advice ≈ 400 L (≈ 30 mm rise).",
+                         "no multiplication when the cans no longer divide the advice evenly")
 
     @unittest.skipUnless(NODE, "node is not installed")
     def test_page_header_live_indicator(self):
@@ -1003,7 +1058,8 @@ class TestSitePage(unittest.TestCase):
         self.assertIn("<dt>level</dt>", s["kv"])
         self.assertEqual(s["advice"], "", "no advised next pour and no prediction for it")
         self.assertEqual(v["advice"], "")
-        self.assertRegex(s["target"], r"^Target: \d+ × 200 L$")
+        self.assertEqual(s["target"], "Target: ≈ 200 L",
+                         "one can of the advice: no multiplication to show")
         self.assertNotIn("<p>", s["verdict"], "simple mode drops the verdict message")
         self.assertIn("<h3>", s["verdict"])
         self.assertEqual(got["saved"], "simple")
@@ -2912,7 +2968,7 @@ class TestSitePlan(unittest.TestCase):
             "out.head = el('t-plan-head').textContent; out.chips = el('t-plan-chips').innerHTML;\n"
             "out.hidden = el('t-plan')._classes.has('hidden');\n"
             "out.unit0 = el('t-unit').value; out.target = el('t-target').textContent;\n"
-            "el('t-plus').click(); out.unit1 = el('t-unit').value; out.todo = el('t-chips').innerHTML;\n"
+            "el('t-plus').click(); out.unit1 = el('t-unit').value; out.todo = el('t-bar').innerHTML; out.todoLab = el('t-times').innerHTML;\n"
             "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'settings' } }) } });\n"
             "out.settings = el('set-plan').textContent;\n"
             "out.cfg = JSON.parse(store.get('calib-site:active')).config;\n"
@@ -2938,7 +2994,10 @@ class TestSitePlan(unittest.TestCase):
         self.assertEqual(got["unit0"], "200", "the batch starts with its largest can")
         self.assertTrue(got["target"].startswith("Plan: 200 + 100 L = 300 L"), got["target"])
         self.assertEqual(got["unit1"], "100", "the next tap is the 100 L can of the mix")
-        self.assertIn('class="todo">2 · 100<', got["todo"], "the planned can shows on its chip")
+        self.assertIn('data-state="now"', got["todo"], "the next planned can is the cell in work")
+        self.assertIn('aria-hidden="true">100</span>', got["todo"],
+                      "the planned can shows its size in its cell, hidden from the progressbar's name")
+        self.assertNotIn(" · ", got["todoLab"], "the tag carries no can number")
         self.assertEqual(got["settings"], "Batch plan: 2 × 300, 2 × 600, 8 × 800, 2 × 600, 2 × 300 L"
                          " · nominal 10000 L · cans 200, 100 L. Fixed at the start.")
         cfg = got["cfg"]
