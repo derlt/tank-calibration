@@ -8,6 +8,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- On-site page: a batch plan, declared on the *New campaign* card: the can
+  sizes, the nominal capacity and the batches in groups (`2 × 300 L`,
+  `8 × 800 L`, …). The page checks that each batch is a sum of the cans, that
+  the total is the nominal and that the groups are symmetric with the
+  largest in the middle. Each batch gets the fewest and largest cans. The
+  pour card shows the group in work, its batch tally (adjacent batches of
+  one group only) and the cans of the batch; the size field follows the
+  plan. Past the mid-dip the running shell counts the end of the plan again
+  for a tank larger or smaller than the nominal. Without a plan the 30 mm
+  advice stays.
 - On-site page: − and + buttons beside the can size step it by the pour
   unit (`−50 L`, `+50 L`); never below one pour unit.
 - On-site page: a drain time per can size (Timers, alarm and device): the

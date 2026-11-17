@@ -242,6 +242,9 @@
     direction: "fill",          // "fill": pour in, level rises; "drain": pump out, level falls
     brimPm: 6,                  // drain: the neck-entrance reading is the brim B ± this (2σ), mm
     brimStart: null,            // drain: B, the adopted neck-entrance reading (set by the core)
+    canSizes: null,             // [200, 100, …]: the can sizes the team has, L (batch plan)
+    nominal: null,              // nominal capacity of the tank, L (batch plan)
+    plan: null,                 // [{count, size}, …]: batch groups in pour order (batch plan)
   };
 
   /** Priors of the running fit (§10a.1); the brim prior only with a neck-entrance start. */
@@ -273,8 +276,203 @@
     cfg.dir = cfg.direction === "drain" ? -1 : 1;
     if (!(cfg.brimPm > 0)) cfg.brimPm = DEFAULTS.brimPm;
     if (cfg.brimStart != null && !isFinite(cfg.brimStart)) cfg.brimStart = null;
+    cfg.canSizes = normalizeSizes(cfg.canSizes);
+    cfg.plan = normalizePlan(cfg.plan);
+    if (!(cfg.nominal > 0)) cfg.nominal = null;
     cfg.prior = makePrior(cfg);
     return cfg;
+  }
+
+  // ---------------------------------------------------------------- batch plan (§3.4, §3.10)
+  /*
+   * A batch plan is declared before the first pour: the can sizes the team
+   * has, the nominal capacity, and groups of batches [{count, size}] in pour
+   * order (a fill from the bottom up, a drain from the top down).  A batch is
+   * one level: its cans, then one dip.  A batch size is not a can size: a
+   * 600 L batch with 200 L cans is 3 cans.  The plan is symmetric about the
+   * mid-dip level: the small batches at the bottom and the top, the largest
+   * in the middle, and its total is the nominal capacity (checkPlan).
+   *
+   * The real tank can hold more or less than the nominal.  So once the level
+   * is past the mid-dip, the running shell counts the batches that are still
+   * to come again (planState): only the end of the campaign may break the
+   * symmetry.  Each level records the plan group it was poured for, so the
+   * batch tally counts the adjacent batches of one group only: the small
+   * batches at the bottom and at the top are two groups, never one.
+   */
+
+  /** The can sizes, largest first, without repeats; null when none. */
+  function normalizeSizes(list) {
+    if (list == null || list === "") return null;
+    const raw = Array.isArray(list) ? list : String(list).split(/[,;\s]+/);
+    const out = [];
+    for (const x of raw) {
+      if (x === "" || x == null) continue;
+      const u = Number(String(x).replace(",", "."));
+      if (!(u > 0)) throw new Error("a can size must be more than 0 L");
+      if (!out.some((v) => Math.abs(v - u) < 1e-9)) out.push(u);
+    }
+    out.sort((a, b) => b - a);
+    return out.length ? out : null;
+  }
+
+  /**
+   * The groups of a plan: [{count, size}] in pour order, or "4:300, 2:600".
+   * Adjacent groups of one size merge: the tally counts them as one group.
+   */
+  function normalizePlan(plan) {
+    if (plan == null || plan === "") return null;
+    let list = plan;
+    if (typeof plan === "string") {
+      list = plan.split(/[,;]+/).map((t) => t.trim()).filter(Boolean).map((t) => {
+        const m = t.match(/^(\d+)\s*[:x×*]\s*([0-9.]+)\s*L?$/i);
+        if (!m) throw new Error(`cannot read the batch group ${JSON.stringify(t)}: write count:size, for example 4:300`);
+        return { count: Number(m[1]), size: Number(m[2]) };
+      });
+    }
+    if (!Array.isArray(list)) throw new Error("the batch plan is a list of groups: count × size");
+    const out = [];
+    for (const g of list) {
+      const count = Number(g && g.count), size = Number(g && g.size);
+      if (!(Number.isInteger(count) && count >= 1)) throw new Error("a batch count must be a whole number, 1 or more");
+      if (!(size > 0)) throw new Error("a batch size must be more than 0 L");
+      const last = out[out.length - 1];
+      if (last && Math.abs(last.size - size) < 1e-9) last.count += count;
+      else out.push({ count, size });
+    }
+    return out.length ? out : null;
+  }
+
+  /**
+   * The cans for one batch: the fewest cans, and among those the largest
+   * cans, so the pump and the carry take the least time.  Exact sums only:
+   * a pour lives on the can grid (§3.10).  [{unit, count}], largest first,
+   * or null when no mix of the sizes gives the volume.
+   */
+  function canMix(V, sizes) {
+    const list = (normalizeSizes(sizes) || []);
+    const q = (x) => Math.round(Number(x) * 1000);   // mL: exact sums of decimal sizes
+    const target = q(V), us = list.map(q);
+    if (!(target > 0) || !us.length) return null;
+    const counts = us.map(() => 0);
+    let best = null, steps = 0;
+    // Depth first, the largest can first and most of it first: the first mix
+    // found with the fewest cans is also the one with the largest cans.
+    (function walk(i, rem, used) {
+      if (++steps > 200000) return;
+      if (rem === 0) { if (!best || used < best.n) best = { n: used, counts: counts.slice() }; return; }
+      if (i >= us.length) return;
+      if (best && used + Math.ceil(rem / us[i]) >= best.n) return;
+      for (let c = Math.floor(rem / us[i]); c >= 0; c--) {
+        counts[i] = c;
+        walk(i + 1, rem - c * us[i], used + c);
+      }
+      counts[i] = 0;
+    })(0, target, 0);
+    if (!best) return null;
+    return list.map((unit, i) => ({ unit, count: best.counts[i] })).filter((c) => c.count > 0);
+  }
+
+  /** "4 × 200", "200 + 100", "2 × 200 + 100": the numbers of a mix, without the unit. */
+  function mixText(mix) {
+    return (mix || []).map((c) => (c.count === 1 ? fmtL(c.unit) : `${c.count} × ${fmtL(c.unit)}`)).join(" + ");
+  }
+  /** The can sizes of a mix one by one, in tap order: largest first. */
+  function mixCans(mix) {
+    const out = [];
+    for (const c of mix || []) for (let i = 0; i < c.count; i++) out.push(c.unit);
+    return out;
+  }
+  function fmtL(x) { return String(round(Number(x), 3)); }
+
+  /**
+   * The setup check of a plan (the page refuses to start a campaign on a
+   * plan with errors): every batch is a sum of the cans, the total is the
+   * nominal capacity, and the groups mirror about the middle with the
+   * largest in the middle.
+   */
+  function checkPlan(plan, sizes, nominal) {
+    const groups = normalizePlan(plan) || [];
+    const cans = normalizeSizes(sizes);
+    const errors = [];
+    let total = 0, batches = 0;
+    const out = groups.map((g, i) => {
+      const mix = cans ? canMix(g.size, cans) : null;
+      if (cans && !mix) errors.push(`Group ${i + 1}: ${fmtL(g.size)} L is not a sum of the can sizes.`);
+      total += g.count * g.size; batches += g.count;
+      return { count: g.count, size: g.size, mix };
+    });
+    const n = groups.length;
+    let symmetric = true;
+    for (let i = 0; i < n / 2; i++) {
+      const a = groups[i], b = groups[n - 1 - i];
+      if (a.count !== b.count || Math.abs(a.size - b.size) > 1e-9) symmetric = false;
+    }
+    let m = 0;
+    for (let i = 1; i < n; i++) if (groups[i].size > groups[m].size) m = i;
+    let peaked = true;
+    for (let i = 1; i < n; i++) if (i <= m ? groups[i].size < groups[i - 1].size : groups[i].size > groups[i - 1].size) peaked = false;
+    const nom = nominal > 0 ? Number(nominal) : null;
+    const diff = nom ? total - nom : null;
+    // Sentences: the page shows them as they are.
+    if (n) {
+      if (!cans) errors.push("Enter the can sizes.");
+      if (!nom) errors.push("Enter the nominal capacity.");
+      else if (Math.abs(diff) > 0.5) errors.push(`The batches add up to ${fmtL(total)} L, not the nominal ${fmtL(nom)} L (${sgn(diff, 0)} L).`);
+      if (!symmetric) errors.push("The plan is not symmetric: the groups above the middle must mirror the groups below it.");
+      if (!peaked) errors.push("The largest batches belong in the middle, the smallest at the bottom and the top.");
+    }
+    return { groups: out, total, batches, nominal: nom, diff, symmetric, peaked, errors, ok: !errors.length };
+  }
+
+  /**
+   * Where the campaign stands in its plan.  hist: the plan group of each
+   * batch poured so far, in order.  R: the litres the running shell says
+   * are left (fill: the gap to the brim; drain: the liquid left).  adapt:
+   * the level is past the mid-dip, so the shell counts the end again.
+   *
+   * The count changes land on the middle (largest) group while it is still
+   * to come, else on the group in work; the groups after it keep their
+   * counts, so the small batches stay at the end.  The last group takes as
+   * many batches as the gap needs: a fill reaches the brim (the planned
+   * overflow pour, §3.7), a drain the bottom.  Without adapt the plan is as
+   * declared; a campaign that runs past it goes on with the last size.
+   *
+   * -> { groups: [{size, planned, count, done}], next (group index or
+   *    null when the plan is complete), adapted, total, poured }
+   */
+  function planState(plan, hist, R, adapt) {
+    const G = (plan || []).map((g) => ({ size: g.size, planned: g.count, count: g.count, done: 0 }));
+    if (!G.length) return null;
+    for (const gi of hist) if (G[gi]) G[gi].done++;
+    const g = hist.length ? Math.min(hist[hist.length - 1], G.length - 1) : 0;
+    const last = G.length - 1;
+    if (adapt && R != null && isFinite(R)) {
+      let m = 0;
+      for (let i = 1; i < G.length; i++) if (G[i].size > G[m].size) m = i;
+      const f0 = Math.max(g, m);
+      let avail = R;
+      for (let i = g; i < f0; i++) avail -= Math.max(0, G[i].count - G[i].done) * G[i].size;
+      for (let f = f0; f <= last; f++) {
+        let tail = 0;
+        for (let i = f + 1; i <= last; i++) tail += G[i].count * G[i].size;
+        const want = f === last ? Math.ceil(avail / G[f].size - 1e-9) : Math.round((avail - tail) / G[f].size);
+        const n = Math.max(0, want);
+        G[f].count = G[f].done + n;
+        avail -= n * G[f].size;
+        if (want >= 0 && f < last) break;   // the tail fits: it keeps its counts
+      }
+    } else if (hist.length >= G.reduce((a, x) => a + x.count, 0)) {
+      G[last].count = G[last].done + 1;    // past the plan: go on with the last size
+    }
+    let next = null;
+    for (let f = g; f <= last; f++) if (G[f].done < G[f].count) { next = f; break; }
+    return {
+      groups: G, next,
+      adapted: G.some((x) => x.count !== x.planned),
+      total: G.reduce((a, x) => a + Math.max(x.count, x.done), 0),
+      poured: hist.length,
+    };
   }
 
   // ---------------------------------------------------------------- step cells (§3.9)
@@ -467,8 +665,100 @@
       note: o.note || "", tags: [], overflow: !!o.overflow, H: null, n: 0,
     };
     if (o.neck) L.neck = true;
+    // The plan group this batch is for: the batch tally counts by it.  A
+    // level in the neck is outside the plan (the plan is the shell).
+    else if (this.cfg.plan) L.plan = planPick(o.plan || this.planNow());
     this.levels.push(L);
     return L;
+  };
+
+  /** The plan group a new batch takes: the next one, or the last group past the plan. */
+  function planPick(st) {
+    if (!st) return null;
+    const gi = st.next != null ? st.next : st.groups.length - 1;
+    return { group: gi, size: st.groups[gi].size };
+  }
+
+  /** The plan group of each batch poured so far, in order. */
+  Session.prototype._planHist = function () {
+    const out = [];
+    for (const L of this.levels) if (!L.start && L.plan && L.plan.group != null) out.push(L.plan.group);
+    return out;
+  };
+
+  /**
+   * The litres the running shell says are left for the plan, from the last
+   * good level and the pour that waits for its dip: a fill counts the gap to
+   * the brim, a drain the liquid left.  past: the level is past the mid-dip.
+   */
+  Session.prototype._planRoom = function () {
+    const gi = this.lastGood();
+    if (gi < 0 || !this.fit) return null;
+    const p = this.fit.p, cap = capacity(p), dir = this.cfg.dir;
+    let V = volume(this.levels[gi].H, p);
+    const cur = this.current();
+    if (cur && cur.state === "pending" && !cur.start && cur.from === gi) {
+      V += dir * (cur.step.kind === "known" ? cur.step.value : cur.step.base || 0);
+    }
+    return { R: dir > 0 ? cap - V : V, past: dir > 0 ? V >= cap / 2 : V <= cap / 2, capacity: cap };
+  };
+
+  /** The can sizes of the plan: the declared ones, else the pour unit. */
+  function planSizes(cfg) {
+    return cfg.canSizes || (cfg.pourUnit > 0 ? [cfg.pourUnit] : null);
+  }
+
+  /**
+   * The plan now, for the page and the advice: planState plus, for the next
+   * batch, its group number among the groups left, its place in the group,
+   * its cans (the fewest, the largest) and the batch number in all.
+   * null without a plan or before the first level.
+   */
+  Session.prototype.planNow = function () {
+    if (!this.cfg.plan) return null;
+    const room = this._planRoom();
+    if (!room) return null;
+    return this._planView(planState(this.cfg.plan, this._planHist(), room.R, room.past), room);
+  };
+
+  Session.prototype._planView = function (st, room) {
+    if (!st) return null;
+    // Groups keep their declared numbers, also when the end of the plan
+    // drops one: the operator reads the same number all campaign long.
+    st.R = room ? room.R : null;
+    st.past = room ? room.past : false;
+    st.capacity = room ? room.capacity : null;
+    st.nominal = this.cfg.nominal;
+    if (st.next != null) {
+      const g = st.groups[st.next], mix = canMix(g.size, planSizes(this.cfg));
+      st.batch = {
+        group: st.next, number: st.next + 1, groups: st.groups.length,
+        size: g.size, inGroup: g.done + 1, count: g.count, planned: g.planned,
+        index: st.poured + 1, mix, cans: mix ? mix.reduce((a, c) => a + c.count, 0) : null,
+      };
+    } else st.batch = null;
+    return st;
+  };
+
+  /**
+   * The rest of the plan as the running shell sees it now, adapted whether
+   * or not the level is past the mid-dip: the time estimate (fillPlan) walks
+   * it.  -> [{size, mix}] from the next batch on.
+   */
+  Session.prototype._planList = function (st) {
+    const out = [], sizes = planSizes(this.cfg);
+    if (!st || st.next == null) return out;
+    for (let f = st.next; f < st.groups.length; f++) {
+      const g = st.groups[f], mix = canMix(g.size, sizes);
+      for (let k = g.done; k < g.count; k++) out.push({ size: g.size, mix });
+    }
+    return out;
+  };
+  Session.prototype.planProjection = function () {
+    if (!this.cfg.plan) return null;
+    const room = this._planRoom();
+    if (!room) return null;
+    return this._planList(planState(this.cfg.plan, this._planHist(), room.R, true));
   };
 
   // ---- batch: several cans, then one dip (§3.10).  One tap per can, so the
@@ -1108,13 +1398,21 @@
     const cap = capacity(p), half = 0.5 * cap;
     let V = volume(this.levels[gi].H, p), t = 0, open = 0;
     const cur = this.current();
-    if (cur && cur.state === "pending" && !cur.start) {
+    const pend = cur && cur.state === "pending" && !cur.start;
+    if (pend) {
       // The pour is in; the settle and the dip are still to come.
       if (cur.step.kind === "known") V = volume(this.levels[cur.from].H, p) + dir * cur.step.value;
       else if (cur.step.kind === "partial") V = volume(this.levels[cur.from].H, p) + dir * cur.step.base;
       const spent = cur.pourTime && o.now ? (o.now - cur.pourTime) / 1000 : 0;
       t = Math.max(0, settle - spent) + dipS;
-    } else if (this.batch || o.open) {
+    }
+    // With a plan the levels are the plan's batches, each in its own cans.
+    // A transfer gives its shared plan (o.planList).
+    const list = o.planList || this.planProjection();
+    if (list) {
+      return this._fillPlanBatches(list, Object.assign({}, o, { size, pourS, settle, dipS, V, t, dir, cap, half }));
+    }
+    if (!pend && (this.batch || o.open)) {
       // A transfer keeps the open tally on the drain session; the fill
       // session sees the same litres through o.open.
       V += dir * (this.batch ? this.batchVolume() : o.open.volume);
@@ -1163,6 +1461,43 @@
     return Object.assign(base, { half: atHalf, brim: atBrim });
   };
 
+  /**
+   * fillPlan with a batch plan: one level per batch still to come, each
+   * with the cans of its mix and the cycle time of each can size
+   * (o.cycleFor(size) s, else the time of the size in the panel).  The cans
+   * already tapped belong to the first batch.  m.cans counts cans of mixed
+   * sizes (mixed: true).
+   */
+  Session.prototype._fillPlanBatches = function (list, o) {
+    const p = this.fit.p, drain = o.dir < 0;
+    const cyc = (u) => { const s = o.cycleFor ? o.cycleFor(u) : null; return s > 0 ? s : o.pourS; };
+    const openUnits = this.batch ? this.batch.cans.map((c) => c.u)
+      : o.open ? (o.open.units || Array.from({ length: o.open.cans || 0 }, () => o.size)) : [];
+    let V = o.V, t = o.t - Math.min(Math.max(o.pourElapsed || 0, 0), o.pourS), levels = 0, cans = 0;
+    const start = { volume: V, seconds: t };
+    const mark = (lv, cn) => ({ seconds: Math.max(0, t), levels: lv, cans: cn, volume: V });
+    const endV = drain ? Math.max(0.05 * o.cap, volume(p.h0 + 60, p)) : null;
+    const reached = () => (drain ? V <= endV + 1e-6 : V >= o.cap - 1e-6);
+    const halfway = () => (drain ? V <= o.half : V >= o.half);
+    let atHalf = halfway() ? Object.assign(mark(0, 0), { done: true }) : null;
+    let atEnd = reached() ? Object.assign(mark(0, 0), { done: true }) : null;
+    let first = true;
+    for (const b of list) {
+      if (atEnd) break;
+      const units = b.mix ? mixCans(b.mix) : Array.from({ length: Math.max(1, Math.ceil(b.size / o.size - 1e-9)) }, () => o.size);
+      if (first) {
+        for (const u of openUnits) { const k = units.indexOf(u); units.splice(k >= 0 ? k : units.length - 1, 1); }
+        first = false;
+      }
+      V += o.dir * b.size; levels++; cans += units.length;
+      t += units.reduce((a, u) => a + cyc(u), 0) + o.settle + o.dipS;
+      if (!atHalf && halfway()) atHalf = mark(levels, cans);
+      if (reached()) atEnd = mark(levels, cans);
+    }
+    const base = { size: o.size, cycleSeconds: o.pourS, settleSeconds: o.settle, dipSeconds: o.dipS, start, capacity: o.cap, mixed: true };
+    return Object.assign(base, drain ? { half: atHalf, end: atEnd, brim: null, endVolume: endV } : { half: atHalf, brim: atEnd });
+  };
+
   /** Pour advisor and brim watch (§3.4, §10). */
   Session.prototype._advise = function (verdict, L) {
     const a = L.neck ? this.advice(L.H) : this.adviceNext(L.H, L.n);
@@ -1198,20 +1533,51 @@
     if (cfg.dir < 0) return this._adviceDrain(H, m, gap, toBrim);
     let target = 30 * m;
     const halve = gap < 0.05 * capacity(p) || toBrim < 60;
-    if (halve) target /= 2;
+    const pb = this._planBatch();
+    if (halve && !pb) target /= 2;
     let units = null;
     if (cfg.pourUnit) { units = Math.max(1, Math.round(target / cfg.pourUnit)); target = units * cfg.pourUnit; }
     const sdB = Math.sqrt(Math.max(this.fit.cov ? 4 * this.fit.cov[0][0] + 4 * this.fit.cov[0][2] + this.fit.cov[2][2] : 0, 0));
     // warn: the warning alone, without the advised pour (the Now card shows it).
-    const warn = halve ? `Near the brim (≈ ${fmt(toBrim, 0)} mm, gap ≈ ${fmt(gap, 0)} L): halve the pour.` : "";
-    return {
+    // With a plan the batch size is the plan's: the brim watch only warns.
+    const warn = !halve ? "" : pb ? `Near the brim (≈ ${fmt(toBrim, 0)} mm, gap ≈ ${fmt(gap, 0)} L): keep to the small batches.`
+      : `Near the brim (≈ ${fmt(toBrim, 0)} mm, gap ≈ ${fmt(gap, 0)} L): halve the pour.`;
+    const a = {
       slope: m, target, units, floor: 15 * m, ceiling: 100 * m, halve,
       gap, toBrim, brim: brim(p), brimSd: sdB, capacity: capacity(p), warn,
       text: (warn ? warn + " " : "")
         + `Next pour ≈ ${fmt(target, 0)} L` + (units ? ` = ${units} × ${cfg.pourUnit} L` : "")
         + ` (≈ ${fmt(target / Math.max(m, 1e-3), 0)} mm rise).`,
     };
+    return pb ? planAdvice(a, pb, warn, "rise", H, p, 1) : a;
   };
+
+  /** The plan's next batch, or null (no plan, or the plan is complete). */
+  Session.prototype._planBatch = function () {
+    const st = this.planNow();
+    return st && st.batch ? Object.assign({ state: st }, st.batch) : null;
+  };
+
+  /**
+   * The advice with a plan: the recommended batch is the plan's next batch,
+   * in the cans of its mix.  The 30 mm rule of §3.4 stays as a check: a
+   * batch below the 15 mm floor or above 100 mm of travel gets a note.
+   */
+  function planAdvice(a, pb, warn, word, H, p, dir) {
+    // The travel of the whole batch on the shell, not the local slope: near
+    // the bottom of a fill the slope is almost 0.
+    const V0 = volume(H, p), cap = capacity(p);
+    const mm = dir > 0 ? levelFor(Math.min(V0 + pb.size, cap), p) - H : H - levelFor(Math.max(V0 - pb.size, 0), p);
+    const note = mm < 15 ? ` ${fmt(pb.size, 0)} L gives only ≈ ${fmt(mm, 0)} mm here: below the 15 mm floor, dip noise dominates (§7.1).`
+      : mm > 100 ? ` ${fmt(pb.size, 0)} L gives ≈ ${fmt(mm, 0)} mm here: above 100 mm, shape detail is lost (§3.4).` : "";
+    return Object.assign(a, {
+      target: pb.size, units: null, plan: pb, mix: pb.mix, cans: pb.cans, travel: mm, riseNote: note.trim(),
+      text: (warn ? warn + " " : "")
+        + `Batch ${pb.index} of ${pb.state.total}: ${fmt(pb.size, 0)} L`
+        + (pb.mix ? ` = ${mixText(pb.mix)} L` : "")
+        + ` (≈ ${fmt(mm, 0)} mm ${word}).` + note,
+    });
+  }
 
   /**
    * Drain advisor: the same 30 mm target, no halving (the brim is behind
@@ -1223,17 +1589,19 @@
     let target = 30 * m;
     let units = null;
     if (cfg.pourUnit) { units = Math.max(1, Math.round(target / cfg.pourUnit)); target = units * cfg.pourUnit; }
-    const after = levelFor(left - target, p);
+    const pb = this._planBatch();
+    const after = levelFor(left - (pb ? pb.size : target), p);
     const bottom = after - p.h0 < 60 || left < 0.05 * cap;
     const sdB = Math.sqrt(Math.max(this.fit.cov ? 4 * this.fit.cov[0][0] + 4 * this.fit.cov[0][2] + this.fit.cov[2][2] : 0, 0));
     const warn = bottom ? `Near the bottom (≈ ${fmt(toBottom, 0)} mm, ≈ ${fmt(left, 0)} L left): the pump may lose suction; a part can is fine (N+?).` : "";
-    return {
+    const a = {
       slope: m, target, units, floor: 15 * m, ceiling: 100 * m, halve: false, bottom,
       gap, toBrim, brim: brim(p), brimSd: sdB, capacity: cap, left, toBottom, warn,
       text: (warn ? warn + " " : "")
         + `Next drain ≈ ${fmt(target, 0)} L` + (units ? ` = ${units} × ${cfg.pourUnit} L` : "")
         + ` (≈ ${fmt(target / Math.max(m, 1e-3), 0)} mm fall).`,
     };
+    return pb ? planAdvice(a, pb, warn, "fall", H, p, -1) : a;
   };
 
   /** Drift and closure with the running fit (§2, §9.3). */
@@ -1454,10 +1822,36 @@
   TransferSession.prototype.pour = function (stepText, opts) {
     this._guard();
     const o = opts || {};
-    const Lo = this.out.pour(stepText, { neck: !!o.neck, note: o.note });
-    const Li = this.in.pour(stepText, { overflow: !!o.overflow, note: o.note });
+    const plan = this.planNow() || undefined;
+    const Lo = this.out.pour(stepText, { neck: !!o.neck, note: o.note, plan });
+    const Li = this.in.pour(stepText, { overflow: !!o.overflow, note: o.note, plan });
     this._pair();
     return Lo;
+  };
+
+  /**
+   * The shared batch plan: tank A's history of batches, and the litres left
+   * by the tighter tank (A's liquid or B's gap): the campaign ends when A is
+   * empty or B is full, whichever comes first.  Past the mid-dip when
+   * either tank is.
+   */
+  TransferSession.prototype._planRoom = function () {
+    const a = this.out._planRoom(), b = this.in._planRoom();
+    if (!a || !b) return null;
+    const room = a.R <= b.R ? a : b;
+    return { R: room.R, past: a.past || b.past, capacity: room.capacity };
+  };
+  TransferSession.prototype.planNow = function () {
+    if (!this.out.cfg.plan) return null;
+    const room = this._planRoom();
+    if (!room) return null;
+    return this.out._planView(planState(this.out.cfg.plan, this.out._planHist(), room.R, room.past), room);
+  };
+  TransferSession.prototype.planProjection = function () {
+    if (!this.out.cfg.plan) return null;
+    const room = this._planRoom();
+    if (!room) return null;
+    return this.out._planList(planState(this.out.cfg.plan, this.out._planHist(), room.R, true));
   };
 
   // The shared can tally lives on the drain session (the pump fills the cans).
@@ -1473,8 +1867,9 @@
   TransferSession.prototype.closeBatch = function (opts) {
     this._guard();
     const o = opts || {};
-    const Lo = this.out.closeBatch({ partial: o.partial, neck: o.neck, note: o.note });
-    const Li = this.in.pour(Lo.step.text, { overflow: !!o.overflow, note: o.note });
+    const plan = this.planNow() || undefined;
+    const Lo = this.out.closeBatch({ partial: o.partial, neck: o.neck, note: o.note, plan });
+    const Li = this.in.pour(Lo.step.text, { overflow: !!o.overflow, note: o.note, plan });
     Li.cans = {
       tapped: Lo.cans.tapped, unit: Lo.cans.unit, partial: Lo.cans.partial,
       taps: Lo.cans.taps.slice(), units: Lo.cans.units.slice(),
@@ -1611,6 +2006,9 @@
     const unit = this.out.cfg.pourUnit;
     let target = Math.min(aO.target, aI.target), units = null;
     if (unit) { units = Math.max(1, Math.round(target / unit)); target = units * unit; }
+    // With a plan the batch is the plan's next batch, for both tanks.
+    const st = this.planNow(), pb = st && st.batch ? Object.assign({ state: st }, st.batch) : null;
+    if (pb) { target = pb.size; units = null; }
     // Where both next dips must land after the advised batch (§10a.2).
     const GO = this.out.levels[giO], GI = this.in.levels[giI];
     const prO = GO.neck ? null : this.out.preview(GO.H, target, GO.n);
@@ -1621,12 +2019,16 @@
     const eI = prI.overflow ? "B reaches the neck" : `B ≈ ${fmt(prI.H, 1)} ± ${fmt(2 * prI.sd, 1)} mm`;
     const warn = ((aI.halve ? `Tank B near the brim (≈ ${fmt(aI.toBrim, 0)} mm): small batches. ` : "")
       + (aO.bottom ? `Tank A near the bottom (≈ ${fmt(aO.toBottom, 0)} mm): the pump may lose suction; a part can is fine. ` : "")).trim();
+    const mmO = target / Math.max(aO.slope, 1e-3), mmI = target / Math.max(aI.slope, 1e-3);
+    const head = pb ? `Batch ${pb.index} of ${st.total}: ${fmt(target, 0)} L` + (pb.mix ? ` = ${mixText(pb.mix)} L` : "")
+      : `Next batch ≈ ${fmt(target, 0)} L` + (units ? ` = ${units} × ${fmt(unit, 0)} L` : "");
     return {
       target, units, out: aO, in: aI, halve: aI.halve, bottom: aO.bottom,
+      plan: pb, mix: pb ? pb.mix : null, cans: pb ? pb.cans : null,
       expect: { out: prO, in: prI }, warn,
       text: (warn ? warn + " " : "")
-        + `Next batch ≈ ${fmt(target, 0)} L` + (units ? ` = ${units} × ${fmt(unit, 0)} L` : "")
-        + ` (≈ ${fmt(target / Math.max(aO.slope, 1e-3), 0)} mm out of A, ≈ ${fmt(target / Math.max(aI.slope, 1e-3), 0)} mm into B).`
+        + head
+        + ` (≈ ${fmt(mmO, 0)} mm out of A, ≈ ${fmt(mmI, 0)} mm into B).`
         + ` Expect the next dips at ${eO} · ${eI} (2σ).`,
     };
   };
@@ -1868,6 +2270,7 @@
     area, volume, slope, capacity, brim, levelFor, fitShell, predictLevel, parseStep,
     resolveConfig, Session, TransferSession, DEFAULTS, adopt, canHint, NAMES, replayRows,
     readRawText, detectDirection, makePrior, levelTimes, clock,
+    canMix, mixText, mixCans, checkPlan, planState, normalizePlan, normalizeSizes,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.CalibSite = api;

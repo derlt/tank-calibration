@@ -2500,5 +2500,281 @@ class TestSiteCore(unittest.TestCase):
         self.assertLessEqual(got["falseAlarm"], 0.01)
 
 
+# A planned campaign on a synthetic tank: nominal 10 000 L, cans 200 L and
+# 100 L.  Each batch takes the cans of its mix; every dip is exact.
+PLAN_JS = r"""
+const GROUPS = [{count: 2, size: 300}, {count: 2, size: 600}, {count: 8, size: 800},
+  {count: 2, size: 600}, {count: 2, size: 300}];
+function planned(P, o) {
+  const cfg = Object.assign({D: 2 * P.r, Dpm: 50, Lest: P.L, h0pm: 5, pourUnit: 100,
+    canSizes: [200, 100], nominal: 10000, plan: GROUPS}, o || {});
+  const s = new core.Session(cfg);
+  const cap = core.capacity(P), drain = cfg.direction === 'drain';
+  let V = drain ? cap : 50, t = 0;
+  s.start(drain ? '?' : '50', core.levelFor(V, P)); s.dip(core.levelFor(V, P));
+  const log = [];
+  for (let k = 0; k < 40; k++) {
+    const st = s.planNow();
+    if (!st.batch) break;
+    const b = st.batch, a = s.advice(s.levels[s.lastGood()].H);
+    log.push({group: b.group, inGroup: b.inGroup, count: b.count, planned: b.planned, size: b.size,
+      target: a.target, text: a.text, cans: core.mixCans(b.mix), past: st.past, total: st.total});
+    for (const u of core.mixCans(b.mix)) s.tap(++t * 30000, u);
+    V += (drain ? -1 : 1) * b.size;
+    const end = drain ? V <= 0 : V >= cap;
+    s.closeBatch(drain ? {partial: end} : {overflow: end});
+    const H = core.levelFor(Math.min(Math.max(V, 0), cap), P);
+    let n = 0;
+    while (s.current().state === 'pending' && n < 4) { s.dip(H); n++; }
+    if (end) break;
+  }
+  return {s, log, cap};
+}
+"""
+
+
+class TestSitePlan(unittest.TestCase):
+    """The batch plan: cans per batch, the setup check, and the end of the plan (§3.4, §3.10)."""
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_can_mix_fewest_then_largest(self):
+        got = _node(
+            "const m = (v, s) => core.canMix(v, s);\n"
+            "console.log(JSON.stringify({\n"
+            "  a: m(300, [200, 100]), b: m(300, [150, 100]), c: m(800, [200, 100]),\n"
+            "  tie: m(300, [200, 150, 100]), none: m(250, [200, 100]), half: m(2.5, [1, 0.5]),\n"
+            "  text: core.mixText(m(500, [200, 100])), cans: core.mixCans(m(500, [200, 100])),\n"
+            "}));"
+        )
+        self.assertEqual(got["a"], [{"unit": 200, "count": 1}, {"unit": 100, "count": 1}])
+        self.assertEqual(got["b"], [{"unit": 150, "count": 2}], "a 150 L can: 2 cans, not 3")
+        self.assertEqual(got["c"], [{"unit": 200, "count": 4}])
+        self.assertEqual(got["tie"], [{"unit": 200, "count": 1}, {"unit": 100, "count": 1}],
+                         "two cans either way: the largest can wins")
+        self.assertIsNone(got["none"], "a batch lives on the can grid")
+        self.assertEqual(got["half"], [{"unit": 1, "count": 2}, {"unit": 0.5, "count": 1}])
+        self.assertEqual(got["text"], "2 × 200 + 100")
+        self.assertEqual(got["cans"], [200, 200, 100], "tap order: the largest first")
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_check_plan(self):
+        got = _node(
+            "const G = [{count: 2, size: 300}, {count: 2, size: 600}, {count: 8, size: 800},"
+            " {count: 2, size: 600}, {count: 2, size: 300}];\n"
+            "const c = (p, s, n) => core.checkPlan(p, s, n);\n"
+            "console.log(JSON.stringify({\n"
+            "  ok: c(G, [200, 100], 10000),\n"
+            "  text: c('2:300, 2:600, 8:800, 2:600, 2:300', [200, 100], 10000).ok,\n"
+            "  merged: core.normalizePlan('2:300, 1:300, 4:800'),\n"
+            "  sum: c(G, [200, 100], 10500).errors,\n"
+            "  sym: c('2:300, 8:800, 3:300', [200, 100], 7900).errors,\n"
+            "  peak: c('2:800, 2:300, 2:800', [200, 100], 3800).errors,\n"
+            "  grid: c(G, [200], 10000).errors,\n"
+            "  none: c(null, null, null),\n"
+            "}));"
+        )
+        ok = got["ok"]
+        self.assertTrue(ok["ok"], ok["errors"])
+        self.assertEqual((ok["batches"], ok["total"], ok["diff"]), (16, 10000, 0))
+        self.assertTrue(got["text"], "count:size, as the operator writes 4:300")
+        self.assertEqual(got["merged"], [{"count": 3, "size": 300}, {"count": 4, "size": 800}],
+                         "adjacent groups of one size are one group")
+        self.assertEqual(got["sum"], ["The batches add up to 10000 L, not the nominal 10500 L (−500 L)."])
+        self.assertEqual(len(got["sym"]), 1)
+        self.assertIn("not symmetric", got["sym"][0])
+        self.assertEqual(len(got["peak"]), 1)
+        self.assertIn("largest batches belong in the middle", got["peak"][0])
+        self.assertEqual(got["grid"], ["Group 1: 300 L is not a sum of the can sizes.",
+                                       "Group 5: 300 L is not a sum of the can sizes."])
+        self.assertTrue(got["none"]["ok"], "no plan: nothing to check")
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_plan_state_counts_the_end_again(self):
+        got = _node(
+            "const G = [{count: 2, size: 300}, {count: 2, size: 600}, {count: 8, size: 800},"
+            " {count: 2, size: 600}, {count: 2, size: 300}];\n"
+            "const hist = [0, 0, 1, 1, 2, 2, 2, 2, 2, 2];   // 6 of the 8 middle batches poured\n"
+            "const counts = (R, adapt, h) => { const s = core.planState(G, h || hist, R, adapt);"
+            " return {c: s.groups.map((g) => g.count), next: s.next}; };\n"
+            "const top = [0, 0, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 4];\n"
+            "console.log(JSON.stringify({\n"
+            "  asPlanned: counts(4200 - 800, true), larger: counts(4200, true), smaller: counts(3400 - 800, true),\n"
+            "  before: counts(4200, false), tiny: counts(500, true), full: counts(0, true),\n"
+            "  lastGroup: counts(900, true, top), past: counts(null, false, top.concat([4])),\n"
+            "  first: counts(9000, false, []),\n"
+            "}));"
+        )
+        self.assertEqual(got["asPlanned"]["c"], [2, 2, 8, 2, 2])
+        self.assertEqual(got["larger"]["c"], [2, 2, 9, 2, 2], "a larger tank: one more middle batch")
+        self.assertEqual(got["smaller"]["c"], [2, 2, 7, 2, 2], "a smaller tank: one less")
+        self.assertEqual(got["before"]["c"], [2, 2, 8, 2, 2], "before the mid-dip the plan stands")
+        self.assertEqual(got["tiny"]["c"], [2, 2, 6, 0, 2], "the small top batches stay to the end")
+        self.assertEqual(got["tiny"]["next"], 4)
+        self.assertIsNone(got["full"]["next"], "no room left: the plan is complete")
+        self.assertEqual(got["lastGroup"]["c"], [2, 2, 8, 2, 4], "the last group fills the gap")
+        self.assertEqual(got["past"]["c"][4], 3, "past the plan: on with the last size")
+        self.assertEqual(got["first"]["next"], 0)
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_planned_fill_on_a_larger_tank(self):
+        got = _node(
+            PLAN_JS
+            + "const r = planned({r: 1000, L: 3374, h0: 0});\n"
+            "const s = r.s, s2 = core.Session.fromJSON(JSON.parse(JSON.stringify(s.toJSON())));\n"
+            "console.log(JSON.stringify({log: r.log, cap: r.cap,"
+            " levels: s.levels.slice(1).map((L) => L.plan && L.plan.group),"
+            " poured: s.levels.slice(1).reduce((a, L) => a + (L.step.value || 0), 0),"
+            " reload: [s2.planNow().poured, s2.planNow().total, s2.cfg.plan.length, s2.cfg.nominal],"
+            " now: [s.planNow().poured, s.planNow().total]}));"
+        )
+        log = got["log"]
+        self.assertGreater(got["cap"], 10500, "the tank holds more than the nominal")
+        for e in log:
+            self.assertEqual(e["target"], e["size"], "the recommended batch is the plan's batch")
+            self.assertIn(f"Batch {log.index(e) + 1} of {e['total']}: ", e["text"])
+            if not e["past"]:
+                self.assertEqual(e["count"], e["planned"], "before the mid-dip the plan stands")
+        self.assertEqual(log[0]["cans"], [200, 100])
+        self.assertEqual(log[4]["cans"], [200, 200, 200, 200])
+        groups = [e["group"] for e in log]
+        self.assertEqual(groups, sorted(groups), "the groups follow in order")
+        self.assertEqual(got["levels"], groups, "each level records its plan group")
+        top = [e["inGroup"] for e in log if e["group"] == 4]
+        self.assertEqual(top[0], 1, "the top 300 L group counts its own batches, not the bottom ones")
+        self.assertEqual(top, list(range(1, len(top) + 1)))
+        self.assertGreater(sum(1 for e in log), 16, "a larger tank takes more batches than the plan")
+        self.assertEqual(log[-1]["size"], 300, "the small batches stay at the top")
+        self.assertGreaterEqual(got["poured"] + 50, got["cap"], "the campaign reaches the brim")
+        self.assertEqual(got["reload"][:2], got["now"], "the plan and its tally survive a reload")
+        self.assertEqual(got["reload"][2:], [5, 10000])
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_planned_drain_on_a_smaller_tank(self):
+        got = _node(
+            PLAN_JS
+            + "const r = planned({r: 1000, L: 2992, h0: 0}, {direction: 'drain'});\n"
+            "console.log(JSON.stringify({log: r.log, cap: r.cap,"
+            " poured: r.s.levels.slice(1).reduce((a, L) => a + (L.step.value || L.step.base || 0), 0)}));"
+        )
+        log = got["log"]
+        self.assertLess(got["cap"], 9500)
+        self.assertIn(7, [e["count"] for e in log if e["group"] == 2], "the middle group loses a batch")
+        planned = sum(e["size"] for e in log)
+        self.assertGreaterEqual(planned, got["cap"], "the batches reach the bottom")
+        self.assertLess(planned, got["cap"] + 300, "the last batch is a part batch at most")
+        self.assertEqual(log[-1]["size"], 300, "the small batches stay at the bottom of a drain")
+        self.assertTrue(all("fall" in e["text"] for e in log))
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_planned_transfer_and_time(self):
+        got = _node(
+            PLAN_JS
+            + "const PA = {r: 1100, L: 3000, h0: 0}, PB = {r: 1000, L: 3183, h0: 0};\n"
+            "const shared = {Dpm: 50, h0pm: 5, pourUnit: 100, canSizes: [200, 100], plan: GROUPS};\n"
+            "const X = new core.TransferSession(Object.assign({D: 2200, Lest: 3000, tank: 'a', nominal: 11000}, shared),"
+            " Object.assign({D: 2000, Lest: 3183, tank: 'b', nominal: 10000}, shared));\n"
+            "let VA = core.capacity(PA), VB = 0.5 * 0 + 60, t = 0;\n"
+            "X.start('?', core.levelFor(VA, PA), '60', core.levelFor(VB, PB));\n"
+            "const dip = (k, H) => { let n = 0; while (X.pendingTank() === k && n < 4) { X.dip(H); n++; } };\n"
+            "dip('out', core.levelFor(VA, PA)); dip('in', core.levelFor(VB, PB));\n"
+            "const out = {first: X.adviceBatch().text, groups: []};\n"
+            "for (let k = 0; k < 6; k++) {\n"
+            "  const b = X.planNow().batch;\n"
+            "  for (const u of core.mixCans(b.mix)) X.tap(++t * 30000, u);\n"
+            "  X.closeBatch({}); VA -= b.size; VB += b.size;\n"
+            "  dip('out', core.levelFor(VA, PA)); dip('in', core.levelFor(VB, PB));\n"
+            "  out.groups.push([X.out.current().plan.group, X.in.current().plan.group]);\n"
+            "}\n"
+            "out.room = X._planRoom().R; out.gapB = X.in._planRoom().R; out.leftA = X.out._planRoom().R;\n"
+            "const s = new core.Session({D: 2000, Lest: 3183, pourUnit: 100, canSizes: [200, 100], nominal: 10000, plan: GROUPS});\n"
+            "s.start('60', core.levelFor(60, PB)); s.dip(core.levelFor(60, PB));\n"
+            "const cyc = (u) => (u === 100 ? 50 : 90);\n"
+            "out.eta = s.fillPlan({size: 200, cycleSeconds: 90, settleSeconds: 0, dipSeconds: 0, cycleFor: cyc});\n"
+            "out.list = s.planProjection();\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertTrue(got["first"].startswith("Batch 1 of 16: 300 L = 200 + 100 L"), got["first"])
+        self.assertEqual(got["groups"], [[0, 0], [0, 0], [1, 1], [1, 1], [2, 2], [2, 2]],
+                         "one batch is one plan step for both tanks")
+        self.assertAlmostEqual(got["room"], min(got["gapB"], got["leftA"]), places=6,
+                               msg="the tighter tank sets the room")
+        eta, lst = got["eta"], got["list"]
+        self.assertTrue(eta["mixed"])
+        cans = sum(len([u for c in b["mix"] for u in [c["unit"]] * c["count"]]) for b in lst)
+        secs = sum(cyc_u * c["count"] for b in lst for c in b["mix"] for cyc_u in [50 if c["unit"] == 100 else 90])
+        self.assertEqual(eta["brim"]["levels"], len(lst), "one level per batch of the plan")
+        self.assertEqual(eta["brim"]["cans"], cans)
+        self.assertAlmostEqual(eta["brim"]["seconds"], secs, places=6, msg="each can at its own cycle time")
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_batch_plan(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "let p = stub.boot(page, corePath, store), el = p.el;\n"
+            "const click = (act, i) => el('s-plan')._listeners.click[0]({ target: { closest: () => ({ dataset: { act, i: String(i) }, disabled: false }) } });\n"
+            "const size = (i, v) => el('s-plan')._listeners.input[0]({ target: { dataset: { i: String(i) }, value: String(v) } });\n"
+            "out.none = el('s-plan-check').textContent;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '2000'; el('s-L').value = '3183';\n"
+            "el('s-step').value = '?'; el('s-dip').value = '10'; el('s-unit').value = '200';\n"
+            "el('s-unit')._listeners.input[0]({});\n"
+            "el('s-can-add').value = '100'; el('s-can-go').click();\n"
+            "el('s-nom').value = '10500'; el('s-nom')._listeners.input[0]({});\n"
+            "out.nomNote = el('s-nom-note').textContent;\n"
+            "el('s-plan-add').click(); size(0, 300); click('inc', 0);\n"
+            "el('s-plan-add').click(); size(1, 600); click('inc', 1);\n"
+            "el('s-plan-add').click(); size(2, 800); for (let k = 0; k < 7; k++) click('inc', 2);\n"
+            "out.mix = el('s-plan-mix-0').textContent;\n"
+            "el('s-plan-mirror').click();\n"
+            "out.wrong = el('s-plan-check').textContent;\n"
+            "el('s-go').click(); out.blocked = el('s-err').textContent; out.started = !!store.get('calib-site:active');\n"
+            "el('s-nom').value = '10000'; el('s-nom')._listeners.input[0]({});\n"
+            "out.ok = [el('s-plan-check').textContent, el('s-plan-check').className];\n"
+            "// The draft stays on the device: a reload shows the same plan.\n"
+            "const p2 = stub.boot(page, corePath, store);\n"
+            "out.draft = [p2.el('s-plan').innerHTML.split('plan-row').length - 1, p2.el('s-plan-check').textContent];\n"
+            "el('s-go').click(); out.err = el('s-err').textContent;\n"
+            "el('d-val').value = '10'; el('d-go').click(); el('d-val').value = '10'; el('d-go').click();\n"
+            "out.head = el('t-plan-head').textContent; out.chips = el('t-plan-chips').innerHTML;\n"
+            "out.hidden = el('t-plan')._classes.has('hidden');\n"
+            "out.unit0 = el('t-unit').value; out.target = el('t-target').textContent;\n"
+            "el('t-plus').click(); out.unit1 = el('t-unit').value; out.todo = el('t-chips').innerHTML;\n"
+            "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'settings' } }) } });\n"
+            "out.settings = el('set-plan').textContent;\n"
+            "out.cfg = JSON.parse(store.get('calib-site:active')).config;\n"
+            "// Without a plan the pour card has no plan block.\n"
+            "const s3 = new Map(); const p3 = stub.boot(page, corePath, s3), e3 = p3.el;\n"
+            "e3('s-D').value = '1800'; e3('s-L').value = '3000'; e3('s-dip').value = '400'; e3('s-unit').value = '200';\n"
+            "e3('s-go').click(); e3('d-val').value = '400'; e3('d-go').click(); e3('d-val').value = '400'; e3('d-go').click();\n"
+            "out.plain = [e3('t-plan')._classes.has('hidden'), e3('t-target').textContent];\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["none"], "No batch plan yet: tap + group.")
+        self.assertEqual(got["nomNote"], "D and L give ≈ 10000 L.")
+        self.assertEqual(got["mix"], "= 200 + 100 L")
+        self.assertEqual(got["wrong"], "The batches add up to 10000 L, not the nominal 10500 L (−500 L).")
+        self.assertEqual(got["blocked"], got["wrong"], "a plan with errors does not start")
+        self.assertFalse(got["started"])
+        self.assertEqual(got["ok"], ["16 batches · 10000 L = nominal ✓ · symmetric ✓", "ok"])
+        self.assertEqual(got["draft"], [5, "16 batches · 10000 L = nominal ✓ · symmetric ✓"])
+        self.assertEqual(got["err"], "")
+        self.assertFalse(got["hidden"])
+        self.assertEqual(got["head"], "Group 1 of 5 · 300 L · batch 1 of 2 · 1 of 16 in all")
+        self.assertEqual(got["chips"], '<span class="now">1</span><span class="todo">2</span>')
+        self.assertEqual(got["unit0"], "200", "the batch starts with its largest can")
+        self.assertTrue(got["target"].startswith("Plan: 200 + 100 L = 300 L"), got["target"])
+        self.assertEqual(got["unit1"], "100", "the next tap is the 100 L can of the mix")
+        self.assertIn('class="todo">2 · 100<', got["todo"], "the planned can shows on its chip")
+        self.assertEqual(got["settings"], "Batch plan: 2 × 300, 2 × 600, 8 × 800, 2 × 600, 2 × 300 L"
+                         " · nominal 10000 L · cans 200, 100 L. Fixed at the start.")
+        cfg = got["cfg"]
+        self.assertEqual((cfg["canSizes"], cfg["nominal"], len(cfg["plan"])), ([200, 100], 10000, 5))
+        self.assertTrue(got["plain"][0], "no plan: no plan block")
+        self.assertTrue(got["plain"][1].startswith("Advice ≈"), "no plan: the 30 mm advice")
+
+
 if __name__ == "__main__":
     unittest.main()

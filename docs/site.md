@@ -58,6 +58,7 @@ To keep the one file on a phone, use `site/calib_site.html`.
 | Length estimate L | Outside length minus the end plates. |
 | L is good to ± | Leave blank for ±3 %. |
 | Pour unit | Can size or meter step, L. The pour advice rounds to it. |
+| Batch plan | Optional: the can sizes, the nominal capacity and the batches (see *The batch plan* below). Without a plan the page advises each pour for a rise of about 30 mm. |
 | Reading repeatability σ | **Settings → Noise and limits**. From a repeat study (below). Default 0.4 mm. |
 | Pour noise | **Settings → Noise and limits**. From the can calibration (§3.1). Default 0.5 % + 3 L. |
 | Datum | **Settings → Noise and limits**. 0 ± 80 mm unless you sounded the bottom. |
@@ -236,7 +237,8 @@ the next batch.
   device, it starts at the last can's size, then at the default.
 - **The advice is a target, not a limit.** The page shows the advised number
   of cans for a rise of about 30 mm. It warns near the brim, and when the
-  batch is more than the gap that is left in the shell.
+  batch is more than the gap that is left in the shell. With a batch plan,
+  the target is the plan's batch in its cans (*Plan: 200 + 100 L = 300 L*).
 - **A second tap in less than 20 s** asks if it is a new can.
 - **Undo last can** removes one tap. *Undo last entry* does the same while a
   batch is open. After *Batch done*, *Undo last entry* opens the batch again
@@ -255,6 +257,79 @@ wrong, press *Recount: edit pour*. The message appears only when the miss is
 within a quarter can of a whole number and the changed count brings z below 2
 (§3.10, §6.2). With mixed sizes the page tests each size in the batch and
 names the one that fits.
+
+## The batch plan
+
+A batch is the cans of one level, then one dip. A batch size is not a can
+size: a 300 L batch with a 100 L can is 3 cans, with a 150 L can 2 cans. The
+plan says before the first pour which batches the campaign needs and how
+many of each.
+
+On the *New campaign* card, under **Batch plan**:
+
+| Field | What to enter |
+|---|---|
+| Can sizes you have | The default can size is always one of them; *Add* puts more sizes in the list. Tap a size to remove it. |
+| Nominal capacity | The capacity on the drawing or the name plate, L. The line under it gives π·D²/4·L from your estimates, as a check. A transfer asks for both tanks. |
+| Batches | One row per group: `− 2 +` is the count, then the batch size in litres. The row shows the cans of one batch, for example `= 200 + 100 L`. *+ group* adds a row; *Mirror bottom half* writes the top half from the rows up to the largest batch. |
+
+The rows go from the first level to the last: a fill from the bottom up, a
+drain from the top down. A transfer follows tank B from the bottom up. The
+page starts a campaign with a plan only when the plan is good:
+
+- every batch is a sum of the can sizes;
+- the batches add up to the nominal capacity (a transfer: the smaller of
+  the two nominals, because the campaign ends at the first tank that is
+  empty or full);
+- the groups are symmetric about the middle, with the smallest batches at
+  the bottom and the top and the largest in the middle.
+
+The line under the rows says what is wrong, for example *The batches add up
+to 10000 L, not the nominal 10500 L (−500 L).* The device keeps the plan for
+the next campaign. *Settings → This campaign* shows the plan of the open
+campaign; it is fixed at the start.
+
+**The cans of a batch.** The page gives each batch the fewest cans, and of
+those the largest cans: 300 L with 200 L and 100 L cans is `200 + 100`, not
+`3 × 100`. Fewer cans is less pumping and less carrying. The size field of
+the pour card starts each batch at its first can and moves to the next can
+of the plan after each tap. The chips of the cans to come show their sizes.
+You can still choose another size.
+
+**The batch tally.** The pour card shows the group in work, for example
+`Group 3 of 5 · 800 L · batch 5 of 8 · 9 of 16 in all`, and one chip per
+batch of that group. The tally counts only the adjacent batches of one group:
+the 300 L batches at the bottom and the 300 L batches at the top are two
+groups. Each level records its group, so a reload or an undo keeps the
+tally. The Now card adds `batch plan: 8 of 16 batches poured · nominal
+10000 L`.
+
+**The end of the campaign.** The nominal capacity is not the real
+capacity. Up to the mid-dip level, the plan stands as declared. Past the
+mid-dip, the running shell counts the litres that are left and counts the
+end of the plan again:
+
+- while the middle (largest) group is still in work, it takes a batch more
+  for a larger tank, or a batch less for a smaller one; the groups after it
+  keep their counts, so the small batches stay at the top (fill) or the
+  bottom (drain);
+- in a later group, that group takes the change;
+- the last group takes as many batches as the gap needs: a fill ends with
+  the planned overflow pour (§3.7), a drain with a part can.
+
+The pour card then shows the new count with the planned one, for example
+`batch 5 of 9 (plan 8)`, and says why: *The running shell puts the tank at
+≈ 10600 L (nominal 10000 L): the end of the plan changes. Group 3: 9 × 800 L
+(plan 8).* At the end of a campaign, the counts are not symmetric any more;
+this is correct.
+
+**The 30 mm rule stays as a check.** The plan sets the batch size, but the
+page still compares each batch with §3.4: a batch that gives less than 15 mm
+of rise, or more than 100 mm, gets a note. Near the brim the page warns, but
+it does not halve a planned batch: the small top group is the plan's answer.
+
+**The time estimate** walks the batches of the plan, each with its cans and
+the fill and drain times of each can size.
 
 ## Timers and alarm
 

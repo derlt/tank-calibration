@@ -292,6 +292,88 @@ coreTexts(readRows("demo_drain_raw.csv"), { D: 2480, Lest: 5280, pourUnit: 200, 
   } catch (e) { add(e.message); }
 })();
 
+// Batch plan campaigns through the page: the setup rows and their errors,
+// then batches to the end of the plan on a synthetic tank that holds more
+// (or less) than the nominal, so the end of the plan changes.
+(function plans() {
+  const planUi = (p, groups, o) => {
+    const el = p.el;
+    const click = (act, i) => el("s-plan")._listeners.click[0]({ target: { closest: () => ({ dataset: { act, i: String(i) }, disabled: false }) } });
+    const size = (i, v) => el("s-plan")._listeners.input[0]({ target: { dataset: { i: String(i) }, value: String(v) } });
+    el("s-unit").value = "200"; el("s-unit")._listeners.input[0]({});
+    tryClick(p, "s-can-go");                                   // no size typed: an error
+    el("s-can-add").value = "100"; tryClick(p, "s-can-go");
+    el("s-can-add").value = "50"; tryClick(p, "s-can-go");
+    el("s-cans")._listeners.click[0]({ target: { closest: () => ({ dataset: { can: "50" }, disabled: false }) } }); collect(p);
+    tryClick(p, "s-plan-add"); collect(p);                     // a blank size
+    size(0, 250); collect(p);
+    groups.forEach((g, i) => { if (i) tryClick(p, "s-plan-add"); size(i, g.size); for (let k = 1; k < g.count; k++) click("inc", i); collect(p); });
+    tryClick(p, "s-go");                                        // no nominal, not symmetric: errors
+    size(0, 333); collect(p); size(0, groups[0].size);          // not a sum of the cans
+    el("s-nom").value = String(o.nominal + 300); el("s-nom")._listeners.input[0]({}); collect(p);
+    el("s-nom").value = String(o.nominal); el("s-nom")._listeners.input[0]({});
+    if (o.nominalB) { el("sB-nom").value = String(o.nominalB); el("sB-nom")._listeners.input[0]({}); }
+    tryClick(p, "s-plan-add"); size(groups.length, 9000); collect(p); click("del", groups.length);   // the largest at the top: not peaked
+    tryClick(p, "s-plan-mirror"); collect(p);
+    click("dec", 0); click("inc", 0); collect(p);
+  };
+  const run = (o) => {
+    const p = boot(o.prefs);
+    const el = p.el;
+    if (o.drain) el("s-dir-drain").click();
+    if (o.transfer) el("s-dir-transfer").click();
+    collect(p);
+    el("s-tank").value = o.transfer ? "alpha" : "t1"; el("s-D").value = String(2 * o.P.r); el("s-L").value = String(o.P.L);
+    if (o.transfer) { el("sB-tank").value = "beta"; el("sB-D").value = String(2 * o.PB.r); el("sB-L").value = String(o.PB.L); }
+    el("s-D")._listeners.input[0]({});
+    planUi(p, o.groups, o);
+    const cap = core.capacity(o.P), capB = o.PB ? core.capacity(o.PB) : 0;
+    let V = o.drain || o.transfer ? cap : 0, VB = 100;
+    const H0 = core.levelFor(V, o.P), HB0 = o.PB ? core.levelFor(VB, o.PB) : 0;
+    el("s-step").value = "?"; el("s-dip").value = String(H0);
+    if (o.transfer) { el("sB-step").value = "?"; el("sB-dip").value = String(HB0); }
+    tryClick(p, "s-go");
+    const dipAll = (H, HB) => {
+      for (let k = 0; k < 4; k++) {
+        if (el("dip-card")._classes.has("hidden")) break;
+        if (o.transfer) {
+          if (!el("d-go-a").disabled) { el("d-val").value = String(H); tryClick(p, "d-go-a"); }
+          if (!el("d-go-b").disabled) { el("d-val-b").value = String(HB); tryClick(p, "d-go-b"); }
+        } else { el("d-val").value = String(H); tryClick(p, "d-go"); }
+      }
+      if (!el("dip-card")._classes.has("hidden")) tryClick(p, "a-override");
+    };
+    dipAll(H0, HB0);
+    // A fill time: the Now card estimates the time to the end of the plan.
+    tabsOf(p)("settings"); el("tm-fill-200").value = "1:30"; tryClick(p, "tm-save"); tabsOf(p)("live");
+    sweep(p);
+    for (let b = 0; b < 40; b++) {
+      if (!el("pour-card")._classes.has("hidden")) {
+        for (let k = 0; k < 8 && el("t-bar").style.width !== "100%"; k++) tryClick(p, "t-plus");
+        if (b === 2) { tryClick(p, "t-plus"); collect(p); tryClick(p, "t-undo"); }
+        collect(p);
+      }
+      const vol = parseFloat(String(el("t-count").textContent).split("·")[1]) || 0;
+      if (!vol) break;
+      V += (o.drain || o.transfer ? -1 : 1) * vol; VB += vol;
+      if (V <= 0 || V >= cap || (o.PB && VB >= capB)) { el("p-over").checked = !o.drain; el("t-part").checked = !!o.drain; }
+      tryClick(p, "p-go");
+      el("p-over").checked = false; el("t-part").checked = false;
+      dipAll(core.levelFor(Math.min(Math.max(V, 0), cap), o.P), o.PB ? core.levelFor(Math.min(VB, capB), o.PB) : 0);
+      if (b % 4 === 3) sweep(p);
+      if (V <= 0 || V >= cap || (o.PB && VB >= capB)) break;
+    }
+    sweep(p);
+  };
+  // Nominal 10 000 L; the tank holds about 10 600 L (fill) or 9 400 L (drain).
+  const groups = [{ count: 2, size: 300 }, { count: 2, size: 600 }, { count: 8, size: 800 }, { count: 2, size: 600 }, { count: 2, size: 300 }];
+  for (const prefs of [{}, { mode: "simple" }]) {
+    run({ P: { r: 1000, L: 3374, h0: 0 }, groups, nominal: 10000, prefs });
+    run({ P: { r: 1000, L: 2992, h0: 0 }, groups, nominal: 10000, drain: true, prefs });
+    run({ P: { r: 1000, L: 3374, h0: 0 }, PB: { r: 1000, L: 3183, h0: 0 }, groups, nominal: 10000, nominalB: 10000, transfer: true, prefs });
+  }
+})();
+
 for (const t of statics) add(t);
 
 // The replay tab reads its file asynchronously: run it, then report.

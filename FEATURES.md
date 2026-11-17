@@ -124,6 +124,7 @@ adopted shell, so the tool cannot drift from the fit.
 | iPhone timer (Shortcuts) | `site/page.html` `isIOS` / `iosTimerUrl` / `iosTimer`, started by *Start fill timer*; device prefs `iosTimer`, `iosShortcut`; `tests/test_site.py` |
 | Swipe between tabs | `site/page.html` touch handlers on `main`, `goTab`; `tests/test_site.py` |
 | Settings tab | `site/page.html`; `Session.setCampaign` refits the running shell after a change of the tank record, the priors or the noise |
+| Batch plan (§3.4, §3.10) | `checkPlan`, `canMix` (fewest, then largest cans), `planState` (the end of the plan counted again past the mid-dip) in `site_core.js`; `Session.planNow`, the plan group on each level (`L.plan`), the plan's batch as the advice target, `fillPlan` over the plan's batches; the page's setup rows and the pour card's group tally. Tests: `tests/test_site.py::TestSitePlan` |
 | Transfer, two tanks (§3.12) | `TransferSession` in `site_core.js` + the page's transfer mode: shared tally, one dip field and button per tank (`dipBoth`), tinted field cards with tank pictograms and a same-batch header, per-tank verdicts, the pair view after both dips, per-tank raw files, a Current tank switch in the header (`↑ alpha`, `↓ beta`) and in Log & charts |
 
 ## §11 Deliverables

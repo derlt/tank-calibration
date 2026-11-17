@@ -171,6 +171,18 @@
   .chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.5rem 0; }
   .chips span { background: var(--ok-bg); color: var(--ok); border-radius: 6px; padding: 0 0.4rem; font: 600 0.78rem var(--mono); }
   .chips span.todo { background: var(--todo-bg); color: var(--todo); }
+  .chips span.now { background: var(--info-bg); color: var(--info); box-shadow: inset 0 0 0 2px var(--info); }
+  /* The batch plan: one row per group in the setup, the group in work on the pour card. */
+  .plan-lab { display: block; font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; }
+  .plan-row { display: flex; align-items: center; gap: 0.35rem; margin-top: 0.35rem; flex-wrap: wrap; }
+  .plan-row .plan-n { width: 1.3rem; color: var(--muted); font: 600 0.85rem var(--mono); }
+  .plan-row .plan-c { min-width: 1.8rem; text-align: center; font: 650 1.05rem var(--mono); }
+  .plan-row input { width: 5.5rem; flex: 0 0 auto; }
+  .plan-row .plan-mix { flex: 1 1 6rem; min-width: 0; font-family: var(--mono); }
+  .plan-row button { min-height: 2.3rem; min-width: 2.3rem; padding: 0.2rem 0.5rem; }
+  #s-plan-check.ok { color: var(--ok); font-weight: 650; }
+  .plan-live { border-bottom: 1px solid var(--line); padding-bottom: 0.5rem; margin-bottom: 0.6rem; }
+  .plan-live #t-plan-head { font-size: 0.95rem; }
   .sizes { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem; }
   .sizes button { min-height: 2.3rem; padding: 0.2rem 0.7rem; font-size: 0.9rem; background: var(--surface); color: var(--brand-ink); }
   .sizes button[aria-pressed=true] { background: var(--brand); color: #fff; }
@@ -332,6 +344,25 @@
       <label>L is good to ±, mm (blank = 3 %)<input id="s-Lpm" type="number" inputmode="decimal"></label>
       <label>Default can size, L<input id="s-unit" type="number" inputmode="decimal" placeholder="200"></label>
     </div>
+    <h2 style="margin-top:0.9rem">Batch plan</h2>
+    <p class="muted" style="margin-top:0">Optional. A batch is the cans of one level, then one dip. Declare the batches the campaign needs, from the first level to the last: small at the bottom and the top, the largest in the middle, and in total the nominal capacity. Without a plan the page advises each pour for a rise of about 30 mm.</p>
+    <span class="plan-lab">Can sizes you have, L</span>
+    <div class="sizes" id="s-cans"></div>
+    <div class="row" style="margin-top:0.4rem;flex-wrap:nowrap">
+      <label style="min-width:0;flex:1 1 0">Add a can size, L<input id="s-can-add" type="number" inputmode="decimal" placeholder="100"></label>
+      <button class="secondary" id="s-can-go">Add</button>
+    </div>
+    <div class="grid" style="margin-top:0.5rem">
+      <label><span id="s-nom-label">Nominal capacity, L</span><input id="s-nom" type="number" inputmode="decimal" placeholder="10000"></label>
+    </div>
+    <p class="muted" id="s-nom-note"></p>
+    <span class="plan-lab" id="s-plan-label">Batches, bottom → top</span>
+    <div id="s-plan"></div>
+    <div class="row" style="margin-top:0.4rem">
+      <button class="secondary small" id="s-plan-add">+ group</button>
+      <button class="secondary small" id="s-plan-mirror">Mirror bottom half</button>
+    </div>
+    <p id="s-plan-check" class="muted"></p>
     <p class="muted" id="s-noise"></p>
     <h2 style="margin-top:0.9rem">First level</h2>
     <div id="s-at-wrap" class="hidden">
@@ -355,6 +386,7 @@
         <label>D is good to ±, mm<input id="sB-Dpm" type="number" inputmode="decimal" value="200"></label>
         <label>Length estimate L, mm<input id="sB-L" type="number" inputmode="decimal" placeholder="5280"></label>
         <label>L is good to ±, mm (blank = 3 %)<input id="sB-Lpm" type="number" inputmode="decimal"></label>
+        <label>Tank B nominal capacity, L (batch plan)<input id="sB-nom" type="number" inputmode="decimal"></label>
         <label>Liquid in tank B before the first batch, L (? = unknown heel)<input id="sB-step" value="?"></label>
         <label>Tank B first reading, mm<input id="sB-dip" class="big" type="number" inputmode="decimal" step="0.5"></label>
       </div>
@@ -379,6 +411,11 @@
     <div class="card" id="pour-card" style="margin-top:0.8rem">
       <h2 id="pour-title">1 · Pour</h2>
       <div id="tally">
+        <div class="plan-live hidden" id="t-plan">
+          <div id="t-plan-head"></div>
+          <div class="chips" id="t-plan-chips"></div>
+          <p class="muted" id="t-plan-note" style="margin:0"></p>
+        </div>
         <div class="row" style="align-items:end;flex-wrap:nowrap">
           <label style="min-width:0;flex:1 1 0">Can size for the next can, L<input id="t-unit" type="number" inputmode="decimal" step="0.5"></label>
           <button class="secondary hidden" id="t-dec"></button>
@@ -563,6 +600,7 @@
         <label>Pour unit, L<input id="set-unit" type="number" inputmode="decimal"></label>
       </div>
       <p class="muted" id="set-dir"></p>
+      <p class="muted" id="set-plan"></p>
       <div class="row" style="margin-top:0.6rem"><button id="set-save">Save campaign settings</button></div>
       <p class="muted">A change refits the running shell from the levels already accepted. The levels keep their state; the next check uses the new values.</p>
       <p id="set-msg" class="muted"></p>
@@ -732,6 +770,7 @@
     <p><b>Drain campaign (reverse strapping).</b> The tank starts full. A pump draws the water out into calibrated cans; each batch is one step, and the level falls. Start at the neck entrance: pump the neck down until the level just reaches the shell crown and dip. That reading is the brim, and the running shell knows the top from the first level. Keep the hose in the same state at every dip. Fill each can to its mark. When the pump loses suction, tick <i>pump lost suction: last can part</i>.</p>
     <p><b>Signs in a drain.</b> resid &lt; 0: the fall came too large (an object exposed, a leak, a spill at the can, or more left than the count). resid &gt; 0: the fall came too small (RETURN?: the hose drained back, wall film, or less left than the count).</p>
     <p><b>Two tanks at once (transfer).</b> A pump draws water out of a full tank A into calibrated cans, and the same cans are emptied into tank B. One batch is one step for both tanks: A is a drain, B is a fill. Each tank keeps its own check, its own running shell and its own raw file; switch tanks in the header or in Log &amp; charts. Dip A, then dip B, after each batch — the dip card has one field and one button per tank, so each tank is checked as soon as its reading is in. When both dips are in, the page compares the two residuals of the same batch: the same litres in both tanks means the cans (a count or fill error) — one recount fixes both files; litres that only B misses means a spill on the way; a miss that only one tank shows means that tank or its hose. The pour noise is shared, so the comparison is as sharp as the dips alone.</p>
+    <p><b>Batch plan.</b> Before the first pour, declare the can sizes, the nominal capacity and the batches: for example 2 × 300 L, 2 × 600 L, 8 × 800 L, 2 × 600 L, 2 × 300 L. A batch is not a can: a 300 L batch is one 200 L can and one 100 L can. The page gives each batch the fewest cans, and of those the largest, so the pump and the carry take the least time. The pour card shows the group in work and its batches only: the small batches at the bottom and at the top are two groups. The real tank can hold more or less than the nominal. Past the mid-dip, the running shell counts the end of the plan again: the middle group takes more or fewer batches, and the small batches stay at the end.</p>
     <p class="muted">Method: CALIBRATION_METHODOLOGY.md §10a. Residual convention §2: resid = pour − predicted pour. resid &lt; 0: the rise came too cheap (object, or more liquid than recorded). resid &gt; 0: the rise came too small (loss, or less liquid than recorded).</p>
   </section>
 </main>
@@ -1855,6 +1894,96 @@
     "the alarm lead must be 0 to 120 s": "thời gian báo trước phải từ 0 đến 120 s",
     "a fill time must be more than 0 s": "thời gian bơm đầy phải lớn hơn 0 s",
     "a drain time must be more than 0 s": "thời gian trút phải lớn hơn 0 s",
+    "tick \"tank B reached the neck\"": "đánh dấu \"bồn B tới cổ bồn\"",
+
+    // Batch plan: the setup card
+    "Batch plan": "Kế hoạch mẻ",
+    "batch plan": "kế hoạch mẻ",
+    "A batch is the cans of one level, then one dip.": "Một mẻ là các bình của một mức, sau đó là một lần đo.",
+    "Declare the batches the campaign needs, from the first level to the last: small at the bottom and the top, the largest in the middle, and in total the nominal capacity.": "Khai báo các mẻ mà đợt đo cần, từ mức đầu tiên đến mức cuối cùng: mẻ nhỏ ở đáy và ở đỉnh, mẻ lớn nhất ở giữa, và tổng bằng dung tích danh định.",
+    "Without a plan the page advises each pour for a rise of about 30 mm.": "Không có kế hoạch thì trang khuyên mỗi lần đổ để mức dâng khoảng 30 mm.",
+    "Can sizes you have, L": "Các cỡ bình hiện có, L",
+    "Add a can size, L": "Thêm một cỡ bình, L",
+    "Add": "Thêm",
+    "default": "mặc định",
+    "{0} L ×": "{0} L ×",
+    "Remove the {0} L can": "Bỏ bình {0} L",
+    "No can size yet: enter the default can size, or add one.": "Chưa có cỡ bình: nhập cỡ bình mặc định, hoặc thêm một cỡ.",
+    "Nominal capacity, L": "Dung tích danh định, L",
+    "Tank A nominal capacity, L": "Dung tích danh định bồn A, L",
+    "Tank B nominal capacity, L (batch plan)": "Dung tích danh định bồn B, L (kế hoạch mẻ)",
+    "D and L give ≈ {0} L.": "D và L cho ≈ {0} L.",
+    "Tank A: D and L give ≈ {0} L.": "Bồn A: D và L cho ≈ {0} L.",
+    "Tank B: D and L give ≈ {0} L.": "Bồn B: D và L cho ≈ {0} L.",
+    "Batches, bottom → top": "Các mẻ, đáy → đỉnh",
+    "Batches, top → bottom": "Các mẻ, đỉnh → đáy",
+    "Batches, in order (tank B from the bottom up)": "Các mẻ, theo thứ tự (bồn B từ đáy lên)",
+    "+ group": "+ nhóm",
+    "Mirror bottom half": "Lấy đối xứng nửa dưới",
+    "One batch less in group {0}": "Bớt một mẻ ở nhóm {0}",
+    "One batch more in group {0}": "Thêm một mẻ ở nhóm {0}",
+    "Batch size of group {0}, L": "Cỡ mẻ của nhóm {0}, L",
+    "Remove group {0}": "Bỏ nhóm {0}",
+    "= {mix} L": "= {mix} L",
+    "no mix of the cans": "không ghép được từ các bình",
+    "No batch plan yet: tap + group.": "Chưa có kế hoạch mẻ: chạm + nhóm.",
+    "{0} batches · {1} L = nominal ✓ · symmetric ✓": "{0} mẻ · {1} L = danh định ✓ · đối xứng ✓",
+    "Enter a can size in litres.": "Nhập một cỡ bình bằng lít.",
+    "Enter the batch size of group {0}.": "Nhập cỡ mẻ của nhóm {0}.",
+    "Enter the can sizes.": "Nhập các cỡ bình.",
+    "Enter the nominal capacity.": "Nhập dung tích danh định.",
+    "Group {0}: {1} L is not a sum of the can sizes.": "Nhóm {0}: {1} L không phải là tổng của các cỡ bình.",
+    "The batches add up to {0} L, not the nominal {1} L ({2} L).": "Tổng các mẻ là {0} L, không bằng dung tích danh định {1} L ({2} L).",
+    "The plan is not symmetric: the groups above the middle must mirror the groups below it.": "Kế hoạch không đối xứng: các nhóm phía trên điểm giữa phải đối xứng với các nhóm phía dưới.",
+    "The largest batches belong in the middle, the smallest at the bottom and the top.": "Các mẻ lớn nhất phải ở giữa, các mẻ nhỏ nhất ở đáy và ở đỉnh.",
+    "a batch count must be a whole number, 1 or more": "số mẻ phải là số nguyên, từ 1 trở lên",
+    "a batch size must be more than 0 L": "cỡ mẻ phải lớn hơn 0 L",
+    "a can size must be more than 0 L": "cỡ bình phải lớn hơn 0 L",
+    "the batch plan is a list of groups: count × size": "kế hoạch mẻ là một danh sách nhóm: số mẻ × cỡ mẻ",
+    "cannot read the batch group {name}: write count:size, for example 4:300": "không đọc được nhóm mẻ {name}: viết số mẻ:cỡ mẻ, ví dụ 4:300",
+
+    // Batch plan: the pour card, the Now card, the advice and Settings
+    "Group {0} of {1}": "Nhóm {0}/{1}",
+    "batch {0} of {1}": "mẻ {0}/{1}",
+    "batch {0} of {1} (plan {2})": "mẻ {0}/{1} (kế hoạch {2})",
+    "{0} of {1} in all": "tổng {0}/{1}",
+    "{0} of {1} batches poured": "đã xong {0}/{1} mẻ",
+    "nominal {0} L": "danh định {0} L",
+    "nominal {0} L.": "danh định {0} L.",
+    "Batch plan complete: {0} batches.": "Đã xong kế hoạch mẻ: {0} mẻ.",
+    "The running shell puts the level at the brim: the last pour overflows on purpose (§3.7).": "Mô hình bồn tạm cho mức đã tới đỉnh: lần đổ cuối cố ý cho tràn (§3.7).",
+    "The running shell puts the level at the bottom: drain on until the pump loses suction.": "Mô hình bồn tạm cho mức đã tới đáy: bơm tiếp đến khi bơm mất hút.",
+    "The running shells have no room for another batch: tank A is at the bottom or tank B at the brim.": "Các mô hình bồn tạm không còn chỗ cho mẻ nữa: bồn A đã tới đáy hoặc bồn B đã tới đỉnh.",
+    "Past the mid-dip, the running shell counts the end of the plan again.": "Qua mức giữa, mô hình bồn tạm tính lại phần cuối của kế hoạch.",
+    "The running shell puts the tank at ≈ {0} L (nominal {1} L): the end of the plan changes.": "Mô hình bồn tạm cho bồn ≈ {0} L (danh định {1} L): phần cuối của kế hoạch thay đổi.",
+    "The running shell puts the tank at ≈ {0} L: the end of the plan changes.": "Mô hình bồn tạm cho bồn ≈ {0} L: phần cuối của kế hoạch thay đổi.",
+    "Group {0}: {1} × {2} L (plan {3}).": "Nhóm {0}: {1} × {2} L (kế hoạch {3}).",
+    "Group {0} drops out (plan {1} × {2} L).": "Bỏ nhóm {0} (kế hoạch {1} × {2} L).",
+    "The plan's batches are done, but the running shell has room for more: batches of {0} L follow.": "Đã xong các mẻ của kế hoạch, nhưng mô hình bồn tạm vẫn còn chỗ: tiếp theo là các mẻ {0} L.",
+    "Plan: {mix} L = {0} L (≈ {1} mm rise).": "Kế hoạch: {mix} L = {0} L (≈ dâng {1} mm).",
+    "Plan: {mix} L = {0} L (≈ {1} mm fall).": "Kế hoạch: {mix} L = {0} L (≈ hạ {1} mm).",
+    "Plan: {mix} L = {0} L.": "Kế hoạch: {mix} L = {0} L.",
+    "Plan: {0} L (≈ {1} mm rise).": "Kế hoạch: {0} L (≈ dâng {1} mm).",
+    "Plan: {0} L (≈ {1} mm fall).": "Kế hoạch: {0} L (≈ hạ {1} mm).",
+    "Plan: {0} L.": "Kế hoạch: {0} L.",
+    "{0} more than the plan.": "Hơn kế hoạch {0} bình.",
+    "Target: {mix} L": "Mục tiêu: {mix} L",
+    "Batch {0} of {1}: {2} L = {mix} L (≈ {3} mm rise).": "Mẻ {0}/{1}: {2} L = {mix} L (≈ dâng {3} mm).",
+    "Batch {0} of {1}: {2} L = {mix} L (≈ {3} mm fall).": "Mẻ {0}/{1}: {2} L = {mix} L (≈ hạ {3} mm).",
+    "Batch {0} of {1}: {2} L (≈ {3} mm rise).": "Mẻ {0}/{1}: {2} L (≈ dâng {3} mm).",
+    "Batch {0} of {1}: {2} L (≈ {3} mm fall).": "Mẻ {0}/{1}: {2} L (≈ hạ {3} mm).",
+    "Batch {0} of {1}: {2} L = {mix} L (≈ {3} mm out of A, ≈ {4} mm into B).": "Mẻ {0}/{1}: {2} L = {mix} L (≈ {3} mm ra khỏi A, ≈ {4} mm vào B).",
+    "Batch {0} of {1}: {2} L (≈ {3} mm out of A, ≈ {4} mm into B).": "Mẻ {0}/{1}: {2} L (≈ {3} mm ra khỏi A, ≈ {4} mm vào B).",
+    "{0} L gives ≈ {1} mm here: above 100 mm, shape detail is lost (§3.4).": "{0} L cho ≈ {1} mm ở đây: trên 100 mm, mất chi tiết hình dạng (§3.4).",
+    "{0} L gives only ≈ {1} mm here: below the 15 mm floor, dip noise dominates (§7.1).": "{0} L chỉ cho ≈ {1} mm ở đây: dưới mức sàn 15 mm, nhiễu đo chiếm phần lớn (§7.1).",
+    "Near the brim (≈ {0} mm, gap ≈ {1} L): keep to the small batches.": "Gần đỉnh bồn (≈ {0} mm, khoảng trống ≈ {1} L): giữ các mẻ nhỏ.",
+    "Batch plan: {plan} L": "Kế hoạch mẻ: {plan} L",
+    "cans {cans} L.": "bình {cans} L.",
+    "From the running shell and the batch plan.": "Theo mô hình bồn tạm và kế hoạch mẻ.",
+    "From the running shells and the batch plan.": "Theo các mô hình bồn tạm và kế hoạch mẻ.",
+    "Batch plan.": "Kế hoạch mẻ.",
+    "Before the first pour, declare the can sizes, the nominal capacity and the batches: for example 2 × 300 L, 2 × 600 L, 8 × 800 L, 2 × 600 L, 2 × 300 L. A batch is not a can: a 300 L batch is one 200 L can and one 100 L can. The page gives each batch the fewest cans, and of those the largest, so the pump and the carry take the least time. The pour card shows the group in work and its batches only: the small batches at the bottom and at the top are two groups. The real tank can hold more or less than the nominal. Past the mid-dip, the running shell counts the end of the plan again: the middle group takes more or fewer batches, and the small batches stay at the end.":
+      "Trước lần đổ đầu tiên, khai báo các cỡ bình, dung tích danh định và các mẻ: ví dụ 2 × 300 L, 2 × 600 L, 8 × 800 L, 2 × 600 L, 2 × 300 L. Một mẻ không phải là một bình: một mẻ 300 L là một bình 200 L và một bình 100 L. Trang chọn cho mỗi mẻ ít bình nhất, và trong số đó là các bình lớn nhất, để việc bơm và mang bình mất ít thời gian nhất. Thẻ đổ chỉ hiện nhóm đang làm và các mẻ của nhóm đó: các mẻ nhỏ ở đáy và ở đỉnh là hai nhóm. Bồn thật có thể chứa nhiều hơn hoặc ít hơn dung tích danh định. Qua mức giữa, mô hình bồn tạm tính lại phần cuối của kế hoạch: nhóm giữa thêm hoặc bớt một mẻ, và các mẻ nhỏ vẫn ở cuối.",
   };
 
   const DICTS = { vi: VI };
@@ -2192,6 +2321,9 @@
     direction: "fill",          // "fill": pour in, level rises; "drain": pump out, level falls
     brimPm: 6,                  // drain: the neck-entrance reading is the brim B ± this (2σ), mm
     brimStart: null,            // drain: B, the adopted neck-entrance reading (set by the core)
+    canSizes: null,             // [200, 100, …]: the can sizes the team has, L (batch plan)
+    nominal: null,              // nominal capacity of the tank, L (batch plan)
+    plan: null,                 // [{count, size}, …]: batch groups in pour order (batch plan)
   };
 
   /** Priors of the running fit (§10a.1); the brim prior only with a neck-entrance start. */
@@ -2223,8 +2355,203 @@
     cfg.dir = cfg.direction === "drain" ? -1 : 1;
     if (!(cfg.brimPm > 0)) cfg.brimPm = DEFAULTS.brimPm;
     if (cfg.brimStart != null && !isFinite(cfg.brimStart)) cfg.brimStart = null;
+    cfg.canSizes = normalizeSizes(cfg.canSizes);
+    cfg.plan = normalizePlan(cfg.plan);
+    if (!(cfg.nominal > 0)) cfg.nominal = null;
     cfg.prior = makePrior(cfg);
     return cfg;
+  }
+
+  // ---------------------------------------------------------------- batch plan (§3.4, §3.10)
+  /*
+   * A batch plan is declared before the first pour: the can sizes the team
+   * has, the nominal capacity, and groups of batches [{count, size}] in pour
+   * order (a fill from the bottom up, a drain from the top down).  A batch is
+   * one level: its cans, then one dip.  A batch size is not a can size: a
+   * 600 L batch with 200 L cans is 3 cans.  The plan is symmetric about the
+   * mid-dip level: the small batches at the bottom and the top, the largest
+   * in the middle, and its total is the nominal capacity (checkPlan).
+   *
+   * The real tank can hold more or less than the nominal.  So once the level
+   * is past the mid-dip, the running shell counts the batches that are still
+   * to come again (planState): only the end of the campaign may break the
+   * symmetry.  Each level records the plan group it was poured for, so the
+   * batch tally counts the adjacent batches of one group only: the small
+   * batches at the bottom and at the top are two groups, never one.
+   */
+
+  /** The can sizes, largest first, without repeats; null when none. */
+  function normalizeSizes(list) {
+    if (list == null || list === "") return null;
+    const raw = Array.isArray(list) ? list : String(list).split(/[,;\s]+/);
+    const out = [];
+    for (const x of raw) {
+      if (x === "" || x == null) continue;
+      const u = Number(String(x).replace(",", "."));
+      if (!(u > 0)) throw new Error("a can size must be more than 0 L");
+      if (!out.some((v) => Math.abs(v - u) < 1e-9)) out.push(u);
+    }
+    out.sort((a, b) => b - a);
+    return out.length ? out : null;
+  }
+
+  /**
+   * The groups of a plan: [{count, size}] in pour order, or "4:300, 2:600".
+   * Adjacent groups of one size merge: the tally counts them as one group.
+   */
+  function normalizePlan(plan) {
+    if (plan == null || plan === "") return null;
+    let list = plan;
+    if (typeof plan === "string") {
+      list = plan.split(/[,;]+/).map((t) => t.trim()).filter(Boolean).map((t) => {
+        const m = t.match(/^(\d+)\s*[:x×*]\s*([0-9.]+)\s*L?$/i);
+        if (!m) throw new Error(`cannot read the batch group ${JSON.stringify(t)}: write count:size, for example 4:300`);
+        return { count: Number(m[1]), size: Number(m[2]) };
+      });
+    }
+    if (!Array.isArray(list)) throw new Error("the batch plan is a list of groups: count × size");
+    const out = [];
+    for (const g of list) {
+      const count = Number(g && g.count), size = Number(g && g.size);
+      if (!(Number.isInteger(count) && count >= 1)) throw new Error("a batch count must be a whole number, 1 or more");
+      if (!(size > 0)) throw new Error("a batch size must be more than 0 L");
+      const last = out[out.length - 1];
+      if (last && Math.abs(last.size - size) < 1e-9) last.count += count;
+      else out.push({ count, size });
+    }
+    return out.length ? out : null;
+  }
+
+  /**
+   * The cans for one batch: the fewest cans, and among those the largest
+   * cans, so the pump and the carry take the least time.  Exact sums only:
+   * a pour lives on the can grid (§3.10).  [{unit, count}], largest first,
+   * or null when no mix of the sizes gives the volume.
+   */
+  function canMix(V, sizes) {
+    const list = (normalizeSizes(sizes) || []);
+    const q = (x) => Math.round(Number(x) * 1000);   // mL: exact sums of decimal sizes
+    const target = q(V), us = list.map(q);
+    if (!(target > 0) || !us.length) return null;
+    const counts = us.map(() => 0);
+    let best = null, steps = 0;
+    // Depth first, the largest can first and most of it first: the first mix
+    // found with the fewest cans is also the one with the largest cans.
+    (function walk(i, rem, used) {
+      if (++steps > 200000) return;
+      if (rem === 0) { if (!best || used < best.n) best = { n: used, counts: counts.slice() }; return; }
+      if (i >= us.length) return;
+      if (best && used + Math.ceil(rem / us[i]) >= best.n) return;
+      for (let c = Math.floor(rem / us[i]); c >= 0; c--) {
+        counts[i] = c;
+        walk(i + 1, rem - c * us[i], used + c);
+      }
+      counts[i] = 0;
+    })(0, target, 0);
+    if (!best) return null;
+    return list.map((unit, i) => ({ unit, count: best.counts[i] })).filter((c) => c.count > 0);
+  }
+
+  /** "4 × 200", "200 + 100", "2 × 200 + 100": the numbers of a mix, without the unit. */
+  function mixText(mix) {
+    return (mix || []).map((c) => (c.count === 1 ? fmtL(c.unit) : `${c.count} × ${fmtL(c.unit)}`)).join(" + ");
+  }
+  /** The can sizes of a mix one by one, in tap order: largest first. */
+  function mixCans(mix) {
+    const out = [];
+    for (const c of mix || []) for (let i = 0; i < c.count; i++) out.push(c.unit);
+    return out;
+  }
+  function fmtL(x) { return String(round(Number(x), 3)); }
+
+  /**
+   * The setup check of a plan (the page refuses to start a campaign on a
+   * plan with errors): every batch is a sum of the cans, the total is the
+   * nominal capacity, and the groups mirror about the middle with the
+   * largest in the middle.
+   */
+  function checkPlan(plan, sizes, nominal) {
+    const groups = normalizePlan(plan) || [];
+    const cans = normalizeSizes(sizes);
+    const errors = [];
+    let total = 0, batches = 0;
+    const out = groups.map((g, i) => {
+      const mix = cans ? canMix(g.size, cans) : null;
+      if (cans && !mix) errors.push(`Group ${i + 1}: ${fmtL(g.size)} L is not a sum of the can sizes.`);
+      total += g.count * g.size; batches += g.count;
+      return { count: g.count, size: g.size, mix };
+    });
+    const n = groups.length;
+    let symmetric = true;
+    for (let i = 0; i < n / 2; i++) {
+      const a = groups[i], b = groups[n - 1 - i];
+      if (a.count !== b.count || Math.abs(a.size - b.size) > 1e-9) symmetric = false;
+    }
+    let m = 0;
+    for (let i = 1; i < n; i++) if (groups[i].size > groups[m].size) m = i;
+    let peaked = true;
+    for (let i = 1; i < n; i++) if (i <= m ? groups[i].size < groups[i - 1].size : groups[i].size > groups[i - 1].size) peaked = false;
+    const nom = nominal > 0 ? Number(nominal) : null;
+    const diff = nom ? total - nom : null;
+    // Sentences: the page shows them as they are.
+    if (n) {
+      if (!cans) errors.push("Enter the can sizes.");
+      if (!nom) errors.push("Enter the nominal capacity.");
+      else if (Math.abs(diff) > 0.5) errors.push(`The batches add up to ${fmtL(total)} L, not the nominal ${fmtL(nom)} L (${sgn(diff, 0)} L).`);
+      if (!symmetric) errors.push("The plan is not symmetric: the groups above the middle must mirror the groups below it.");
+      if (!peaked) errors.push("The largest batches belong in the middle, the smallest at the bottom and the top.");
+    }
+    return { groups: out, total, batches, nominal: nom, diff, symmetric, peaked, errors, ok: !errors.length };
+  }
+
+  /**
+   * Where the campaign stands in its plan.  hist: the plan group of each
+   * batch poured so far, in order.  R: the litres the running shell says
+   * are left (fill: the gap to the brim; drain: the liquid left).  adapt:
+   * the level is past the mid-dip, so the shell counts the end again.
+   *
+   * The count changes land on the middle (largest) group while it is still
+   * to come, else on the group in work; the groups after it keep their
+   * counts, so the small batches stay at the end.  The last group takes as
+   * many batches as the gap needs: a fill reaches the brim (the planned
+   * overflow pour, §3.7), a drain the bottom.  Without adapt the plan is as
+   * declared; a campaign that runs past it goes on with the last size.
+   *
+   * -> { groups: [{size, planned, count, done}], next (group index or
+   *    null when the plan is complete), adapted, total, poured }
+   */
+  function planState(plan, hist, R, adapt) {
+    const G = (plan || []).map((g) => ({ size: g.size, planned: g.count, count: g.count, done: 0 }));
+    if (!G.length) return null;
+    for (const gi of hist) if (G[gi]) G[gi].done++;
+    const g = hist.length ? Math.min(hist[hist.length - 1], G.length - 1) : 0;
+    const last = G.length - 1;
+    if (adapt && R != null && isFinite(R)) {
+      let m = 0;
+      for (let i = 1; i < G.length; i++) if (G[i].size > G[m].size) m = i;
+      const f0 = Math.max(g, m);
+      let avail = R;
+      for (let i = g; i < f0; i++) avail -= Math.max(0, G[i].count - G[i].done) * G[i].size;
+      for (let f = f0; f <= last; f++) {
+        let tail = 0;
+        for (let i = f + 1; i <= last; i++) tail += G[i].count * G[i].size;
+        const want = f === last ? Math.ceil(avail / G[f].size - 1e-9) : Math.round((avail - tail) / G[f].size);
+        const n = Math.max(0, want);
+        G[f].count = G[f].done + n;
+        avail -= n * G[f].size;
+        if (want >= 0 && f < last) break;   // the tail fits: it keeps its counts
+      }
+    } else if (hist.length >= G.reduce((a, x) => a + x.count, 0)) {
+      G[last].count = G[last].done + 1;    // past the plan: go on with the last size
+    }
+    let next = null;
+    for (let f = g; f <= last; f++) if (G[f].done < G[f].count) { next = f; break; }
+    return {
+      groups: G, next,
+      adapted: G.some((x) => x.count !== x.planned),
+      total: G.reduce((a, x) => a + Math.max(x.count, x.done), 0),
+      poured: hist.length,
+    };
   }
 
   // ---------------------------------------------------------------- step cells (§3.9)
@@ -2417,8 +2744,100 @@
       note: o.note || "", tags: [], overflow: !!o.overflow, H: null, n: 0,
     };
     if (o.neck) L.neck = true;
+    // The plan group this batch is for: the batch tally counts by it.  A
+    // level in the neck is outside the plan (the plan is the shell).
+    else if (this.cfg.plan) L.plan = planPick(o.plan || this.planNow());
     this.levels.push(L);
     return L;
+  };
+
+  /** The plan group a new batch takes: the next one, or the last group past the plan. */
+  function planPick(st) {
+    if (!st) return null;
+    const gi = st.next != null ? st.next : st.groups.length - 1;
+    return { group: gi, size: st.groups[gi].size };
+  }
+
+  /** The plan group of each batch poured so far, in order. */
+  Session.prototype._planHist = function () {
+    const out = [];
+    for (const L of this.levels) if (!L.start && L.plan && L.plan.group != null) out.push(L.plan.group);
+    return out;
+  };
+
+  /**
+   * The litres the running shell says are left for the plan, from the last
+   * good level and the pour that waits for its dip: a fill counts the gap to
+   * the brim, a drain the liquid left.  past: the level is past the mid-dip.
+   */
+  Session.prototype._planRoom = function () {
+    const gi = this.lastGood();
+    if (gi < 0 || !this.fit) return null;
+    const p = this.fit.p, cap = capacity(p), dir = this.cfg.dir;
+    let V = volume(this.levels[gi].H, p);
+    const cur = this.current();
+    if (cur && cur.state === "pending" && !cur.start && cur.from === gi) {
+      V += dir * (cur.step.kind === "known" ? cur.step.value : cur.step.base || 0);
+    }
+    return { R: dir > 0 ? cap - V : V, past: dir > 0 ? V >= cap / 2 : V <= cap / 2, capacity: cap };
+  };
+
+  /** The can sizes of the plan: the declared ones, else the pour unit. */
+  function planSizes(cfg) {
+    return cfg.canSizes || (cfg.pourUnit > 0 ? [cfg.pourUnit] : null);
+  }
+
+  /**
+   * The plan now, for the page and the advice: planState plus, for the next
+   * batch, its group number among the groups left, its place in the group,
+   * its cans (the fewest, the largest) and the batch number in all.
+   * null without a plan or before the first level.
+   */
+  Session.prototype.planNow = function () {
+    if (!this.cfg.plan) return null;
+    const room = this._planRoom();
+    if (!room) return null;
+    return this._planView(planState(this.cfg.plan, this._planHist(), room.R, room.past), room);
+  };
+
+  Session.prototype._planView = function (st, room) {
+    if (!st) return null;
+    // Groups keep their declared numbers, also when the end of the plan
+    // drops one: the operator reads the same number all campaign long.
+    st.R = room ? room.R : null;
+    st.past = room ? room.past : false;
+    st.capacity = room ? room.capacity : null;
+    st.nominal = this.cfg.nominal;
+    if (st.next != null) {
+      const g = st.groups[st.next], mix = canMix(g.size, planSizes(this.cfg));
+      st.batch = {
+        group: st.next, number: st.next + 1, groups: st.groups.length,
+        size: g.size, inGroup: g.done + 1, count: g.count, planned: g.planned,
+        index: st.poured + 1, mix, cans: mix ? mix.reduce((a, c) => a + c.count, 0) : null,
+      };
+    } else st.batch = null;
+    return st;
+  };
+
+  /**
+   * The rest of the plan as the running shell sees it now, adapted whether
+   * or not the level is past the mid-dip: the time estimate (fillPlan) walks
+   * it.  -> [{size, mix}] from the next batch on.
+   */
+  Session.prototype._planList = function (st) {
+    const out = [], sizes = planSizes(this.cfg);
+    if (!st || st.next == null) return out;
+    for (let f = st.next; f < st.groups.length; f++) {
+      const g = st.groups[f], mix = canMix(g.size, sizes);
+      for (let k = g.done; k < g.count; k++) out.push({ size: g.size, mix });
+    }
+    return out;
+  };
+  Session.prototype.planProjection = function () {
+    if (!this.cfg.plan) return null;
+    const room = this._planRoom();
+    if (!room) return null;
+    return this._planList(planState(this.cfg.plan, this._planHist(), room.R, true));
   };
 
   // ---- batch: several cans, then one dip (§3.10).  One tap per can, so the
@@ -3058,13 +3477,21 @@
     const cap = capacity(p), half = 0.5 * cap;
     let V = volume(this.levels[gi].H, p), t = 0, open = 0;
     const cur = this.current();
-    if (cur && cur.state === "pending" && !cur.start) {
+    const pend = cur && cur.state === "pending" && !cur.start;
+    if (pend) {
       // The pour is in; the settle and the dip are still to come.
       if (cur.step.kind === "known") V = volume(this.levels[cur.from].H, p) + dir * cur.step.value;
       else if (cur.step.kind === "partial") V = volume(this.levels[cur.from].H, p) + dir * cur.step.base;
       const spent = cur.pourTime && o.now ? (o.now - cur.pourTime) / 1000 : 0;
       t = Math.max(0, settle - spent) + dipS;
-    } else if (this.batch || o.open) {
+    }
+    // With a plan the levels are the plan's batches, each in its own cans.
+    // A transfer gives its shared plan (o.planList).
+    const list = o.planList || this.planProjection();
+    if (list) {
+      return this._fillPlanBatches(list, Object.assign({}, o, { size, pourS, settle, dipS, V, t, dir, cap, half }));
+    }
+    if (!pend && (this.batch || o.open)) {
       // A transfer keeps the open tally on the drain session; the fill
       // session sees the same litres through o.open.
       V += dir * (this.batch ? this.batchVolume() : o.open.volume);
@@ -3113,6 +3540,43 @@
     return Object.assign(base, { half: atHalf, brim: atBrim });
   };
 
+  /**
+   * fillPlan with a batch plan: one level per batch still to come, each
+   * with the cans of its mix and the cycle time of each can size
+   * (o.cycleFor(size) s, else the time of the size in the panel).  The cans
+   * already tapped belong to the first batch.  m.cans counts cans of mixed
+   * sizes (mixed: true).
+   */
+  Session.prototype._fillPlanBatches = function (list, o) {
+    const p = this.fit.p, drain = o.dir < 0;
+    const cyc = (u) => { const s = o.cycleFor ? o.cycleFor(u) : null; return s > 0 ? s : o.pourS; };
+    const openUnits = this.batch ? this.batch.cans.map((c) => c.u)
+      : o.open ? (o.open.units || Array.from({ length: o.open.cans || 0 }, () => o.size)) : [];
+    let V = o.V, t = o.t - Math.min(Math.max(o.pourElapsed || 0, 0), o.pourS), levels = 0, cans = 0;
+    const start = { volume: V, seconds: t };
+    const mark = (lv, cn) => ({ seconds: Math.max(0, t), levels: lv, cans: cn, volume: V });
+    const endV = drain ? Math.max(0.05 * o.cap, volume(p.h0 + 60, p)) : null;
+    const reached = () => (drain ? V <= endV + 1e-6 : V >= o.cap - 1e-6);
+    const halfway = () => (drain ? V <= o.half : V >= o.half);
+    let atHalf = halfway() ? Object.assign(mark(0, 0), { done: true }) : null;
+    let atEnd = reached() ? Object.assign(mark(0, 0), { done: true }) : null;
+    let first = true;
+    for (const b of list) {
+      if (atEnd) break;
+      const units = b.mix ? mixCans(b.mix) : Array.from({ length: Math.max(1, Math.ceil(b.size / o.size - 1e-9)) }, () => o.size);
+      if (first) {
+        for (const u of openUnits) { const k = units.indexOf(u); units.splice(k >= 0 ? k : units.length - 1, 1); }
+        first = false;
+      }
+      V += o.dir * b.size; levels++; cans += units.length;
+      t += units.reduce((a, u) => a + cyc(u), 0) + o.settle + o.dipS;
+      if (!atHalf && halfway()) atHalf = mark(levels, cans);
+      if (reached()) atEnd = mark(levels, cans);
+    }
+    const base = { size: o.size, cycleSeconds: o.pourS, settleSeconds: o.settle, dipSeconds: o.dipS, start, capacity: o.cap, mixed: true };
+    return Object.assign(base, drain ? { half: atHalf, end: atEnd, brim: null, endVolume: endV } : { half: atHalf, brim: atEnd });
+  };
+
   /** Pour advisor and brim watch (§3.4, §10). */
   Session.prototype._advise = function (verdict, L) {
     const a = L.neck ? this.advice(L.H) : this.adviceNext(L.H, L.n);
@@ -3148,20 +3612,51 @@
     if (cfg.dir < 0) return this._adviceDrain(H, m, gap, toBrim);
     let target = 30 * m;
     const halve = gap < 0.05 * capacity(p) || toBrim < 60;
-    if (halve) target /= 2;
+    const pb = this._planBatch();
+    if (halve && !pb) target /= 2;
     let units = null;
     if (cfg.pourUnit) { units = Math.max(1, Math.round(target / cfg.pourUnit)); target = units * cfg.pourUnit; }
     const sdB = Math.sqrt(Math.max(this.fit.cov ? 4 * this.fit.cov[0][0] + 4 * this.fit.cov[0][2] + this.fit.cov[2][2] : 0, 0));
     // warn: the warning alone, without the advised pour (the Now card shows it).
-    const warn = halve ? `Near the brim (≈ ${fmt(toBrim, 0)} mm, gap ≈ ${fmt(gap, 0)} L): halve the pour.` : "";
-    return {
+    // With a plan the batch size is the plan's: the brim watch only warns.
+    const warn = !halve ? "" : pb ? `Near the brim (≈ ${fmt(toBrim, 0)} mm, gap ≈ ${fmt(gap, 0)} L): keep to the small batches.`
+      : `Near the brim (≈ ${fmt(toBrim, 0)} mm, gap ≈ ${fmt(gap, 0)} L): halve the pour.`;
+    const a = {
       slope: m, target, units, floor: 15 * m, ceiling: 100 * m, halve,
       gap, toBrim, brim: brim(p), brimSd: sdB, capacity: capacity(p), warn,
       text: (warn ? warn + " " : "")
         + `Next pour ≈ ${fmt(target, 0)} L` + (units ? ` = ${units} × ${cfg.pourUnit} L` : "")
         + ` (≈ ${fmt(target / Math.max(m, 1e-3), 0)} mm rise).`,
     };
+    return pb ? planAdvice(a, pb, warn, "rise", H, p, 1) : a;
   };
+
+  /** The plan's next batch, or null (no plan, or the plan is complete). */
+  Session.prototype._planBatch = function () {
+    const st = this.planNow();
+    return st && st.batch ? Object.assign({ state: st }, st.batch) : null;
+  };
+
+  /**
+   * The advice with a plan: the recommended batch is the plan's next batch,
+   * in the cans of its mix.  The 30 mm rule of §3.4 stays as a check: a
+   * batch below the 15 mm floor or above 100 mm of travel gets a note.
+   */
+  function planAdvice(a, pb, warn, word, H, p, dir) {
+    // The travel of the whole batch on the shell, not the local slope: near
+    // the bottom of a fill the slope is almost 0.
+    const V0 = volume(H, p), cap = capacity(p);
+    const mm = dir > 0 ? levelFor(Math.min(V0 + pb.size, cap), p) - H : H - levelFor(Math.max(V0 - pb.size, 0), p);
+    const note = mm < 15 ? ` ${fmt(pb.size, 0)} L gives only ≈ ${fmt(mm, 0)} mm here: below the 15 mm floor, dip noise dominates (§7.1).`
+      : mm > 100 ? ` ${fmt(pb.size, 0)} L gives ≈ ${fmt(mm, 0)} mm here: above 100 mm, shape detail is lost (§3.4).` : "";
+    return Object.assign(a, {
+      target: pb.size, units: null, plan: pb, mix: pb.mix, cans: pb.cans, travel: mm, riseNote: note.trim(),
+      text: (warn ? warn + " " : "")
+        + `Batch ${pb.index} of ${pb.state.total}: ${fmt(pb.size, 0)} L`
+        + (pb.mix ? ` = ${mixText(pb.mix)} L` : "")
+        + ` (≈ ${fmt(mm, 0)} mm ${word}).` + note,
+    });
+  }
 
   /**
    * Drain advisor: the same 30 mm target, no halving (the brim is behind
@@ -3173,17 +3668,19 @@
     let target = 30 * m;
     let units = null;
     if (cfg.pourUnit) { units = Math.max(1, Math.round(target / cfg.pourUnit)); target = units * cfg.pourUnit; }
-    const after = levelFor(left - target, p);
+    const pb = this._planBatch();
+    const after = levelFor(left - (pb ? pb.size : target), p);
     const bottom = after - p.h0 < 60 || left < 0.05 * cap;
     const sdB = Math.sqrt(Math.max(this.fit.cov ? 4 * this.fit.cov[0][0] + 4 * this.fit.cov[0][2] + this.fit.cov[2][2] : 0, 0));
     const warn = bottom ? `Near the bottom (≈ ${fmt(toBottom, 0)} mm, ≈ ${fmt(left, 0)} L left): the pump may lose suction; a part can is fine (N+?).` : "";
-    return {
+    const a = {
       slope: m, target, units, floor: 15 * m, ceiling: 100 * m, halve: false, bottom,
       gap, toBrim, brim: brim(p), brimSd: sdB, capacity: cap, left, toBottom, warn,
       text: (warn ? warn + " " : "")
         + `Next drain ≈ ${fmt(target, 0)} L` + (units ? ` = ${units} × ${cfg.pourUnit} L` : "")
         + ` (≈ ${fmt(target / Math.max(m, 1e-3), 0)} mm fall).`,
     };
+    return pb ? planAdvice(a, pb, warn, "fall", H, p, -1) : a;
   };
 
   /** Drift and closure with the running fit (§2, §9.3). */
@@ -3404,10 +3901,36 @@
   TransferSession.prototype.pour = function (stepText, opts) {
     this._guard();
     const o = opts || {};
-    const Lo = this.out.pour(stepText, { neck: !!o.neck, note: o.note });
-    const Li = this.in.pour(stepText, { overflow: !!o.overflow, note: o.note });
+    const plan = this.planNow() || undefined;
+    const Lo = this.out.pour(stepText, { neck: !!o.neck, note: o.note, plan });
+    const Li = this.in.pour(stepText, { overflow: !!o.overflow, note: o.note, plan });
     this._pair();
     return Lo;
+  };
+
+  /**
+   * The shared batch plan: tank A's history of batches, and the litres left
+   * by the tighter tank (A's liquid or B's gap): the campaign ends when A is
+   * empty or B is full, whichever comes first.  Past the mid-dip when
+   * either tank is.
+   */
+  TransferSession.prototype._planRoom = function () {
+    const a = this.out._planRoom(), b = this.in._planRoom();
+    if (!a || !b) return null;
+    const room = a.R <= b.R ? a : b;
+    return { R: room.R, past: a.past || b.past, capacity: room.capacity };
+  };
+  TransferSession.prototype.planNow = function () {
+    if (!this.out.cfg.plan) return null;
+    const room = this._planRoom();
+    if (!room) return null;
+    return this.out._planView(planState(this.out.cfg.plan, this.out._planHist(), room.R, room.past), room);
+  };
+  TransferSession.prototype.planProjection = function () {
+    if (!this.out.cfg.plan) return null;
+    const room = this._planRoom();
+    if (!room) return null;
+    return this.out._planList(planState(this.out.cfg.plan, this.out._planHist(), room.R, true));
   };
 
   // The shared can tally lives on the drain session (the pump fills the cans).
@@ -3423,8 +3946,9 @@
   TransferSession.prototype.closeBatch = function (opts) {
     this._guard();
     const o = opts || {};
-    const Lo = this.out.closeBatch({ partial: o.partial, neck: o.neck, note: o.note });
-    const Li = this.in.pour(Lo.step.text, { overflow: !!o.overflow, note: o.note });
+    const plan = this.planNow() || undefined;
+    const Lo = this.out.closeBatch({ partial: o.partial, neck: o.neck, note: o.note, plan });
+    const Li = this.in.pour(Lo.step.text, { overflow: !!o.overflow, note: o.note, plan });
     Li.cans = {
       tapped: Lo.cans.tapped, unit: Lo.cans.unit, partial: Lo.cans.partial,
       taps: Lo.cans.taps.slice(), units: Lo.cans.units.slice(),
@@ -3561,6 +4085,9 @@
     const unit = this.out.cfg.pourUnit;
     let target = Math.min(aO.target, aI.target), units = null;
     if (unit) { units = Math.max(1, Math.round(target / unit)); target = units * unit; }
+    // With a plan the batch is the plan's next batch, for both tanks.
+    const st = this.planNow(), pb = st && st.batch ? Object.assign({ state: st }, st.batch) : null;
+    if (pb) { target = pb.size; units = null; }
     // Where both next dips must land after the advised batch (§10a.2).
     const GO = this.out.levels[giO], GI = this.in.levels[giI];
     const prO = GO.neck ? null : this.out.preview(GO.H, target, GO.n);
@@ -3571,12 +4098,16 @@
     const eI = prI.overflow ? "B reaches the neck" : `B ≈ ${fmt(prI.H, 1)} ± ${fmt(2 * prI.sd, 1)} mm`;
     const warn = ((aI.halve ? `Tank B near the brim (≈ ${fmt(aI.toBrim, 0)} mm): small batches. ` : "")
       + (aO.bottom ? `Tank A near the bottom (≈ ${fmt(aO.toBottom, 0)} mm): the pump may lose suction; a part can is fine. ` : "")).trim();
+    const mmO = target / Math.max(aO.slope, 1e-3), mmI = target / Math.max(aI.slope, 1e-3);
+    const head = pb ? `Batch ${pb.index} of ${st.total}: ${fmt(target, 0)} L` + (pb.mix ? ` = ${mixText(pb.mix)} L` : "")
+      : `Next batch ≈ ${fmt(target, 0)} L` + (units ? ` = ${units} × ${fmt(unit, 0)} L` : "");
     return {
       target, units, out: aO, in: aI, halve: aI.halve, bottom: aO.bottom,
+      plan: pb, mix: pb ? pb.mix : null, cans: pb ? pb.cans : null,
       expect: { out: prO, in: prI }, warn,
       text: (warn ? warn + " " : "")
-        + `Next batch ≈ ${fmt(target, 0)} L` + (units ? ` = ${units} × ${fmt(unit, 0)} L` : "")
-        + ` (≈ ${fmt(target / Math.max(aO.slope, 1e-3), 0)} mm out of A, ≈ ${fmt(target / Math.max(aI.slope, 1e-3), 0)} mm into B).`
+        + head
+        + ` (≈ ${fmt(mmO, 0)} mm out of A, ≈ ${fmt(mmI, 0)} mm into B).`
         + ` Expect the next dips at ${eO} · ${eI} (2σ).`,
     };
   };
@@ -3818,6 +4349,7 @@
     area, volume, slope, capacity, brim, levelFor, fitShell, predictLevel, parseStep,
     resolveConfig, Session, TransferSession, DEFAULTS, adopt, canHint, NAMES, replayRows,
     readRawText, detectDirection, makePrior, levelTimes, clock,
+    canMix, mixText, mixCans, checkPlan, planState, normalizePlan, normalizeSizes,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.CalibSite = api;
@@ -4676,9 +5208,160 @@
       : drain
         ? "Prime the pump and fill the hose before this reading: water that fills the hose later leaves the tank off the record. The first level always needs two readings: no prediction can test it."
         : "Sound the bottom first and record the heel as this row (§3.3). The first level always needs two readings: no prediction can test it.";
+    renderPlanSetup();
+  }
+
+  // ------------------------------------------------------------ batch plan (setup)
+  // The draft lives in the device prefs, so a team with one set of cans and
+  // one kind of tank keeps it from one campaign to the next.  The core
+  // checks it (checkPlan); the page does not start a campaign on a plan
+  // with errors.  The rows rebuild only when a group is added, removed or
+  // counted: typing a size changes its own row, so the field keeps the focus.
+  let planSig = "";
+  const fl = (x) => String(Math.round(Number(x) * 1000) / 1000);
+  function planDraft() {
+    if (!P.plan || !Array.isArray(P.plan.groups)) P.plan = { cans: [], groups: [], nominal: null, nominalB: null };
+    if (!Array.isArray(P.plan.cans)) P.plan.cans = [];
+    return P.plan;
+  }
+  function savePlanDraft() { localStorage.setItem(PREFS, JSON.stringify(P)); }
+  /** The can sizes of the plan: the default can size and the sizes added. */
+  function planCans() {
+    const out = [], add = (u) => { u = Number(u); if (u > 0 && !out.some((v) => Math.abs(v - u) < 1e-9)) out.push(u); };
+    add(num("s-unit"));
+    for (const u of planDraft().cans) add(u);
+    return out.sort((a, b) => b - a);
+  }
+  /** The nominal the plan must add up to: a transfer ends at the smaller tank. */
+  function planNominal() {
+    const d = planDraft();
+    if (setupDir !== "transfer") return d.nominal;
+    const vs = [d.nominal, d.nominalB].filter((v) => v > 0);
+    return vs.length ? Math.min.apply(null, vs) : null;
+  }
+  function planCheck() {
+    const d = planDraft();
+    if (!d.groups.length) return null;
+    const blank = d.groups.findIndex((g) => !(g.size > 0));
+    if (blank >= 0) return { ok: false, errors: [`Enter the batch size of group ${blank + 1}.`] };
+    try { return C.checkPlan(d.groups, planCans(), planNominal()); } catch (e) { return { ok: false, errors: [e.message] }; }
+  }
+  function mixLine(size, cans) {
+    if (!(size > 0) || !cans.length) return "";
+    const mix = C.canMix(size, cans);
+    return mix ? `= ${C.mixText(mix)} L` : "no mix of the cans";
+  }
+  function renderPlanSetup() {
+    const d = planDraft(), cans = planCans(), def = num("s-unit");
+    const drain = setupDir === "drain", transfer = setupDir === "transfer";
+    $("s-cans").innerHTML = cans.length ? cans.map((u) => (def != null && Math.abs(u - def) < 1e-9
+      ? `<button data-can="${fl(u)}" aria-pressed="true" disabled>${fl(u)} L · default</button>`
+      : `<button data-can="${fl(u)}" aria-pressed="true" aria-label="Remove the ${fl(u)} L can">${fl(u)} L ×</button>`)).join("")
+      : `<span class="muted">No can size yet: enter the default can size, or add one.</span>`;
+    $("s-nom-label").textContent = transfer ? "Tank A nominal capacity, L" : "Nominal capacity, L";
+    $("s-plan-label").textContent = transfer ? "Batches, in order (tank B from the bottom up)"
+      : drain ? "Batches, top → bottom" : "Batches, bottom → top";
+    if ($("s-nom") !== document.activeElement && d.nominal != null && !$("s-nom").value) $("s-nom").value = fl(d.nominal);
+    if ($("sB-nom") !== document.activeElement && d.nominalB != null && !$("sB-nom").value) $("sB-nom").value = fl(d.nominalB);
+    const shell = (D, L) => (D > 0 && L > 0 ? Math.PI * D * D / 4 * L / 1e6 : null);
+    const vA = shell(num("s-D"), num("s-L")), vB = transfer ? shell(num("sB-D"), num("sB-L")) : null;
+    $("s-nom-note").textContent = [vA ? `${transfer ? "Tank A: " : ""}D and L give ≈ ${f(vA, 0)} L.` : "",
+      vB ? `Tank B: D and L give ≈ ${f(vB, 0)} L.` : ""].filter(Boolean).join(" ");
+    const sig = JSON.stringify(d.groups.map((g) => g.count)) + d.groups.length;
+    if (sig !== planSig) {
+      planSig = sig;
+      $("s-plan").innerHTML = d.groups.map((g, i) => `<div class="plan-row"><span class="plan-n">${i + 1}</span>`
+        + `<button class="secondary" data-act="dec" data-i="${i}" aria-label="One batch less in group ${i + 1}"${g.count <= 1 ? " disabled" : ""}>−</button>`
+        + `<span class="plan-c">${g.count}</span>`
+        + `<button class="secondary" data-act="inc" data-i="${i}" aria-label="One batch more in group ${i + 1}">+</button>`
+        + `<span>×</span><input class="plan-size" data-i="${i}" type="number" inputmode="decimal" value="${g.size > 0 ? fl(g.size) : ""}" aria-label="Batch size of group ${i + 1}, L"><span>L</span>`
+        + `<span class="muted plan-mix" id="s-plan-mix-${i}"></span>`
+        + `<button class="danger" data-act="del" data-i="${i}" aria-label="Remove group ${i + 1}">✕</button></div>`).join("");
+    }
+    d.groups.forEach((g, i) => { $(`s-plan-mix-${i}`).textContent = mixLine(g.size, cans); });
+    $("s-plan-mirror").disabled = !d.groups.length;
+    const chk = planCheck();
+    $("s-plan-check").className = !chk ? "muted" : chk.ok ? "ok" : "error";
+    $("s-plan-check").textContent = !chk ? "No batch plan yet: tap + group."
+      : chk.ok ? `${chk.batches} batches · ${fl(chk.total)} L = nominal ✓ · symmetric ✓` : chk.errors.join(" ");
+  }
+  function planChanged() { savePlanDraft(); renderPlanSetup(); }
+  $("s-cans").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-can]");
+    if (!b || b.disabled) return;
+    const d = planDraft(), u = Number(b.dataset.can);
+    d.cans = d.cans.filter((v) => Math.abs(v - u) > 1e-9);
+    planChanged();
+  });
+  $("s-can-go").addEventListener("click", guard("s-err", () => {
+    const u = num("s-can-add");
+    if (!(u > 0)) throw new Error("Enter a can size in litres.");
+    const d = planDraft();
+    if (!d.cans.some((v) => Math.abs(v - u) < 1e-9)) d.cans.push(u);
+    $("s-can-add").value = "";
+    planChanged();
+  }));
+  $("s-plan").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-act]");
+    if (!b || b.disabled) return;
+    const d = planDraft(), i = Number(b.dataset.i), g = d.groups[i];
+    if (!g) return;
+    if (b.dataset.act === "inc") g.count++;
+    else if (b.dataset.act === "dec") g.count = Math.max(1, g.count - 1);
+    else if (b.dataset.act === "del") { d.groups.splice(i, 1); planSig = ""; }
+    planChanged();
+  });
+  // A typed size changes its own group: no rebuild, so the field keeps the focus.
+  $("s-plan").addEventListener("input", (ev) => {
+    const t = ev.target;
+    if (!t || !t.dataset || t.dataset.i == null) return;
+    const g = planDraft().groups[Number(t.dataset.i)];
+    if (!g) return;
+    const v = parseFloat(String(t.value).trim().replace(",", "."));
+    g.size = v > 0 ? v : null;
+    planChanged();
+  });
+  $("s-plan-add").addEventListener("click", () => {
+    const d = planDraft(), last = d.groups[d.groups.length - 1];
+    d.groups.push({ count: 1, size: last ? last.size : null });
+    planChanged();
+  });
+  /** The top half mirrors the bottom half: the groups up to the largest, then back down. */
+  $("s-plan-mirror").addEventListener("click", () => {
+    const d = planDraft();
+    if (!d.groups.length) return;
+    let m = 0;
+    d.groups.forEach((g, i) => { if ((g.size || 0) > (d.groups[m].size || 0)) m = i; });
+    const low = d.groups.slice(0, m + 1).map((g) => ({ count: g.count, size: g.size }));
+    d.groups = low.concat(low.slice(0, m).reverse().map((g) => ({ count: g.count, size: g.size })));
+    planSig = "";
+    planChanged();
+  });
+  for (const [id, key] of [["s-nom", "nominal"], ["sB-nom", "nominalB"]]) {
+    $(id).addEventListener("input", () => { planDraft()[key] = num(id); planChanged(); });
+  }
+  for (const id of ["s-unit", "s-D", "s-L", "sB-D", "sB-L"]) $(id).addEventListener("input", () => renderPlanSetup());
+
+  /**
+   * The plan part of a new campaign's config: { canSizes, plan } (and the
+   * nominal per tank, set by the caller), or {} without a plan.  A plan with
+   * errors stops the start.
+   */
+  function planConfig() {
+    const d = planDraft();
+    if (!d.groups.length) return {};
+    const chk = planCheck();
+    if (!chk.ok) throw new Error(chk.errors.join(" "));
+    const cans = planCans();
+    return { canSizes: cans, plan: d.groups.map((g) => ({ count: g.count, size: g.size })), unit: cans[cans.length - 1] };
   }
   $("s-go").addEventListener("click", guard("s-err", () => {
     const n = readNoise();
+    const pc = planConfig();   // a plan with errors stops here, before anything changes
+    const plan = pc.plan ? { canSizes: pc.canSizes, plan: pc.plan } : {};
+    // The default can size is the pour unit; with a plan and no default, the smallest can.
+    const pourUnit = num("s-unit") || pc.unit || null;
+    const nomA = pc.plan ? planDraft().nominal : null, nomB = pc.plan ? planDraft().nominalB : null;
     resetTallySize();   // a new campaign takes its own default can size
     if (setupDir === "transfer") {
       const dipA = num("s-dip"), dipB = num("sB-dip");
@@ -4688,10 +5371,10 @@
       if (!(num("sB-L") > 0)) throw new Error("Enter the length estimate L of tank B.");
       if (dipA == null) throw new Error("Enter tank A's first reading.");
       if (dipB == null) throw new Error("Enter tank B's first reading.");
-      const shared = { pourUnit: num("s-unit"), sigmaRead: n.sigmaRead, pourRel: n.pourRel, pourAbs: n.pourAbs, h0pm: n.h0pm, brimPm: n.brimPm };
+      const shared = Object.assign({ pourUnit, sigmaRead: n.sigmaRead, pourRel: n.pourRel, pourAbs: n.pourAbs, h0pm: n.h0pm, brimPm: n.brimPm }, plan);
       const s = new C.TransferSession(
-        Object.assign({ tank: $("s-tank").value.trim() || "tank", D: num("s-D"), Dpm: num("s-Dpm") || 200, Lest: num("s-L"), Lpm: num("s-Lpm") }, shared),
-        Object.assign({ tank: $("sB-tank").value.trim() || "tank-b", D: num("sB-D"), Dpm: num("sB-Dpm") || 200, Lest: num("sB-L"), Lpm: num("sB-Lpm") }, shared));
+        Object.assign({ tank: $("s-tank").value.trim() || "tank", D: num("s-D"), Dpm: num("s-Dpm") || 200, Lest: num("s-L"), Lpm: num("s-Lpm"), nominal: nomA }, shared),
+        Object.assign({ tank: $("sB-tank").value.trim() || "tank-b", D: num("sB-D"), Dpm: num("sB-Dpm") || 200, Lest: num("sB-L"), Lpm: num("sB-Lpm"), nominal: nomB }, shared));
       s.start($("s-step").value.trim() || "?", dipA, $("sB-step").value.trim() || "?", dipB, "", Date.now(), { at: setupAt });
       s.out.levels[0].pourTime = null;
       s.in.levels[0].pourTime = null;
@@ -4701,13 +5384,13 @@
       localStorage.setItem(PREFS, JSON.stringify(P));
       return;
     }
-    const cfg = {
+    const cfg = Object.assign({
       tank: $("s-tank").value.trim() || "tank",
       D: num("s-D"), Dpm: num("s-Dpm") || 200, Lest: num("s-L"), Lpm: num("s-Lpm"),
-      pourUnit: num("s-unit"), sigmaRead: n.sigmaRead,
+      pourUnit, sigmaRead: n.sigmaRead,
       pourRel: n.pourRel, pourAbs: n.pourAbs, h0pm: n.h0pm, brimPm: n.brimPm,
-      direction: setupDir,
-    };
+      direction: setupDir, nominal: nomA,
+    }, plan);
     if (!(cfg.D > 0)) throw new Error("Enter the diameter estimate D.");
     if (!(cfg.Lest > 0)) throw new Error("Enter the length estimate L.");
     const dip = num("s-dip");
@@ -4745,6 +5428,7 @@
     if (!(u > 0)) throw new Error("Enter the can size in litres.");
     if (S.quickTap(now) && !confirm(tr(`Less than ${S.cfg.tapGap} s since the last can. Is this a new can?`))) return;
     S.tap(now, u); save();
+    followPlan();
     // The can is counted: its pour timer and alarm are done.
     if (T.pour || T.wait) { delete T.pour; delete T.wait; saveTimer(); }
     stopAlarm();
@@ -4782,7 +5466,7 @@
     if (v > 0) T.unit = v; else delete T.unit;
     saveTimer();
   }
-  $("t-undo").addEventListener("click", guard("p-err", () => { S.untap(); save(); }));
+  $("t-undo").addEventListener("click", guard("p-err", () => { S.untap(); save(); followPlan(); }));
   $("t-part").addEventListener("change", () => render());
   $("p-go").addEventListener("click", guard("p-err", () => {
     if (S.cans()) {
@@ -5127,6 +5811,7 @@
         : ["brim", `≈ ${f(adv.brim, 0)} ± ${f(2 * adv.brimSd, 0)} mm · ${f(adv.toBrim, 0)} mm to go`],
       drain ? ["bottom", `≈ ${f(adv.toBottom, 0)} mm to go · ≈ ${f(adv.left, 0)} L left`] : null,
       ["slope", `${f(adv.slope, 2)} L/mm`],
+      planRow(),
     ].filter(Boolean).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("") : "";
     $("now-advice").textContent = adv && !pend
       ? (sm ? shortAdvice(adv, G)
@@ -5180,6 +5865,13 @@
     $("a-edit").disabled = !L || L.start;
     $("a-override").disabled = !L || !(L.state === "pending" && L.dips.length >= 2);
     $("a-undo").disabled = !L;
+  }
+
+  /** The Now card's plan line: the batches poured of the plan, and the nominal. */
+  function planRow() {
+    const st = S.planNow ? S.planNow() : null;
+    if (!st) return null;
+    return ["batch plan", `${st.poured} of ${st.total} batches poured` + (st.nominal ? ` · nominal ${f(st.nominal, 0)} L` : "")];
   }
 
   /** One tank's block in the transfer Now card. */
@@ -5500,6 +6192,16 @@
       $("t-unit").value = String(kept || (last > 0 ? last : def));
       $("t-unit").dataset.set = "1";
     }
+    // With a plan the size field starts each batch at its first planned can
+    // (the largest); each tap moves it to the next can (followPlan).
+    const pb = adv && adv.plan ? adv.plan : null;
+    const planned = pb && pb.mix ? C.mixCans(pb.mix) : null;
+    if (planned && n === 0 && T.planFor !== pb.index) {
+      T.planFor = pb.index;
+      $("t-unit").value = String(planned[0]); $("t-unit").dataset.set = "1";
+      keepUnit();
+    }
+    renderPlanLive();
     const act = activeUnit(), part = $("t-part").checked && n > 0;
     const step = def > 0 ? String(Math.round(1000 * def) / 1000) : null;
     for (const [id, sign, word] of [["t-dec", "−", "less"], ["t-inc", "+", "more"]]) {
@@ -5514,7 +6216,7 @@
     $("t-count").textContent = `${n} can${n === 1 ? "" : "s"} · ${f(known, 0)} L` + (part ? " + part can" : "");
 
     const sizes = [];
-    for (const u of [def, act].concat(S.canUnits().map((x) => x.unit))) if (u > 0 && sizes.indexOf(u) < 0) sizes.push(u);
+    for (const u of [def, act].concat(S.cfg.canSizes || [], S.canUnits().map((x) => x.unit))) if (u > 0 && sizes.indexOf(u) < 0) sizes.push(u);
     if (!sizes.length) $("p-manual").open = true;
     $("t-units").innerHTML = sizes.map((u) => `<button data-unit="${u}" aria-pressed="${u === act}">${f(u, 0)} L</button>`).join("");
 
@@ -5524,9 +6226,16 @@
     $("t-plus").textContent = act > 0 ? `+1 can ${transfer || drain ? "full" : "poured"} (${f(act, 0)} L)` : "Enter the can size, L";
     wordPourCard(drain);
 
-    const cans = adv && act ? Math.max(1, Math.round(adv.target / act)) : 0;
+    const cans = planned ? planned.length : adv && act ? Math.max(1, Math.round(adv.target / act)) : 0;
     $("t-bar").style.width = `${cans ? Math.min(100, 100 * n / cans) : 0}%`;
     let note = "", warn = false;
+    // The recommended batch: the plan's next batch in its cans, or the
+    // 30 mm advice.  The warnings are the same for both.
+    const mixT = pb && pb.mix ? `${C.mixText(pb.mix)} L = ` : "";
+    const rec = (tail) => (pb
+      ? `Plan: ${mixT}${f(pb.size, 0)} L` + (transfer ? "." : ` (≈ ${f(adv.travel, 0)} mm ${drain ? "fall" : "rise"}).`) + (adv.riseNote ? " " + adv.riseNote : "")
+      : `Advice ≈ ${f(adv.target, 0)} L` + (cans ? ` = ${cans} × ${f(act, 0)} L` : "") + tail);
+    const more = cans && n > cans ? ` ${n - cans} more than the ${pb ? "plan" : "advice"}.` : "";
     if (transfer && adv && adv.out && adv.in) {
       const aO = adv.out, aI = adv.in;
       if (vol > aO.left) { note = `${f(vol, 0)} L is more than tank A's liquid (≈ ${f(aO.left, 0)} L): the pump will lose suction. Tick the part can.`; warn = true; }
@@ -5534,22 +6243,23 @@
       else {
         if (aO.bottom) { note += "Tank A near the bottom: the pump may lose suction; a part can is fine (N+?). "; warn = true; }
         if (aI.halve) { note += "Tank B near the brim: small batches. "; warn = true; }
-        note += `Advice ≈ ${f(adv.target, 0)} L` + (cans ? ` = ${cans} × ${f(act, 0)} L` : "") + " (≈ 30 mm in each tank).";
+        note += rec(" (≈ 30 mm in each tank).") + (pb ? more : "");
       }
     } else if (adv && drain) {
-      note = `Advice ≈ ${f(adv.target, 0)} L` + (cans ? ` = ${cans} × ${f(act, 0)} L` : "") + " (≈ 30 mm fall).";
+      note = rec(" (≈ 30 mm fall).");
       if (vol > adv.left) { note = `${f(vol, 0)} L is more than the liquid left (≈ ${f(adv.left, 0)} L): the pump will lose suction. Tick the part can.`; warn = true; }
       else if (adv.bottom) { note = "Near the bottom: the pump may lose suction; a part can is fine (N+?). " + note; warn = true; }
-      else if (cans && n > cans) note += ` ${n - cans} more than the advice.`;
+      else note += more;
     } else if (adv) {
-      note = `Advice ≈ ${f(adv.target, 0)} L` + (cans ? ` = ${cans} × ${f(act, 0)} L` : "") + " (≈ 30 mm rise).";
+      note = rec(" (≈ 30 mm rise).");
       if (vol > adv.gap) { note = `${f(vol, 0)} L is more than the shell gap (≈ ${f(adv.gap, 0)} L): expect an overflow.`; warn = true; }
       else if (adv.halve) { note = "Near the brim: small batches. " + note; warn = true; }
-      else if (cans && n > cans) note += ` ${n - cans} more than the advice.`;
+      else note += more;
     }
     if (simple() && !warn) {
       const tgt = adv ? adv.target : null;
-      note = tgt ? `Target: ${cans ? `${cans} × ${f(act, 0)} L` : `≈ ${f(tgt, 0)} L`}` : "";
+      note = pb && pb.mix ? `Target: ${C.mixText(pb.mix)} L`
+        : tgt ? `Target: ${cans ? `${cans} × ${f(act, 0)} L` : `≈ ${f(tgt, 0)} L`}` : "";
     }
     $("t-target").textContent = note;
     $("t-target").className = warn ? "error" : "muted";
@@ -5560,7 +6270,7 @@
     for (let i = 0; i < want; i++) {
       chips += i < n
         ? `<span>${i + 1} · ${list[i].t ? hhmm(list[i].t) : ""} · ${f(list[i].u, 0)}</span>`
-        : `<span class="todo">${i + 1}</span>`;
+        : `<span class="todo">${i + 1}${planned && planned[i] ? ` · ${f(planned[i], 0)}` : ""}</span>`;
     }
     $("t-chips").innerHTML = chips;
     $("t-undo").disabled = n === 0;
@@ -5571,6 +6281,56 @@
         ? (n ? `Drained: ${n} can${n > 1 ? "s" : ""}, ${f(vol, 0)} L → dip` : "Drained")
         : (n ? `Batch done: ${n} can${n > 1 ? "s" : ""}, ${f(vol, 0)} L → dip` : "Poured");
     tickPour(Date.now());
+  }
+
+  /**
+   * The batch plan on the pour card: the group in work and the batch in it,
+   * one chip per batch of that group only (the small batches at the bottom
+   * and at the top are two groups), and why a count differs from the plan.
+   */
+  function renderPlanLive() {
+    const st = S && S.planNow ? S.planNow() : null;
+    $("t-plan").classList.toggle("hidden", !st);
+    if (!st) return;
+    const b = st.batch, sm = simple();
+    if (!b) {
+      $("t-plan-head").textContent = `Batch plan complete: ${st.poured} batches.`;
+      $("t-plan-chips").innerHTML = "";
+      $("t-plan-note").textContent = sm ? "" : isTransfer()
+        ? "The running shells have no room for another batch: tank A is at the bottom or tank B at the brim."
+        : isDrain() ? "The running shell puts the level at the bottom: drain on until the pump loses suction."
+          : "The running shell puts the level at the brim: the last pour overflows on purpose (§3.7).";
+      return;
+    }
+    $("t-plan-head").textContent = `Group ${b.number} of ${b.groups} · ${f(b.size, 0)} L · `
+      + (b.count !== b.planned ? `batch ${b.inGroup} of ${b.count} (plan ${b.planned})` : `batch ${b.inGroup} of ${b.count}`)
+      + (sm ? "" : ` · ${b.index} of ${st.total} in all`);
+    let chips = "";
+    for (let i = 1; i <= b.count; i++) chips += `<span class="${i < b.inGroup ? "" : i === b.inGroup ? "now" : "todo"}">${i}</span>`;
+    $("t-plan-chips").innerHTML = chips;
+    let note = "";
+    if (st.adapted && st.past) {
+      note = `The running shell puts the tank at ≈ ${f(st.capacity, 0)} L`
+        + (st.nominal ? ` (nominal ${f(st.nominal, 0)} L)` : "") + ": the end of the plan changes.";
+      st.groups.forEach((g, i) => {
+        if (g.count === g.planned) return;
+        note += g.count > 0 ? ` Group ${i + 1}: ${g.count} × ${f(g.size, 0)} L (plan ${g.planned}).`
+          : ` Group ${i + 1} drops out (plan ${g.planned} × ${f(g.size, 0)} L).`;
+      });
+    } else if (st.adapted) {
+      note = `The plan's batches are done, but the running shell has room for more: batches of ${f(b.size, 0)} L follow.`;
+    } else if (!st.past) {
+      note = "Past the mid-dip, the running shell counts the end of the plan again.";
+    }
+    $("t-plan-note").textContent = sm && !(st.adapted && st.past) ? "" : note;
+  }
+
+  /** With a plan, each tap moves the size field to the next planned can of the batch. */
+  function followPlan() {
+    const st = S && S.planNow ? S.planNow() : null, b = st && st.batch;
+    if (!b || !b.mix) return;
+    const next = C.mixCans(b.mix)[S.cans()];
+    if (next > 0) { $("t-unit").value = String(next); keepUnit(); }
   }
 
   /** The pour card in the words of the campaign direction. */
@@ -5652,8 +6412,15 @@
           ? `Direction: drain (pump out), fixed at the start. First level: ${L0 && L0.entrance ? "at the neck entrance (brim B = " + f(S.cfg.brimStart) + " mm)" : L0 && L0.neck ? "in the neck" : "in the shell"}.`
           : "Direction: fill (pour in), fixed at the start.";
       }
+      // The batch plan is declared before the first pour: shown, not edited.
+      const c = S.cfg;
+      $("set-plan").textContent = !c.plan ? ""
+        : `Batch plan: ${c.plan.map((g) => `${g.count} × ${fl(g.size)}`).join(", ")} L`
+          + (c.nominal ? ` · nominal ${fl(c.nominal)} L` : "")
+          + (c.canSizes ? ` · cans ${c.canSizes.map(fl).join(", ")} L` : "") + ". Fixed at the start.";
     } else {
       $("set-campaign-title").textContent = "This campaign";
+      $("set-plan").textContent = "";
     }
     $("set-noise-note").textContent = has
       ? "These are the numbers the check uses, one set everywhere (§9.1). A change refits the running shell and restarts the noise scale; earlier rows keep the z from their dip."
@@ -6138,15 +6905,23 @@
     tapCheck(u);
     if (!d) { box.innerHTML = `<div class="muted">Set the fill time for ${f(u, 0)} L cans (Timers and alarm, below) to see the time to half and to the ${isDrain() ? "bottom" : "brim"}.</div>`; return; }
     const pe = T.pour && T.pour.size === u ? (now - T.pour.start) / 1000 : 0;
-    const plan = S.fillPlan({ size: u, cycleSeconds: d.seconds, now, pourElapsed: pe, settleSeconds: 0, dipSeconds: 0 });
+    const plan = S.fillPlan({ size: u, cycleSeconds: d.seconds, now, pourElapsed: pe, settleSeconds: 0, dipSeconds: 0, cycleFor: cycleSecondsOf });
     if (!plan) { box.innerHTML = ""; return; }
-    const line = (name, m, V) => !m ? `<div><b>${name}</b>: —</div>`
-      : m.done ? `<div><b>${name}</b> (${f(V, 0)} L): reached</div>`
-        : `<div><b>${name}</b> (${f(V, 0)} L): ≈ ${fmtSpan(m.seconds)} · done ≈ <b>${hhmm(now + 1000 * m.seconds)}</b> · ${m.levels} level${m.levels > 1 ? "s" : ""} · ${m.cans} × ${f(u, 0)} L</div>`;
+    const line = etaLine(now, u, plan.mixed);
     box.innerHTML = line("To half", plan.half, plan.capacity / 2)
       + (plan.end !== undefined ? line("To bottom", plan.end, plan.endVolume) : line("To brim", plan.brim, plan.capacity))
-      + `<div class="muted">${fmtClock(d.seconds)} per can${cycleNote(d)}. Pouring time only: no settle and no dip time. From the running shell and the pour advice.</div>`
+      + `<div class="muted">${fmtClock(d.seconds)} per can${cycleNote(d)}. Pouring time only: no settle and no dip time. ${plan.mixed ? "From the running shell and the batch plan." : "From the running shell and the pour advice."}</div>`
       + tapLine(u);
+  }
+
+  /** The cycle time of one can size in s, for the plan's mixed batches; null when not set. */
+  function cycleSecondsOf(x) { const c = cycleFor(x); return c ? c.seconds : null; }
+  /** One line of the time estimate.  A plan mixes can sizes: the cans are counted, not sized. */
+  function etaLine(now, u, mixed) {
+    return (name, m, V) => !m ? `<div><b>${name}</b>: —</div>`
+      : m.done ? `<div><b>${name}</b> (${f(V, 0)} L): reached</div>`
+        : `<div><b>${name}</b> (${f(V, 0)} L): ≈ ${esc(fmtSpan(m.seconds))} · done ≈ <b>${hhmm(now + 1000 * m.seconds)}</b> · ${m.levels} level${m.levels > 1 ? "s" : ""} · `
+          + (mixed ? `${m.cans} can${m.cans === 1 ? "" : "s"}` : `${m.cans} × ${f(u, 0)} L`) + "</div>";
   }
 
   /** A transfer shares the batches: A counts down to its bottom, B up to its brim. */
@@ -6161,17 +6936,16 @@
       return;
     }
     const pe = T.pour && T.pour.size === u ? (now - T.pour.start) / 1000 : 0;
-    const open = { volume: S.batchVolume(), cans: S.cans() };
-    const z = { settleSeconds: 0, dipSeconds: 0 };
+    const open = { volume: S.batchVolume(), cans: S.cans(), units: S.canList().map((c) => c.u) };
+    // One shared plan: the tighter tank sets the batches for both.
+    const z = { settleSeconds: 0, dipSeconds: 0, cycleFor: cycleSecondsOf, planList: S.planProjection() || undefined };
     const planO = S.out.fillPlan(Object.assign({ size: u, cycleSeconds: d.seconds, now, pourElapsed: pe, open }, z));
     const planI = S.in.fillPlan(Object.assign({ size: u, cycleSeconds: d.seconds, now, pourElapsed: pe, open }, z));
     if (!planO || !planI) { box.innerHTML = ""; return; }
-    const line = (name, m, V) => !m ? `<div><b>${name}</b>: —</div>`
-      : m.done ? `<div><b>${name}</b> (${f(V, 0)} L): reached</div>`
-        : `<div><b>${name}</b> (${f(V, 0)} L): ≈ ${fmtSpan(m.seconds)} · done ≈ <b>${hhmm(now + 1000 * m.seconds)}</b> · ${m.levels} level${m.levels > 1 ? "s" : ""} · ${m.cans} × ${f(u, 0)} L</div>`;
+    const line = etaLine(now, u, planO.mixed);
     box.innerHTML = line(`A (${S.out.cfg.tank}) to bottom`, planO.end, planO.endVolume)
       + line(`B (${S.in.cfg.tank}) to brim`, planI.brim, planI.capacity)
-      + `<div class="muted">${fmtClock(d.seconds)} per can${cycleNote(d)}. Both tanks take the same batches. Pouring time only: no settle and no dip time. From the running shells and the pour advice.</div>`
+      + `<div class="muted">${fmtClock(d.seconds)} per can${cycleNote(d)}. Both tanks take the same batches. Pouring time only: no settle and no dip time. ${planO.mixed ? "From the running shells and the batch plan." : "From the running shells and the pour advice."}</div>`
       + tapLine(u);
   }
 
