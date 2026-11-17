@@ -8,6 +8,25 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- On-site page: the time trend of the cans. With the fill timer running,
+  *Start fill timer* to *+1 can* measures a can's fill time and *+1 can* to
+  the next start its drain time; the trend is a weighted mean in which the
+  most recent cans weigh most (a can three cans back weighs half), with
+  each can held within a third and three times the median. The time-to-half
+  and time-to-brim estimate follows the trend; the typed times count where
+  no can was timed yet. *Use the trend* (Now card, and one button per can
+  size in the timers card) copies the trend into the fill and drain
+  settings; the fill alarm changes only then. With no typed fill time at all,
+  the fill timer runs on the trend (the start button names the duration).
+- On-site page, drain: the **suction floor** — a pump cannot suck below a
+  certain height, and the liquid under it stays in the tank. The floor is a
+  tape reading like a dip, 65 mm by default, in *Settings → Noise and
+  limits*. The time estimate is now **time to the suction floor**, not time
+  to the bottom; the Now card shows the floor, the way down to it and the
+  litres still to pump.
+- On-site page: the time estimate counts the batches and the cans still to
+  come, by size: `31 batches: 400 + 30 × 200 L · 30 cans: 30 × 200 L`, with
+  the recommended batch (the plan's batch, else the 30 mm advice).
 - On-site page: a batch plan, declared on the *New campaign* card: the can
   sizes, the nominal capacity and the batches in groups (`2 × 300 L`,
   `8 × 800 L`, …). The page checks that each batch is a sum of the cans, that
@@ -21,10 +40,8 @@ All notable changes to this project are documented here. The format follows
 - On-site page: − and + buttons beside the can size step it by the pour
   unit (`−50 L`, `+50 L`); never below one pour unit.
 - On-site page: a drain time per can size (Timers, alarm and device): the
-  time to empty one can. The time to half and to the brim (or the bottom) is
-  the cans left × (fill time + drain time).
-- Now card: *Your taps* shows the measured time per can; a button sets the
-  drain time from it (tap gap − fill time).
+  time to empty one can. The time to half and to the brim (a drain: to the
+  suction floor) adds it to the fill time.
 - On-site page: a live indicator in the header, on every tab: a dot before
   the tank name and a progress line along the header's bottom edge. Blue
   while the can fills, amber at the close-the-valve alarm, green when the

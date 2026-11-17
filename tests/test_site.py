@@ -743,10 +743,10 @@ class TestSitePage(unittest.TestCase):
         self.assertIn("2:10 per can (fill 1:30 + drain 0:40)", got["eta"])
         self.assertIn("no settle and no dip time", got["eta"])
         self.assertTrue(got["useHidden"], "no taps, no button")
-        self.assertIn("Your taps: 2:30 per can", got["eta2"])
-        self.assertIn("2:10 per can", got["eta2"], "the taps do not change the estimate by themselves")
+        self.assertIn("Your trend for 200 L cans (1 can, the most recent weigh most) · cycle 2:30", got["eta2"])
+        self.assertIn("2:10 per can", got["eta2"], "a tap gap does not replace a typed fill + drain")
         self.assertFalse(got["use"]["hidden"])
-        self.assertEqual(got["use"]["text"], "Use the taps: drain 1:00 per 200 L can")
+        self.assertEqual(got["use"]["text"], "Use the trend: drain 1:00 per 200 L can")
         self.assertEqual(got["after"], {"200": 60})
         self.assertTrue(got["useAfter"], "once adopted, the button goes away")
         self.assertIn("2:30 per can (fill 1:30 + drain 1:00)", got["eta3"])
@@ -1206,7 +1206,8 @@ class TestSitePage(unittest.TestCase):
         self.assertEqual(got["part"], "pump lost suction: last can part")
         self.assertIn("from the tank", got["help"])
         self.assertIn("drain", got["phase"])
-        self.assertIn("L left", got["kv"])
+        self.assertIn("<dt>suction floor</dt><dd>65 mm · ≈ 1735 mm to go", got["kv"])
+        self.assertIn("L to pump", got["kv"])
         self.assertEqual(got["advice"], "", "the Now card predicts this batch only, not an advised next drain")
         self.assertTrue(got["pred"].startswith("After this drain (400 L):"), got["pred"])
         self.assertIn("mm fall", got["pred"])
@@ -2183,14 +2184,17 @@ class TestSiteCore(unittest.TestCase):
         )
         self.assertEqual(got["defaults"], [300, 60, {}, 15])
         self.assertIsNone(got["none"], "the timer needs a set fill time")
-        self.assertEqual(got["measured"], {"seconds": 110, "n": 3})
+        # The trend: the last gap weighs most (weights 0.5^(2/3), 0.5^(1/3), 1).
+        w = [0.5 ** (2 / 3), 0.5 ** (1 / 3), 1]
+        self.assertAlmostEqual(got["measured"]["seconds"], (100 * w[0] + 120 * w[1] + 110 * w[2]) / sum(w), places=6)
+        self.assertEqual(got["measured"]["n"], 3)
         self.assertIsNone(got["other"], "one 100 L can has no gap of its own size")
         self.assertIsNone(got["noFill"], "a tap gap never gives the fill time")
         self.assertEqual(got["set"][0], {"seconds": 95, "source": "set"})
         self.assertEqual(got["set"][1], {"seconds": 50, "source": "set"}, "100.0 and 100 are one size")
         self.assertEqual(got["set"][2:], [420, 45, 12])
-        self.assertEqual(got["cycle"], {"seconds": 95, "source": "fill", "fill": 95},
-                         "the estimate uses the typed times, never the tap gap")
+        self.assertEqual(got["cycle"]["source"], "taps", "a whole cycle from the taps beats a fill time alone")
+        self.assertAlmostEqual(got["cycle"]["seconds"], got["measured"]["seconds"], places=6)
         self.assertEqual(got["saved"], [420, {"200": 95, "100": 50}, 12])
         self.assertEqual(got["cleared"], None, "a cleared fill time leaves the timer without one")
         self.assertEqual(got["bad"], 4)
@@ -2213,13 +2217,13 @@ class TestSiteCore(unittest.TestCase):
             "console.log(JSON.stringify(out));"
         )
         self.assertEqual(got["default"], {})
-        self.assertEqual(got["drainOnly"], {"seconds": 40, "source": "drain", "drain": 40})
-        self.assertEqual(got["both"], {"seconds": 130, "source": "set", "fill": 90, "drain": 40})
+        self.assertEqual(got["drainOnly"], {"seconds": 40, "source": "drain", "drain": 40, "drainSource": "set"})
+        self.assertEqual(got["both"], {"seconds": 130, "source": "set", "fill": 90, "drain": 40, "fillSource": "set", "drainSource": "set"})
         self.assertEqual(got["timer"], {"seconds": 90, "source": "set"}, "the fill timer ignores the drain")
         self.assertEqual(got["saved"], {"200": 40})
-        self.assertEqual(got["cleared"], {"seconds": 90, "source": "fill", "fill": 90})
+        self.assertEqual(got["cleared"], {"seconds": 90, "source": "fill", "fill": 90, "fillSource": "set"})
         self.assertTrue(got["bad"])
-        self.assertEqual(got["measured"]["source"], "set", "a tap gap never replaces the typed times")
+        self.assertEqual(got["measured"]["source"], "set", "a tap gap does not replace a typed fill + drain")
 
     def test_fill_plan(self):
         got = _node(
@@ -2458,7 +2462,8 @@ class TestSiteCore(unittest.TestCase):
             "// A fill near the brim still halves.\n"
             "const f = new core.Session({D: 1800, Lest: 3000}); f.start('400', 400); f.dip(400);\n"
             "console.log(JSON.stringify({adv: adv.map((a) => ({text: a.text, halve: a.halve, bottom: a.bottom,"
-            " left: a.left, toBottom: a.toBottom})), plan, V0, cap, open, fill: f.advice(1790).text, h0: p.h0}));"
+            " left: a.left, toBottom: a.toBottom})), plan, V0, cap, open, fill: f.advice(1790).text, h0: p.h0,"
+            " floorV: core.volume(65, p)}));"
         )
         adv = got["adv"]
         for a in adv:
@@ -2474,16 +2479,17 @@ class TestSiteCore(unittest.TestCase):
         self.assertIn("Near the bottom", low["text"])
         self.assertIn("a part can is fine (N+?)", low["text"])
         self.assertIn("halve", got["fill"], "fill advice is unchanged")
-        plan, cap, v0 = got["plan"], got["cap"], got["V0"]
+        plan, v0 = got["plan"], got["V0"]
         self.assertIsNone(plan["brim"])
         self.assertTrue(plan["half"]["done"], "the replay ends below half")
         end = plan["end"]
         self.assertLessEqual(end["volume"], plan["endVolume"] + 1e-6)
         self.assertGreaterEqual(end["levels"], 1)
-        self.assertGreater(v0, plan["endVolume"], "the replay stops above the bottom zone")
+        self.assertGreater(v0, plan["endVolume"], "the replay stops above the suction floor")
         self.assertAlmostEqual(v0 - 100 * end["cans"], end["volume"], places=6, msg="the volume counts down")
         self.assertAlmostEqual(end["seconds"], 60 * end["cans"] + 360 * end["levels"], places=6)
-        self.assertGreaterEqual(plan["endVolume"], 0.05 * cap - 1e-6)
+        self.assertAlmostEqual(plan["endVolume"], got["floorV"], places=6, msg="the drain ends at the suction floor (65 mm)")
+        self.assertEqual(plan["endLevel"], 65)
         self.assertAlmostEqual(got["open"]["start"]["volume"], v0 - 200, places=6, msg="an open batch leaves the tank")
 
     def test_drain_power_on_synthetic_campaigns(self):
@@ -2531,6 +2537,171 @@ function planned(P, o) {
   return {s, log, cap};
 }
 """
+
+
+class TestSiteTimeTrend(unittest.TestCase):
+    """The time trend of the cans, the suction floor, and what the time estimate counts."""
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_trend_from_the_fill_timer(self):
+        got = _node(
+            "const s = new core.Session({D: 2000, Lest: 3000, pourUnit: 100, direction: 'drain'});\n"
+            "s.start('?', 1990); s.dip(1990);\n"
+            "// Four 200 L cans: the pump slows (fills 80, 85, 90, 95 s), each can drains in 40 s.\n"
+            "let t = 0;\n"
+            "for (let i = 0; i < 4; i++) { const f = t + 40000; t = f + (80 + 5 * i) * 1000; s.tap(t, 200, f); }\n"
+            "// A 100 L can: its fill is its own; the drain before it belongs to the 200 L can.\n"
+            "const f5 = t + 40000; t = f5 + 50000; s.tap(t, 100, f5);\n"
+            "const out = {open: s.timeTrend(200), small: s.timeTrend(100)};\n"
+            "out.cycle = s.cycleSecondsFor(200); out.sug = s.timerSuggestion(200);\n"
+            "s.setTimers({fillSeconds: {200: 89}, drainSeconds: {200: 40}}); out.sugSet = s.timerSuggestion(200);\n"
+            "s.closeBatch({}); out.fills = s.current().cans.fills.length;\n"
+            "out.closed = s.timeTrend(200).fill.seconds;\n"
+            "const back = core.Session.fromJSON(JSON.parse(JSON.stringify(s.toJSON())));\n"
+            "out.reload = back.timeTrend(200).fill.seconds;\n"
+            "s.undo(); out.reopened = s.batch.cans.map((c) => c.f != null);\n"
+            "// One long break: a 25 min drain does not drag the trend.\n"
+            "const b = new core.Session({D: 2000, Lest: 3000, pourUnit: 200}); b.start('?', 10); b.dip(10); b.dip(10);\n"
+            "t = 0; for (let i = 0; i < 5; i++) { const f = t + (i === 3 ? 1500000 : 40000); t = f + 80000; b.tap(t, 200, f); }\n"
+            "out.brk = b.timeTrend(200).drain;\n"
+            "out.trendTimer = b.fillSecondsFor(200);\n"
+            "console.log(JSON.stringify(out));"
+        )
+        w = [0.5 ** (3 / 3), 0.5 ** (2 / 3), 0.5 ** (1 / 3), 1]
+        fill = sum(wi * x for wi, x in zip(w, (80, 85, 90, 95))) / sum(w)
+        tr = got["open"]
+        self.assertAlmostEqual(tr["fill"]["seconds"], fill, places=6)
+        self.assertGreater(tr["fill"]["seconds"], tr["fill"]["median"], "a slowing pump: the trend follows the last cans")
+        self.assertEqual(tr["drain"]["n"], 4, "the drain before the 100 L can belongs to the 200 L can")
+        self.assertAlmostEqual(tr["drain"]["seconds"], 40, places=6)
+        self.assertEqual(tr["gap"]["n"], 3, "a gap counts between two cans of one size only")
+        self.assertAlmostEqual(got["small"]["fill"]["seconds"], 50, places=6)
+        self.assertIsNone(got["small"]["drain"], "the last can has no drain yet")
+        self.assertEqual(got["cycle"]["source"], "trend")
+        self.assertAlmostEqual(got["cycle"]["seconds"], fill + 40, places=6)
+        self.assertEqual(got["sug"], {"size": 200, "fill": round(fill), "drain": 40})
+        self.assertIsNone(got["sugSet"], "the settings already hold the trend: nothing to suggest")
+        self.assertEqual(got["fills"], 5, "a closed batch keeps the fill starts")
+        self.assertAlmostEqual(got["closed"], fill, places=6)
+        self.assertAlmostEqual(got["reload"], fill, places=6)
+        self.assertEqual(got["reopened"], [True] * 5, "undo opens the batch with its fill starts")
+        self.assertLess(got["brk"]["seconds"], 70, "the break is held at three times the median")
+        self.assertIsNone(got["trendTimer"], "the fill alarm keeps the typed time: the trend is only a suggestion")
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_suction_floor(self):
+        got = _node(
+            PLAN_JS
+            + "const P = {r: 1000, L: 3000, h0: 0};\n"
+            "const s = new core.Session({D: 2000, Dpm: 20, Lest: 3000, h0pm: 2, pourUnit: 200, direction: 'drain'});\n"
+            "let V = core.capacity(P); s.start('?', core.levelFor(V, P)); s.dip(core.levelFor(V, P));\n"
+            "for (let i = 0; i < 3; i++) { s.pour('600'); V -= 600; while (s.current().state === 'pending') s.dip(core.levelFor(V, P)); }\n"
+            "const o = {size: 200, cycleSeconds: 100, settleSeconds: 0, dipSeconds: 0};\n"
+            "const out = {def: s.cfg.suctionFloor, a: s.fillPlan(o), V: core.volume(s.levels[s.lastGood()].H, s.fit.p)};\n"
+            "out.fv = core.volume(65, s.fit.p);\n"
+            "out.adv = (({suction, toSuction, aboveSuction, left}) => ({suction, toSuction, aboveSuction, left}))(s.advice(s.levels[s.lastGood()].H));\n"
+            "s.setCampaign({suctionFloor: 300}); out.high = s.fillPlan(o); out.fv300 = core.volume(300, s.fit.p);\n"
+            "s.setCampaign({suctionFloor: ''}); out.blank = s.cfg.suctionFloor;\n"
+            "try { s.setCampaign({suctionFloor: -1}); out.bad = false; } catch (e) { out.bad = e.message; }\n"
+            "// A planned drain ends at the floor too: the room is the liquid above it.\n"
+            "const r = planned({r: 1000, L: 3183, h0: 0}, {direction: 'drain', suctionFloor: 200});\n"
+            "out.planned = r.log.reduce((a, e) => a + e.size, 0); out.cap = r.cap; out.below = core.volume(200, {r: 1000, L: 3183, h0: 0});\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["def"], 65, "the default suction floor is 65 mm")
+        end = got["a"]["end"]
+        self.assertEqual(got["a"]["endLevel"], 65)
+        self.assertAlmostEqual(got["a"]["endVolume"], got["fv"], places=6)
+        self.assertLessEqual(end["volume"], got["fv"] + 1e-6, "the end is the first level at or below the floor")
+        self.assertGreater(end["volume"] + 200, got["fv"], "the last can is a part can down to the floor")
+        self.assertEqual(sum(b["count"] for b in end["batches"]), end["levels"], "every batch is counted by volume")
+        self.assertEqual(sum(u["count"] for u in end["units"]), end["cans"], "every can is counted by size")
+        self.assertEqual(end["units"], [{"size": 200, "count": end["cans"]}])
+        adv = got["adv"]
+        self.assertEqual(adv["suction"], 65)
+        self.assertAlmostEqual(adv["aboveSuction"], adv["left"] - got["fv"], places=6)
+        self.assertLess(got["high"]["end"]["cans"], end["cans"], "a higher floor: fewer cans")
+        self.assertAlmostEqual(got["high"]["endVolume"], got["fv300"], places=6)
+        self.assertEqual(got["blank"], 65, "blank is the default")
+        self.assertIn("suction floor", got["bad"])
+        self.assertGreaterEqual(got["planned"], got["cap"] - got["below"] - 1, "the plan's batches reach the floor")
+        self.assertLess(got["planned"], got["cap"] - got["below"] + 300, "and stop there: the liquid below stays")
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_fill_timer_takes_the_trend(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "let p = stub.boot(page, corePath, store), el = p.el;\n"
+            "el('s-dir-drain').click();\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '1790'; el('s-unit').value = '200'; el('s-go').click();\n"
+            "el('d-val').value = '1790'; el('d-go').click(); el('d-val').value = '1790'; el('d-go').click();\n"
+            "// No typed fill time and no timed can: the timer asks for one.\n"
+            "el('pt-start').click(); out.ask = el('tm-err').textContent;\n"
+            "// A can filled with the timer running: 100 s from start to tap.\n"
+            "store.set('calib-site:timer', JSON.stringify({ pour: { start: Date.now() - 100000, dur: 90, size: 200, lead: 15 } }));\n"
+            "p = stub.boot(page, corePath, store); el = p.el;\n"
+            "el('t-plus').click();\n"
+            "out.idle = el('pt-status').textContent; out.startLabel = el('pt-start').textContent;\n"
+            "el('pt-start').click();\n"
+            "out.run = JSON.parse(store.get('calib-site:timer')).pour;\n"
+            "out.status = el('pt-status').textContent;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertIn("Set the fill time for 200 L cans", got["ask"])
+        self.assertIn("(the trend of your cans)", got["idle"])
+        self.assertIn("Start fill timer (1:40)", got["startLabel"])
+        self.assertEqual(got["run"]["dur"], 100, "the timer runs on the trend when no time is typed")
+        self.assertIn("left of 1:40", got["status"])
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_trend_floor_and_breakdown(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "let p = stub.boot(page, corePath, store), el = p.el;\n"
+            "const tab = (t) => el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: t } }) } });\n"
+            "out.floor0 = el('set-floor').value;\n"
+            "el('s-dir-drain').click();\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '1790'; el('s-unit').value = '200'; el('s-go').click();\n"
+            "el('d-val').value = '1790'; el('d-go').click(); el('d-val').value = '1790'; el('d-go').click();\n"
+            "tab('settings'); el('set-floor').value = '120'; el('set-noise-save').click();\n"
+            "out.cfgFloor = JSON.parse(store.get('calib-site:active')).config.suctionFloor;\n"
+            "el('tm-fill-200').value = '1:30'; el('tm-drain-200').value = '0:40'; el('tm-save').click(); tab('live');\n"
+            "out.eta = el('now-eta').innerHTML; out.kv = el('now-kv').innerHTML;\n"
+            "// A can with its fill timer: the tap records when the timer started.\n"
+            "el('pt-start').click(); const tm = JSON.parse(store.get('calib-site:timer'));\n"
+            "tm.pour.start = Date.now() - 100000; store.set('calib-site:timer', JSON.stringify(tm));\n"
+            "p = stub.boot(page, corePath, store); el = p.el;\n"
+            "el('t-plus').click();\n"
+            "out.f = JSON.parse(store.get('calib-site:active')).batch.cans[0].f != null;\n"
+            "out.use = [el('eta-use')._classes.has('hidden'), el('eta-use').textContent];\n"
+            "out.trendLine = el('now-eta').innerHTML;\n"
+            "el('eta-use').click();\n"
+            "out.adopted = JSON.parse(store.get('calib-site:active')).config.fillSeconds;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["floor0"], "65", "the default suction floor shows in Settings")
+        self.assertEqual(got["cfgFloor"], 120)
+        self.assertIn("To the suction floor (120 mm)", got["eta"])
+        self.assertNotIn("To bottom", got["eta"])
+        self.assertRegex(got["eta"], r"\d+ batch(es)?: [0-9 ×+]+ L · \d+ cans?: [0-9 ×+]+ L",
+                         "batches by volume and cans by size")
+        self.assertIn("The pump cannot draw below the suction floor", got["eta"])
+        self.assertIn("<dt>suction floor</dt><dd>120 mm", got["kv"])
+        self.assertTrue(got["f"])
+        self.assertFalse(got["use"][0])
+        self.assertEqual(got["use"][1], "Use the trend: fill 1:40 per 200 L can")
+        self.assertIn("Your trend for 200 L cans (1 can, the most recent weigh most) · fill 1:40", got["trendLine"])
+        self.assertEqual(got["adopted"], {"200": 100}, "one tap adopts the trend for the fill alarm")
 
 
 class TestSitePlan(unittest.TestCase):

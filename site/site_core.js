@@ -242,6 +242,7 @@
     direction: "fill",          // "fill": pour in, level rises; "drain": pump out, level falls
     brimPm: 6,                  // drain: the neck-entrance reading is the brim B ± this (2σ), mm
     brimStart: null,            // drain: B, the adopted neck-entrance reading (set by the core)
+    suctionFloor: 65,           // drain: the suction floor, a tape reading (as a dip), mm: the pump cannot draw below it
     canSizes: null,             // [200, 100, …]: the can sizes the team has, L (batch plan)
     nominal: null,              // nominal capacity of the tank, L (batch plan)
     plan: null,                 // [{count, size}, …]: batch groups in pour order (batch plan)
@@ -276,6 +277,8 @@
     cfg.dir = cfg.direction === "drain" ? -1 : 1;
     if (!(cfg.brimPm > 0)) cfg.brimPm = DEFAULTS.brimPm;
     if (cfg.brimStart != null && !isFinite(cfg.brimStart)) cfg.brimStart = null;
+    if (cfg.suctionFloor == null || cfg.suctionFloor === "" || !(Number(cfg.suctionFloor) >= 0)) cfg.suctionFloor = DEFAULTS.suctionFloor;
+    cfg.suctionFloor = Number(cfg.suctionFloor);
     cfg.canSizes = normalizeSizes(cfg.canSizes);
     cfg.plan = normalizePlan(cfg.plan);
     if (!(cfg.nominal > 0)) cfg.nominal = null;
@@ -700,8 +703,18 @@
     if (cur && cur.state === "pending" && !cur.start && cur.from === gi) {
       V += dir * (cur.step.kind === "known" ? cur.step.value : cur.step.base || 0);
     }
-    return { R: dir > 0 ? cap - V : V, past: dir > 0 ? V >= cap / 2 : V <= cap / 2, capacity: cap };
+    // A drain ends at the suction floor: the liquid below it stays (dead).
+    return { R: dir > 0 ? cap - V : V - floorVolume(this.cfg, p), past: dir > 0 ? V >= cap / 2 : V <= cap / 2, capacity: cap };
   };
+
+  /**
+   * The liquid below the suction floor (a drain): the pump cannot draw it,
+   * so the drain ends there.  The floor is a tape reading, as a dip.  A fill
+   * has no floor.
+   */
+  function floorVolume(cfg, p) {
+    return cfg.dir < 0 ? volume(cfg.suctionFloor, p) : 0;
+  }
 
   /** The can sizes of the plan: the declared ones, else the pour unit. */
   function planSizes(cfg) {
@@ -784,15 +797,21 @@
     return n > 0 && time != null && time - this.batch.cans[n - 1].t < this.cfg.tapGap * 1000;
   };
 
-  /** One can is empty.  unit is that can's size; the batch default is the fallback. */
-  Session.prototype.tap = function (time, unit) {
+  /**
+   * One can is counted.  unit is that can's size; the batch default is the
+   * fallback.  fillStart (ms) is when the fill timer of this can started,
+   * when it ran: the time trend takes the fill and the drain times from it.
+   */
+  Session.prototype.tap = function (time, unit, fillStart) {
     const cur = this.current();
     const u = unit == null ? (this.batch && this.batch.unit) || this.cfg.pourUnit : unit;
     if (!(u > 0)) throw new Error("set the can size in litres to count cans");
     if (!cur) throw new Error("start the session first");
     if (cur.state === "pending") throw new Error("finish the dips at the current level first");
     if (!this.batch) this.batch = { unit: u, cans: [] };
-    this.batch.cans.push({ t: time == null ? null : time, u });
+    const c = { t: time == null ? null : time, u };
+    if (fillStart != null && isFinite(fillStart)) c.f = fillStart;
+    this.batch.cans.push(c);
     return { count: this.cans(), volume: this.batchVolume(), unit: u };
   };
 
@@ -819,9 +838,19 @@
       tapped: n, unit: sizes.length === 1 ? sizes[0].unit : null, partial: !!o.partial,
       taps: cans.map((c) => c.t), units: cans.map((c) => c.u),
     };
+    if (cans.some((c) => c.f != null)) L.cans.fills = cans.map((c) => (c.f == null ? null : c.f));
     this.batch = null;
     return L;
   };
+
+  /** The cans of a closed batch as an open tally again, with their fill starts. */
+  function reopenCans(cans) {
+    return cans.taps.map((time, i) => {
+      const c = { t: time, u: cans.units[i] };
+      if (cans.fills && cans.fills[i] != null) c.f = cans.fills[i];
+      return c;
+    });
+  }
 
   /** Add a site marker to a level.  Markers stay apart from the operator note. */
   function addTag(L, text) {
@@ -888,10 +917,7 @@
       this.levels.pop();
       // A batch that was closed too early opens again with its cans.
       if (L.cans) {
-        this.batch = {
-          unit: L.cans.unit || L.cans.units[0],
-          cans: L.cans.taps.map((time, i) => ({ t: time, u: L.cans.units[i] })),
-        };
+        this.batch = { unit: L.cans.unit || L.cans.units[0], cans: reopenCans(L.cans) };
       }
     }
     this._refit();
@@ -1224,7 +1250,7 @@
     const next = {
       tank: cfg.tank, D: cfg.D, Dpm: cfg.Dpm, Lest: cfg.Lest, Lpm: cfg.Lpm,
       pourUnit: cfg.pourUnit, sigmaRead: cfg.sigmaRead, pourRel: cfg.pourRel,
-      pourAbs: cfg.pourAbs, h0pm: cfg.h0pm, brimPm: cfg.brimPm,
+      pourAbs: cfg.pourAbs, h0pm: cfg.h0pm, brimPm: cfg.brimPm, suctionFloor: cfg.suctionFloor,
     };
     if (has("direction") && o.direction != null && o.direction !== cfg.direction) {
       throw new Error("the direction (fill or drain) is fixed at the start of the campaign");
@@ -1277,6 +1303,11 @@
       else if (!(o.brimPm > 0)) throw new Error("the brim limit ± must be more than 0 mm");
       else next.brimPm = o.brimPm;
     }
+    if (has("suctionFloor")) {
+      if (o.suctionFloor == null || o.suctionFloor === "") next.suctionFloor = DEFAULTS.suctionFloor;
+      else if (!(o.suctionFloor >= 0)) throw new Error("the suction floor must be 0 mm or more");
+      else next.suctionFloor = Number(o.suctionFloor);
+    }
     // The repeat limit follows the reading noise unless it was set by hand.
     // "By hand" means it differs from the default made from the old sigma.
     const oldTol = Math.max(1.0, 2.5 * Math.SQRT2 * cfg.sigmaRead);
@@ -1321,27 +1352,93 @@
     return cfg;
   };
 
-  /**
-   * Cycle time per can, measured from the taps: the median gap between two
-   * taps of the same size in one batch.  The gap holds the fill by the pump,
-   * the carry and the drain, which is what the estimate needs.  It cannot
-   * give the fill time alone, so it never feeds the timer.
+  /*
+   * Time trend per can size.  A can's life: the fill timer starts (the pump
+   * fills the can), the can is full and the operator taps "+1 can", then the
+   * can is emptied (the drain of the can: into the tank, into B, or away)
+   * and carried back, and the next fill starts.  So, within one batch:
+   *   fill of can i       = tap_i − fillStart_i            (size of can i)
+   *   drain of can i−1    = fillStart_i − tap_{i−1}        (size of can i−1)
+   *   tap gap of can i    = tap_i − tap_{i−1}              (same size only)
+   * fillStart is known only for a can whose fill timer ran.  The trend is a
+   * weighted mean in which the most recent can weighs most: the weight
+   * halves every TREND_HALF cans back.  A pump slows as the suction head
+   * grows, and a team gets faster: the trend follows both, a median does not.
+   * Each sample is first held within a third and three times the median,
+   * so one long break cannot drag the trend.
    */
-  Session.prototype.measuredPourSeconds = function (size) {
-    const gaps = [];
-    const scan = (taps, units) => {
-      for (let i = 1; i < taps.length; i++) {
-        if (taps[i] == null || taps[i - 1] == null || units[i] !== size || units[i - 1] !== size) continue;
-        const g = (taps[i] - taps[i - 1]) / 1000;
-        if (g >= 5 && g <= 1800) gaps.push(g);
+  const TREND_HALF = 3;
+  function timeTrend(samples) {
+    if (!samples || !samples.length) return null;
+    const xs = samples.slice().sort((a, b) => a.t - b.t);
+    const v = xs.map((x) => x.s).sort((a, b) => a - b), k = v.length;
+    const med = k % 2 ? v[(k - 1) / 2] : 0.5 * (v[k / 2 - 1] + v[k / 2]);
+    let sw = 0, sx = 0;
+    xs.forEach((x, i) => {
+      const w = Math.pow(0.5, (k - 1 - i) / TREND_HALF);
+      sw += w; sx += w * Math.min(Math.max(x.s, med / 3), 3 * med);
+    });
+    return { seconds: sx / sw, n: k, median: med, last: xs[k - 1].s };
+  }
+
+  /** Every timed can of the campaign: { fill, drain, gap } per size key, [{t, s}] in s. */
+  Session.prototype._canSamples = function () {
+    const out = { fill: {}, drain: {}, gap: {} };
+    const push = (kind, u, t, s) => { const k = sizeKey(u); (out[kind][k] = out[kind][k] || []).push({ t, s }); };
+    const scan = (taps, units, fills) => {
+      for (let i = 0; i < taps.length; i++) {
+        const t = taps[i], fs = fills ? fills[i] : null;
+        if (t == null) continue;
+        if (fs != null && t > fs) { const s = (t - fs) / 1000; if (s >= 5 && s <= 1800) push("fill", units[i], t, s); }
+        if (i === 0 || taps[i - 1] == null) continue;
+        if (fs != null && fs > taps[i - 1]) {
+          const s = (fs - taps[i - 1]) / 1000;
+          if (s >= 1 && s <= 1800) push("drain", units[i - 1], fs, s);
+        }
+        if (units[i] === units[i - 1]) { const g = (t - taps[i - 1]) / 1000; if (g >= 5 && g <= 1800) push("gap", units[i], t, g); }
       }
     };
-    for (const L of this.levels) if (L.cans && L.cans.taps) scan(L.cans.taps, L.cans.units || L.cans.taps.map(() => L.cans.unit));
-    if (this.batch) scan(this.batch.cans.map((c) => c.t), this.batch.cans.map((c) => c.u));
-    if (!gaps.length) return null;
-    gaps.sort((a, b) => a - b);
-    const k = gaps.length;
-    return { seconds: k % 2 ? gaps[(k - 1) / 2] : 0.5 * (gaps[k / 2 - 1] + gaps[k / 2]), n: k };
+    for (const L of this.levels) {
+      if (L.cans && L.cans.taps) scan(L.cans.taps, L.cans.units || L.cans.taps.map(() => L.cans.unit), L.cans.fills);
+    }
+    if (this.batch) scan(this.batch.cans.map((c) => c.t), this.batch.cans.map((c) => c.u), this.batch.cans.map((c) => c.f));
+    return out;
+  };
+
+  /**
+   * The time trend of one can size: fill (the pump), drain (empty the can
+   * and carry it back) and the tap gap (one whole cycle).  Each part is
+   * { seconds, n, median, last } or null.
+   */
+  Session.prototype.timeTrend = function (size) {
+    const S = this._canSamples(), k = sizeKey(size);
+    return { fill: timeTrend(S.fill[k]), drain: timeTrend(S.drain[k]), gap: timeTrend(S.gap[k]) };
+  };
+
+  /** The tap-gap trend of one size: { seconds, n } or null (the Now card's "Your taps"). */
+  Session.prototype.measuredPourSeconds = function (size) {
+    const g = this.timeTrend(size).gap;
+    return g ? { seconds: g.seconds, n: g.n } : null;
+  };
+
+  /**
+   * What the trend suggests for the timer settings of one size: the fill
+   * time from the fill trend, the drain time from the drain trend (else the
+   * tap gap minus the set fill time).  Whole seconds; a part that already
+   * equals its setting is left out.  The fill alarm never changes by
+   * itself: the operator adopts a suggestion with one tap.
+   */
+  Session.prototype.timerSuggestion = function (size) {
+    const tr = this.timeTrend(size), f = this.fillSecondsFor(size), d = this.drainSecondsFor(size);
+    let fill = tr.fill ? Math.round(tr.fill.seconds) : null;
+    let drain = tr.drain ? Math.round(tr.drain.seconds) : null;
+    const fillNow = fill || (f && f.seconds);
+    if (drain == null && tr.gap && fillNow && tr.gap.seconds > fillNow) drain = Math.round(tr.gap.seconds - fillNow);
+    if (fill != null && f && Math.abs(f.seconds - fill) < 1) fill = null;
+    if (drain != null && d && Math.abs(d.seconds - drain) < 1) drain = null;
+    if (fill != null && !(fill > 0)) fill = null;
+    if (drain != null && !(drain > 0)) drain = null;
+    return fill == null && drain == null ? null : { size, fill, drain };
   };
 
   /** Fill time of one can by the pump: the setting only.  The timer needs it. */
@@ -1357,17 +1454,25 @@
   };
 
   /**
-   * Time one can costs the campaign: the set fill time plus the set drain
-   * time ("set"); one of them alone is a floor ("fill" or "drain").  Only
-   * the typed times count, so the estimate never changes its source by
-   * itself.  The tap gap (measuredPourSeconds) is shown beside it as a
-   * check; the operator can adopt it as the drain time.
+   * Time one can costs the campaign, for the time estimate.  Each part takes
+   * the trend when the campaign has timed it, else the setting:
+   *   fill + drain                  source "set" (both typed) or "trend"
+   *   else the tap-gap trend        source "taps" (a whole cycle)
+   *   else one part alone, a floor  source "fill" or "drain"
+   * fillSource and drainSource say where each part came from.
    */
   Session.prototype.cycleSecondsFor = function (size) {
-    const f = this.fillSecondsFor(size), d = this.drainSecondsFor(size);
-    if (f && d) return { seconds: f.seconds + d.seconds, source: "set", fill: f.seconds, drain: d.seconds };
-    if (f) return { seconds: f.seconds, source: "fill", fill: f.seconds };
-    if (d) return { seconds: d.seconds, source: "drain", drain: d.seconds };
+    const tr = this.timeTrend(size);
+    const fs = this.fillSecondsFor(size), ds = this.drainSecondsFor(size);
+    const f = tr.fill ? { seconds: tr.fill.seconds, source: "trend" } : fs;
+    const d = tr.drain ? { seconds: tr.drain.seconds, source: "trend" } : ds;
+    if (f && d) {
+      const trend = f.source === "trend" || d.source === "trend";
+      return { seconds: f.seconds + d.seconds, source: trend ? "trend" : "set", fill: f.seconds, drain: d.seconds, fillSource: f.source, drainSource: d.source };
+    }
+    if (tr.gap) return { seconds: tr.gap.seconds, source: "taps", n: tr.gap.n };
+    if (f) return { seconds: f.seconds, source: "fill", fill: f.seconds, fillSource: f.source };
+    if (d) return { seconds: d.seconds, source: "drain", drain: d.seconds, drainSource: d.source };
     return null;
   };
 
@@ -1380,11 +1485,15 @@
    * only the cans the gap needs (the planned overflow pour, §3.7).
    *
    * A drain counts the volume down: half, then the end (`end`): the first
-   * level in the bottom zone (within 60 mm of the bottom, or less than 5 %
-   * of the capacity left), where the pump may lose suction.
+   * level at or below the suction floor (cfg.suctionFloor, a tape reading),
+   * where the pump draws air.  The liquid below the floor stays in the tank.
    *
-   * o = { size, cycleSeconds, settleSeconds, dipSeconds, now, pourElapsed }
-   *   cycleSeconds  time one can costs: fill, carry and drain
+   * Each milestone also says what is left to pour: the batches by volume
+   * and the cans by size (newBreakdown).
+   *
+   * o = { size, cycleSeconds, settleSeconds, dipSeconds, now, pourElapsed, cycleFor }
+   *   cycleSeconds  time one can costs: fill, carry and drain (the trend, else the settings)
+   *   cycleFor      (size) → s, per can size, for a plan's mixed batches
    *   now           ms, for the settle time already spent at a pending level
    *   pourElapsed   s spent on the can that is filling now (fill timer)
    */
@@ -1420,11 +1529,14 @@
     }
     t -= Math.min(Math.max(o.pourElapsed || 0, 0), pourS);
     const start = { volume: V, seconds: t };
-    const mark = (levels, cans) => ({ seconds: Math.max(0, t), levels, cans, volume: V });
+    const bk = newBreakdown();
+    const mark = (levels, cans) => Object.assign({ seconds: Math.max(0, t), levels, cans, volume: V }, bk.snap());
     let levels = 0, cans = 0;
+    const openVol = open ? (this.batch ? this.batchVolume() : o.open.volume) : 0;
     const base = { size, cycleSeconds: pourS, settleSeconds: settle, dipSeconds: dipS, start, capacity: cap };
     if (dir < 0) {
-      const endV = Math.max(0.05 * cap, volume(p.h0 + 60, p));
+      // The drain ends at the suction floor: the pump cannot draw below it.
+      const endV = floorVolume(cfg, p);
       let atHalf = V <= half ? Object.assign(mark(0, 0), { done: true }) : null;
       let atEnd = V <= endV + 1e-6 ? Object.assign(mark(0, 0), { done: true }) : null;
       for (let guard = 0; !atEnd && guard < 100000 && V > 0; guard++) {
@@ -1432,15 +1544,17 @@
         const a = this.advice(H);
         let n = Math.max(1, Math.round(a.target / size)) - open;
         if (n < 0) n = 0;
+        // The pump draws only down to the floor: the last can is a part can.
+        const room = V - endV;
+        if (n * size > room) n = Math.max(open ? 0 : 1, Math.ceil(room / size - 1e-9));
+        bk.add(n * size + (levels === 0 ? openVol : 0), n, size);
         open = 0;
-        // The pump cannot draw more than is left: the last can is a part can.
-        if (n * size > V) n = Math.max(1, Math.ceil(V / size - 1e-9));
         V -= n * size; cans += n; levels++;
         t += n * pourS + settle + dipS;
         if (!atHalf && V <= half) atHalf = mark(levels, cans);
         if (V <= endV + 1e-6) atEnd = mark(levels, cans);
       }
-      return Object.assign(base, { half: atHalf, end: atEnd, brim: null, endVolume: endV });
+      return Object.assign(base, { half: atHalf, end: atEnd, brim: null, endVolume: endV, endLevel: cfg.suctionFloor });
     }
     let atHalf = V >= half ? Object.assign(mark(0, 0), { done: true }) : null;
     let atBrim = V >= cap - 1e-6 ? Object.assign(mark(0, 0), { done: true }) : null;
@@ -1449,10 +1563,11 @@
       const a = this.advice(H);
       let n = Math.max(1, Math.round(a.target / size)) - open;
       if (n < 0) n = 0;
-      open = 0;
       const gap = cap - V;
-      if (n * size > gap) n = Math.max(1, Math.ceil(gap / size - 1e-9));
-      if (n === 0 && levels === 0 && gap <= 0) break;
+      if (n * size > gap) n = Math.max(open ? 0 : 1, Math.ceil(gap / size - 1e-9));
+      if (n === 0 && levels === 0 && gap <= 0 && !open) break;
+      bk.add(n * size + (levels === 0 ? openVol : 0), n, size);
+      open = 0;
       V += n * size; cans += n; levels++;
       t += n * pourS + settle + dipS;
       if (!atHalf && V >= half) atHalf = mark(levels, cans);
@@ -1460,6 +1575,25 @@
     }
     return Object.assign(base, { half: atHalf, brim: atBrim });
   };
+
+  /**
+   * The batches and the cans still to come, counted by size, for the time
+   * estimate: { batches: [{size, count}], units: [{size, count}] }, largest
+   * first.  A batch already open counts with its full volume; its tapped
+   * cans are done and do not count.
+   */
+  function newBreakdown() {
+    const b = {}, u = {};
+    const list = (o) => Object.keys(o).map(Number).sort((x, y) => y - x).map((size) => ({ size, count: o[sizeKey(size)] }));
+    return {
+      add(vol, n, unit) {
+        if (vol > 0) b[sizeKey(vol)] = (b[sizeKey(vol)] || 0) + 1;
+        if (n > 0) u[sizeKey(unit)] = (u[sizeKey(unit)] || 0) + n;
+      },
+      addCans(units) { for (const x of units) u[sizeKey(x)] = (u[sizeKey(x)] || 0) + 1; },
+      snap() { return { batches: list(b), units: list(u) }; },
+    };
+  }
 
   /**
    * fillPlan with a batch plan: one level per batch still to come, each
@@ -1475,8 +1609,9 @@
       : o.open ? (o.open.units || Array.from({ length: o.open.cans || 0 }, () => o.size)) : [];
     let V = o.V, t = o.t - Math.min(Math.max(o.pourElapsed || 0, 0), o.pourS), levels = 0, cans = 0;
     const start = { volume: V, seconds: t };
-    const mark = (lv, cn) => ({ seconds: Math.max(0, t), levels: lv, cans: cn, volume: V });
-    const endV = drain ? Math.max(0.05 * o.cap, volume(p.h0 + 60, p)) : null;
+    const bk = newBreakdown();
+    const mark = (lv, cn) => Object.assign({ seconds: Math.max(0, t), levels: lv, cans: cn, volume: V }, bk.snap());
+    const endV = drain ? floorVolume(this.cfg, p) : null;
     const reached = () => (drain ? V <= endV + 1e-6 : V >= o.cap - 1e-6);
     const halfway = () => (drain ? V <= o.half : V >= o.half);
     let atHalf = halfway() ? Object.assign(mark(0, 0), { done: true }) : null;
@@ -1489,13 +1624,15 @@
         for (const u of openUnits) { const k = units.indexOf(u); units.splice(k >= 0 ? k : units.length - 1, 1); }
         first = false;
       }
+      bk.add(b.size, 0); bk.addCans(units);
       V += o.dir * b.size; levels++; cans += units.length;
       t += units.reduce((a, u) => a + cyc(u), 0) + o.settle + o.dipS;
       if (!atHalf && halfway()) atHalf = mark(levels, cans);
       if (reached()) atEnd = mark(levels, cans);
     }
     const base = { size: o.size, cycleSeconds: o.pourS, settleSeconds: o.settle, dipSeconds: o.dipS, start, capacity: o.cap, mixed: true };
-    return Object.assign(base, drain ? { half: atHalf, end: atEnd, brim: null, endVolume: endV } : { half: atHalf, brim: atEnd });
+    return Object.assign(base, drain ? { half: atHalf, end: atEnd, brim: null, endVolume: endV, endLevel: this.cfg.suctionFloor }
+      : { half: atHalf, brim: atEnd });
   };
 
   /** Pour advisor and brim watch (§3.4, §10). */
@@ -1591,12 +1728,16 @@
     if (cfg.pourUnit) { units = Math.max(1, Math.round(target / cfg.pourUnit)); target = units * cfg.pourUnit; }
     const pb = this._planBatch();
     const after = levelFor(left - (pb ? pb.size : target), p);
-    const bottom = after - p.h0 < 60 || left < 0.05 * cap;
+    // The suction floor: below it the pump draws air, so a drain that
+    // reaches it is the last one (a part can).
+    const suction = cfg.suctionFloor, aboveSuction = Math.max(0, left - volume(suction, p));
+    const bottom = after - p.h0 < 60 || left < 0.05 * cap || after <= suction;
     const sdB = Math.sqrt(Math.max(this.fit.cov ? 4 * this.fit.cov[0][0] + 4 * this.fit.cov[0][2] + this.fit.cov[2][2] : 0, 0));
     const warn = bottom ? `Near the bottom (≈ ${fmt(toBottom, 0)} mm, ≈ ${fmt(left, 0)} L left): the pump may lose suction; a part can is fine (N+?).` : "";
     const a = {
       slope: m, target, units, floor: 15 * m, ceiling: 100 * m, halve: false, bottom,
       gap, toBrim, brim: brim(p), brimSd: sdB, capacity: cap, left, toBottom, warn,
+      suction, toSuction: H - suction, aboveSuction,
       text: (warn ? warn + " " : "")
         + `Next drain ≈ ${fmt(target, 0)} L` + (units ? ` = ${units} × ${cfg.pourUnit} L` : "")
         + ` (≈ ${fmt(target / Math.max(m, 1e-3), 0)} mm fall).`,
@@ -1860,7 +2001,7 @@
   TransferSession.prototype.batchVolume = function () { return this.out.batchVolume(); };
   TransferSession.prototype.canUnits = function () { return this.out.canUnits(); };
   TransferSession.prototype.quickTap = function (time) { return this.out.quickTap(time); };
-  TransferSession.prototype.tap = function (time, unit) { this._guard(); return this.out.tap(time, unit); };
+  TransferSession.prototype.tap = function (time, unit, fillStart) { this._guard(); return this.out.tap(time, unit, fillStart); };
   TransferSession.prototype.untap = function () { return this.out.untap(); };
 
   /** Close the batch: the tally becomes the step of a level on both tanks. */
@@ -1874,6 +2015,7 @@
       tapped: Lo.cans.tapped, unit: Lo.cans.unit, partial: Lo.cans.partial,
       taps: Lo.cans.taps.slice(), units: Lo.cans.units.slice(),
     };
+    if (Lo.cans.fills) Li.cans.fills = Lo.cans.fills.slice();
     this._pair();
     return Lo;
   };
@@ -1901,10 +2043,7 @@
     if (this.out.levels.length > 1 && this.in.levels.length > 1) {
       const Lo = this.out.levels.pop(), Li = this.in.levels.pop();
       if (Lo.cans) {
-        this.out.batch = {
-          unit: Lo.cans.unit || Lo.cans.units[0],
-          cans: Lo.cans.taps.map((t, i) => ({ t, u: Lo.cans.units[i] })),
-        };
+        this.out.batch = { unit: Lo.cans.unit || Lo.cans.units[0], cans: reopenCans(Lo.cans) };
       }
       this.out._refit();
       this.in._refit();
@@ -1949,7 +2088,8 @@
     const has = (k) => Object.prototype.hasOwnProperty.call(o || {}, k);
     if (has("direction")) throw new Error("the direction (fill or drain) is fixed at the start of the campaign");
     const pick = (keys) => { const x = {}; for (const k of keys) if (has(k)) x[k] = o[k]; return x; };
-    const shared = pick(["pourUnit", "sigmaRead", "pourRel", "pourAbs", "h0pm", "brimPm"]);
+    // The suction floor is tank A's (the pump draws from A); B keeps it unused.
+    const shared = pick(["pourUnit", "sigmaRead", "pourRel", "pourAbs", "h0pm", "brimPm", "suctionFloor"]);
     const geo = pick(["tank", "D", "Dpm", "Lest", "Lpm"]);
     if (!Object.keys(shared).length && !Object.keys(geo).length) return this.cfg;
     // A bad field must change nothing on either tank: one Session.setCampaign
@@ -1986,10 +2126,16 @@
     scale: { get: function () { return this[this.active].scale; } },
   });
   for (const name of ["current", "lastGood", "advice", "preview", "status", "series",
-    "learning", "fillPlan", "measuredPourSeconds", "fillSecondsFor", "drainSecondsFor", "cycleSecondsFor",
+    "learning", "fillPlan", "fillSecondsFor", "drainSecondsFor",
     "toRawCsv"]) {
     TransferSession.prototype[name] = function (name) {
       return function () { const s = this[this.active]; return s[name].apply(s, arguments); };
+    }(name);
+  }
+  // The cans are timed on tank A's tally, whichever tank the header shows.
+  for (const name of ["timeTrend", "measuredPourSeconds", "timerSuggestion", "cycleSecondsFor"]) {
+    TransferSession.prototype[name] = function (name) {
+      return function () { return this.out[name].apply(this.out, arguments); };
     }(name);
   }
 

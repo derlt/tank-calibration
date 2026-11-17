@@ -240,6 +240,12 @@ coreTexts(readRows("demo_drain_raw.csv"), { D: 2480, Lest: 5280, pourUnit: 200, 
     tryClick(p, "pt-start");
     for (const dt of [10, 70, 20, 30]) { now += dt * 1000; tab("live"); }
     tryClick(p, "pt-stop");
+    // Cans with the fill timer running: the time trend and its suggestion.
+    for (const [fillS, drainS] of [[85, 40], [90, 45], [95, 50]]) {
+      tryClick(p, "pt-start"); now += fillS * 1000; tryClick(p, "t-plus"); tab("live"); now += drainS * 1000;
+    }
+    tab("settings"); collect(p); tab("live");
+    tryClick(p, "eta-use"); tab("settings"); collect(p); tab("live");
     tryClick(p, "t-plus"); tryClick(p, "p-go");
     for (const dt of [30, 200]) { now += dt * 1000; tab("live"); }
     el("d-val").value = "520"; tryClick(p, "d-go");
@@ -247,6 +253,31 @@ coreTexts(readRows("demo_drain_raw.csv"), { D: 2480, Lest: 5280, pourUnit: 200, 
     if (!el("dip-card")._classes.has("hidden")) { el("d-val").value = "500"; tryClick(p, "d-go"); tryClick(p, "a-override"); }
     tab("files"); tryClick(p, "f-new"); tab("files");
     sweep(p);
+  } finally { Date.now = realNow; }
+})();
+
+// Taps without the fill timer: the trend of the tap gaps; a drain campaign
+// with a drain time only (a lower bound), then the gaps.
+(function tapGaps() {
+  const realNow = Date.now;
+  let now = realNow();
+  Date.now = () => now;
+  try {
+    for (const drain of [false, true]) {
+      const p = boot({});
+      const el = p.el, tab = tabsOf(p);
+      if (drain) el("s-dir-drain").click();
+      el("s-tank").value = "t1"; el("s-D").value = "2480"; el("s-L").value = "5280";
+      el("s-step").value = "?"; el("s-dip").value = drain ? "2400" : "400"; el("s-unit").value = "200";
+      tryClick(p, "s-go");
+      el("d-val").value = el("s-dip").value; tryClick(p, "d-go");
+      el("d-val").value = el("s-dip").value; tryClick(p, "d-go");
+      tab("settings");
+      if (drain) el("tm-drain-200").value = "0:40"; else el("tm-fill-200").value = "1:30";
+      tryClick(p, "tm-save"); tab("live"); collect(p);
+      for (let k = 0; k < 3; k++) { tryClick(p, "t-plus"); now += 130000; }
+      tab("live"); collect(p); tab("settings"); collect(p);
+    }
   } finally { Date.now = realNow; }
 })();
 

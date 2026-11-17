@@ -83,7 +83,7 @@ uses, in four cards:
 |---|---|---|
 | Display | The language of the page (English or Tiếng Việt) and the theme (Auto, Light, Dark) | Any time |
 | This campaign | Tank name, D, L, pour unit and their ± | After the first level |
-| Noise and limits | Reading σ, pour noise, datum ±, brim ± at the neck entrance (drain) | Before or during a campaign |
+| Noise and limits | Reading σ, pour noise, datum ±, brim ± at the neck entrance, suction floor (drain) | Before or during a campaign |
 | Timers, alarm and device | Settle and dip times, fill and drain time per can, alarm lead, animation, sound, vibration, screen | After the first level |
 
 The noise card is also the draft for the next campaign: change it before you
@@ -339,7 +339,7 @@ minutes (`1.5` = 1:30).
 
 | Setting | Meaning | Default |
 |---|---|---|
-| Fill (pump) time per can size | The time the pump needs to fill one can | blank: no timer for that size |
+| Fill (pump) time per can size | The time the pump needs to fill one can | blank: the timer takes the trend of the timed cans, else no timer |
 | Alarm lead before full | The alarm rings this long before the can is full | 15 s |
 | Settle (idle) after a batch | Wait before the first dip (§3.5) | 5:00 |
 | One dip and its entry | Only used for the time estimate | 1:00 |
@@ -350,8 +350,11 @@ The page warns when the settle time is less than 5 minutes.
 
 **Fill timer.** The timer is for the pump, not for the drain. Press *Start
 fill timer* when you start the pump. The hose fills the can and the clock
-counts down. *+20 s* and *−20 s* change this one run. Untick *pour animation*
-to drop the drawing: the clock, the bar and the alarm stay.
+counts down. The duration is the typed fill time; with none typed, the
+trend of the cans you already timed (the start button says which:
+*▶ Start fill timer (1:40)*). *+20 s* and *−20 s* change this one run.
+Untick *pour animation* to drop the drawing: the clock, the bar and the
+alarm stay.
 
 | Time left | Panel | Alarm | Do |
 |---|---|---|---|
@@ -436,31 +439,53 @@ phone's settings, the tab does not move: the new tab fades in.
 **Settle timer.** *Batch done* starts the settle timer from the last can.
 The dip card counts down and rings once when the level is ready to dip.
 
-**Time to half and to the brim.** The page uses two times that you type
-under *Timers, alarm and device*, for each can size:
+**Time to half, to the brim and to the suction floor.** The page measures
+the cans itself. When the fill timer runs, a can's life is on the clock:
+*Start fill timer* to *+1 can* is its **fill time**, *+1 can* to the next
+*Start fill timer* is the **drain time** of the can before (emptying it and
+carrying it back), and tap to tap is its **cycle**. The page takes the
+**trend** of each: a weighted mean in which the most recent cans weigh most
+(a can three cans back weighs half), so a pump that slows or a team that
+gets faster moves the estimate the same day. One long break cannot drag it:
+each can is held within a third and three times the median.
 
-| Time | What it is | What uses it |
-|---|---|---|
-| Fill time | The pump fills one can | The fill timer and its alarm, and the estimate |
-| Drain time | You empty one can into the tank (drain: away; transfer: into B) | The estimate only |
+The typed times under *Timers, alarm and device* count where the campaign
+has not timed a can yet, and the fill **alarm** always uses the typed fill
+time: the trend changes nothing by itself. The Now card shows the trend as
+*Your trend for 200 L cans (3 cans, the most recent weigh most) · fill
+1:28 · drain 0:40*, and the button *Use the trend: fill 1:28, drain 0:40
+per 200 L can* copies it into the settings — also one button per can size
+in *Timers, alarm and device*. An empty field's placeholder shows the
+trend.
 
 The Now card shows how long it takes to reach half of the capacity and the
-brim (a drain: the bottom), and the clock time when you will be done:
+brim (a drain: the suction floor, below), and the clock time when you will
+be done, counted can by can:
 
-    time = number of cans left × (fill time + drain time)
+    time = Σ (fill time + drain time of each can still to come)
 
-It counts pouring time only: no settle time and no dip time. Each level takes
-the advised number of cans for a rise of about 30 mm, so near the brim the
-levels get smaller. The estimate follows the running shell, so early in the
-campaign it can be off by several levels. With only one of the two times, the
-estimate is a floor.
+It counts pouring time only: no settle time and no dip time. Each level
+takes the recommended batch (the plan's batch, else the advised number of
+cans for a rise of about 30 mm), so near the brim the levels get smaller.
+The line also counts what is left to pour: the batches by volume and the
+cans by size, for example `31 batches: 400 + 30 × 200 L · 30 cans:
+30 × 200 L`. The estimate follows the running shell, so early in the
+campaign it can be off by several levels. With no trend and only one typed
+time, the estimate is a lower bound.
 
-**The tap check.** The page notes the clock at each *+1 can* tap. The median
-gap between two taps of the same size is the real time of one can: fill,
-carry and drain. The Now card shows it as *Your taps: 2:30 per can*. It never
-changes the estimate by itself. When it is longer than the fill time, the
-button *Use the taps: drain 1:00 per 200 L can* sets the drain time to the
-gap minus the fill time. The tap gap never feeds the fill timer.
+**The suction floor (drain).** A pump cannot suck from below a certain
+height: under it the liquid stays in the tank — a dead region. The floor is
+a tape reading, like a dip: 0 mm is the tank bottom, the default is **65
+mm**. Set it under **Settings → Noise and limits**; the Now card shows it
+(`suction floor 65 mm · ≈ 1735 mm to go · ≈ 7546 L to pump`), and the time
+estimate is **time to the suction floor**, not to the bottom. The last can
+down to the floor is a part can (*pump lost suction: last can part*). The
+advice's bottom watch warns before the level reaches the floor.
+
+**The tap check.** The page notes the clock at each *+1 can* tap, with or
+without the fill timer. Tap gaps between two cans of one size give the
+cycle trend; the fill timer splits that cycle into the fill and the drain.
+The tap gap never feeds the fill timer.
 
 Sound starts only after a tap on the page. *Test alarm* checks the volume.
 The timers never go into the raw file or the fit.
@@ -572,12 +597,12 @@ metered the prefill, enter the litres.
   next moves its volume between the tank and the record.
 - **Fill each can to the calibrated mark.** A spill at the can is litres that
   left the tank but are not on the record.
-- **The end.** Near the bottom the pump loses suction. The last can is then a
-  part can: tap it, and tick *pump lost suction: last can part* (`N+?`).
-  If you measure the part can, enter its litres instead. The pour advice warns
-  when the level after the advised drain is within 60 mm of the bottom, or
-  when less than 5 % of the capacity is left. A drain never halves near the
-  brim.
+- **The end.** The pump cannot draw below the **suction floor** (a tape
+  reading, 65 mm by default; **Settings → Noise and limits**). The last can
+  is then a part can: tap it, and tick *pump lost suction: last can part*
+  (`N+?`). If you measure the part can, enter its litres instead. The
+  pour advice warns before the level reaches the floor, or when less than
+  5 % of the capacity is left. A drain never halves near the brim.
 - **After the drain.** Sound the bottom and record the heel. Inspect the empty
   tank: an object seen on the bottom or on the wall explains an `OBJECT?`.
 
@@ -597,7 +622,7 @@ gives the same `δ` as a fill.
 
 The Now card shows the drain, for example
 `After this drain (400 L): 486.0 mm ± 8.7 mm (2σ) · −86.0 mm fall · ≈ 1663 L
-left`, and the time to half and to the bottom. The charts and the Levels table
+left`, and the time to half and to the suction floor. The charts and the Levels table
 work for a falling level: the points run from right to left.
 
 ### Simulation
@@ -680,11 +705,11 @@ fixes both files. The finding goes into the note of both raw files, for
 example `transfer: shared pour error`.
 
 The batch advice takes the tighter of the two 30 mm targets, and warns for
-both limits at once: A's bottom (the pump may lose suction — tick *pump lost
-suction: last can part*) and B's brim (tick *tank B: reached the neck* on the
-final batch). The campaign ends when A is empty or B is full, whichever
-comes first. The noise, the cans and the timers are one set for both tanks
-(§9.1).
+both limits at once: A's suction floor (the pump may lose suction — tick
+*pump lost suction: last can part*) and B's brim (tick *tank B: reached the
+neck* on the final batch). The campaign ends when A is down to its suction
+floor or B is full, whichever comes first. The noise, the cans and the
+timers are one set for both tanks (§9.1).
 
 ## After the campaign
 

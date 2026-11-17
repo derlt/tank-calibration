@@ -615,6 +615,7 @@
         <label>Pour noise, fixed L<input id="set-abs" type="number" inputmode="decimal"></label>
         <label>Datum: 0 ± mm<input id="set-h0" type="number" inputmode="decimal"></label>
         <label>Drain: brim at the neck entrance ± mm (blank = 6)<input id="set-brim" type="number" inputmode="decimal"></label>
+        <label>Drain: suction floor, mm on the tape (blank = 65)<input id="set-floor" type="number" inputmode="decimal"></label>
       </div>
       <div class="row" style="margin-top:0.6rem"><button id="set-noise-save">Save noise settings</button></div>
       <p class="muted" id="set-noise-note"></p>
@@ -631,11 +632,12 @@
         <label>Alarm lead before full, s<input id="tm-lead" type="number" inputmode="numeric" placeholder="15"></label>
       </div>
       <h2 style="margin-top:0.9rem">Fill (pump) time per can, m:ss</h2>
-      <p class="muted" style="margin-top:0">The time the pump needs to fill one can. The alarm rings this time minus the lead, so the valve is closed when the can is full. The timer needs this number: a tap gap cannot give it, because the gap also holds the carry and the drain.</p>
+      <p class="muted" style="margin-top:0">The time the pump needs to fill one can. The alarm rings this time minus the lead, so the valve is closed when the can is full. The page measures it from Start fill timer to +1 can. The alarm changes only when you adopt the trend below.</p>
       <div class="grid" id="tm-sizes"></div>
       <h2 style="margin-top:0.9rem">Drain time per can, m:ss</h2>
       <p class="muted" style="margin-top:0" id="tm-drain-help">The time to empty one can into the tank. The time to half and to the brim adds it to the fill time.</p>
       <div class="grid" id="tm-drains"></div>
+      <div id="tm-trend" style="margin-top:0.5rem"></div>
       <div class="row" style="margin-top:0.6rem">
         <label class="check"><input type="checkbox" id="tm-anim"> pour animation</label>
         <label class="check"><input type="checkbox" id="tm-sound"> sound</label>
@@ -1387,7 +1389,7 @@
       if (!(num("sB-L") > 0)) throw new Error("Enter the length estimate L of tank B.");
       if (dipA == null) throw new Error("Enter tank A's first reading.");
       if (dipB == null) throw new Error("Enter tank B's first reading.");
-      const shared = Object.assign({ pourUnit, sigmaRead: n.sigmaRead, pourRel: n.pourRel, pourAbs: n.pourAbs, h0pm: n.h0pm, brimPm: n.brimPm }, plan);
+      const shared = Object.assign({ pourUnit, sigmaRead: n.sigmaRead, pourRel: n.pourRel, pourAbs: n.pourAbs, h0pm: n.h0pm, brimPm: n.brimPm, suctionFloor: n.suctionFloor }, plan);
       const s = new C.TransferSession(
         Object.assign({ tank: $("s-tank").value.trim() || "tank", D: num("s-D"), Dpm: num("s-Dpm") || 200, Lest: num("s-L"), Lpm: num("s-Lpm"), nominal: nomA }, shared),
         Object.assign({ tank: $("sB-tank").value.trim() || "tank-b", D: num("sB-D"), Dpm: num("sB-Dpm") || 200, Lest: num("sB-L"), Lpm: num("sB-Lpm"), nominal: nomB }, shared));
@@ -1404,7 +1406,7 @@
       tank: $("s-tank").value.trim() || "tank",
       D: num("s-D"), Dpm: num("s-Dpm") || 200, Lest: num("s-L"), Lpm: num("s-Lpm"),
       pourUnit, sigmaRead: n.sigmaRead,
-      pourRel: n.pourRel, pourAbs: n.pourAbs, h0pm: n.h0pm, brimPm: n.brimPm,
+      pourRel: n.pourRel, pourAbs: n.pourAbs, h0pm: n.h0pm, brimPm: n.brimPm, suctionFloor: n.suctionFloor,
       direction: setupDir, nominal: nomA,
     }, plan);
     if (!(cfg.D > 0)) throw new Error("Enter the diameter estimate D.");
@@ -1443,7 +1445,8 @@
     const now = Date.now(), u = activeUnit();
     if (!(u > 0)) throw new Error("Enter the can size in litres.");
     if (S.quickTap(now) && !confirm(tr(`Less than ${S.cfg.tapGap} s since the last can. Is this a new can?`))) return;
-    S.tap(now, u); save();
+    // The fill timer of this can, when it ran: the time trend learns the fill and drain times from it.
+    S.tap(now, u, T.pour && T.pour.size === u && T.pour.start <= now ? T.pour.start : null); save();
     followPlan();
     // The can is counted: its pour timer and alarm are done.
     if (T.pour || T.wait) { delete T.pour; delete T.wait; saveTimer(); }
@@ -1825,7 +1828,7 @@
       ["liquid (running shell)", `${f(C.volume(G.H, p), 0)} L of ${f(st.capacity, 0)} L`],
       drain ? ["brim", `≈ ${f(adv.brim, 0)} ± ${f(2 * adv.brimSd, 0)} mm${S.cfg.brimStart != null ? " (neck-entrance reading " + f(S.cfg.brimStart) + " mm)" : ""}`]
         : ["brim", `≈ ${f(adv.brim, 0)} ± ${f(2 * adv.brimSd, 0)} mm · ${f(adv.toBrim, 0)} mm to go`],
-      drain ? ["bottom", `≈ ${f(adv.toBottom, 0)} mm to go · ≈ ${f(adv.left, 0)} L left`] : null,
+      drain ? suctionRow(adv) : null,
       ["slope", `${f(adv.slope, 2)} L/mm`],
       planRow(),
     ].filter(Boolean).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("") : "";
@@ -1883,6 +1886,11 @@
     $("a-undo").disabled = !L;
   }
 
+  /** The Now card's drain line: the suction floor, the way down to it, and the litres the pump can still draw. */
+  function suctionRow(adv) {
+    return ["suction floor", `${f(adv.suction, 0)} mm · ≈ ${f(adv.toSuction, 0)} mm to go · ≈ ${f(adv.aboveSuction, 0)} L to pump`];
+  }
+
   /** The Now card's plan line: the batches poured of the plan, and the nominal. */
   function planRow() {
     const st = S.planNow ? S.planNow() : null;
@@ -1900,7 +1908,7 @@
       ["liquid (running shell)", `${f(C.volume(G.H, p), 0)} L of ${f(st.capacity, 0)} L`],
     ];
     rows.push(role === "pump out"
-      ? ["bottom", `≈ ${f(adv.toBottom, 0)} mm to go · ≈ ${f(adv.left, 0)} L left`]
+      ? suctionRow(adv)
       : ["brim", `≈ ${f(adv.brim, 0)} ± ${f(2 * adv.brimSd, 0)} mm · ${f(adv.toBrim, 0)} mm to go`]);
     rows.push(["slope", `${f(adv.slope, 2)} L/mm`]);
     return rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
@@ -2378,7 +2386,7 @@
   // timers need a session; the noise card also sets the next campaign.
   let settingsSig = "";
   function noiseDraft() {
-    return Object.assign({ sigmaRead: 0.4, pourRel: 0.005, pourAbs: 3, h0pm: 80, brimPm: 6 }, P.noise || {});
+    return Object.assign({ sigmaRead: 0.4, pourRel: 0.005, pourAbs: 3, h0pm: 80, brimPm: 6, suctionFloor: 65 }, P.noise || {});
   }
   function pct(x) { return String(Math.round(x * 1000) / 1000); }
   function renderSetupNoise() {
@@ -2390,7 +2398,7 @@
     const n = has ? S.cfg : noiseDraft();
     return JSON.stringify([has,
       has ? [S.cfg.tank, S.cfg.D, S.cfg.Dpm, S.cfg.Lest, S.cfg.Lpm, S.cfg.pourUnit] : null,
-      n.sigmaRead, n.pourRel, n.pourAbs, n.h0pm, n.brimPm]);
+      n.sigmaRead, n.pourRel, n.pourAbs, n.h0pm, n.brimPm, n.suctionFloor]);
   }
   function renderSettings() {
     const has = !!S;
@@ -2414,6 +2422,7 @@
       $("set-abs").value = String(n.pourAbs);
       $("set-h0").value = String(n.h0pm);
       $("set-brim").value = n.brimPm == null ? "" : String(n.brimPm);
+      $("set-floor").value = n.suctionFloor == null ? "" : String(n.suctionFloor);
     }
     if (has) {
       $("set-campaign-title").textContent = isTransfer() ? `This tank — ${S.cfg.tank} (switch in the header)` : "This campaign";
@@ -2444,13 +2453,14 @@
     if (has) renderTimers();
   }
   function readNoise() {
-    const sr = num("set-sr"), rel = num("set-rel"), abs = num("set-abs"), h0 = num("set-h0"), bp = num("set-brim");
+    const sr = num("set-sr"), rel = num("set-rel"), abs = num("set-abs"), h0 = num("set-h0"), bp = num("set-brim"), fl = num("set-floor");
     if (!(sr > 0)) throw new Error("Enter the reading repeatability σ, more than 0 mm.");
     if (rel == null || !(rel >= 0)) throw new Error("Enter the pour noise in %, 0 or more.");
     if (abs == null || !(abs >= 0)) throw new Error("Enter the fixed pour noise in L, 0 or more.");
     if (!(h0 > 0)) throw new Error("Enter the datum limit ±, more than 0 mm.");
     if (bp != null && !(bp > 0)) throw new Error("Enter the brim limit ±, more than 0 mm, or leave it blank for 6 mm.");
-    return { sigmaRead: sr, pourRel: rel / 100, pourAbs: abs, h0pm: h0, brimPm: bp == null ? 6 : bp };
+    if (fl != null && !(fl >= 0)) throw new Error("Enter the suction floor, 0 mm or more, or leave it blank for 65 mm.");
+    return { sigmaRead: sr, pourRel: rel / 100, pourAbs: abs, h0pm: h0, brimPm: bp == null ? 6 : bp, suctionFloor: fl == null ? 65 : fl };
   }
   $("set-noise-save").addEventListener("click", guard("set-noise-err", () => {
     $("set-noise-msg").textContent = "";
@@ -2494,7 +2504,7 @@
     P.nowOpen = $("now-card").open;
     localStorage.setItem(PREFS, JSON.stringify(P));
   });
-  P.noise = Object.assign({ sigmaRead: 0.4, pourRel: 0.005, pourAbs: 3, h0pm: 80, brimPm: 6 }, P.noise || {});
+  P.noise = Object.assign({ sigmaRead: 0.4, pourRel: 0.005, pourAbs: 3, h0pm: 80, brimPm: 6, suctionFloor: 65 }, P.noise || {});
   let timersSig = "", lastEta = 0;
   function saveTimer() { localStorage.setItem(TIMER, JSON.stringify(T)); }
   function clearTimers() { T = {}; localStorage.removeItem(TIMER); stopAlarm(); releaseWake(); stopPourAnim(); }
@@ -2527,15 +2537,24 @@
     const days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 864e5);
     return days === 0 ? s : days === 1 ? `tomorrow ${s}` : `${s} (+${days} days)`;
   }
-  function fillTimeFor(u) { return S && u > 0 ? S.fillSecondsFor(u) : null; }
+  /** The fill time for the timer: the typed setting, else the trend of the timed cans (source "trend"). */
+  function fillTimeFor(u) {
+    if (!S || !(u > 0)) return null;
+    const set = S.fillSecondsFor(u);
+    if (set) return set;
+    const tr = S.timeTrend ? S.timeTrend(u).fill : null;
+    return tr ? { seconds: Math.round(tr.seconds), source: "trend" } : null;
+  }
   function cycleFor(u) { return S && u > 0 ? S.cycleSecondsFor(u) : null; }
   function sizeId(u) { return "tm-fill-" + String(u).replace(/[^0-9]/g, "_"); }
   function drainId(u) { return "tm-drain-" + String(u).replace(/[^0-9]/g, "_"); }
   /** How the estimate got its time per can, for the line under the estimate. */
   function cycleNote(d) {
     if (d.source === "set") return ` (fill ${fmtClock(d.fill)} + drain ${fmtClock(d.drain)})`;
-    if (d.source === "drain") return " (drain time only: a floor)";
-    return " (fill time only: a floor)";
+    if (d.source === "trend") return ` (fill ${fmtClock(d.fill)} + drain ${fmtClock(d.drain)}, from the trend)`;
+    if (d.source === "taps") return " (the trend of your tap gaps)";
+    if (d.source === "drain") return " (drain time only: a lower bound)";
+    return " (fill time only: a lower bound)";
   }
 
   // ---- sound, vibration, screen
@@ -2648,6 +2667,8 @@
   $("pt-start").addEventListener("click", guard("p-err", () => {
     const u = activeUnit();
     if (!(u > 0)) throw new Error("Enter the can size in litres.");
+    // The typed fill time runs the alarm; without one, the trend of the
+    // timed cans does (it is the same number, measured).
     const d = fillTimeFor(u);
     if (!d) {
       tab = "settings"; $("timers").open = true; render();
@@ -2728,7 +2749,7 @@
       box.className = "timer";
       $("pt-clock").textContent = d ? fmtClock(d.seconds) : "—:—";
       $("pt-status").textContent = !(u > 0) ? "Enter the can size to use the timer."
-        : d ? `Fill time of one ${f(u, 0)} L can. The alarm rings ${fmtClock(S.cfg.alarmLead)} before it is full.`
+        : d ? `Fill time of one ${f(u, 0)} L can${d.source === "trend" ? " (the trend of your cans)" : ""}. The alarm rings ${fmtClock(S.cfg.alarmLead)} before it is full.`
           : `Set the fill time for ${f(u, 0)} L cans under Timers and alarm.`;
       $("pt-start").textContent = d ? `▶ Start fill timer (${fmtClock(d.seconds)})` : "▶ Start fill timer";
       $("t-plus").classList.remove("pulse");
@@ -2883,31 +2904,49 @@
     if (settle > 0 && T.settled !== key) { T.settled = key; saveTimer(); alarm("Settled: dip now"); }
   }
 
-  // ---- time to half and to the brim.  The estimate counts only the typed
-  // fill and drain times.  The tap gap is a check beside it: the button
-  // takes it as the drain time (gap − fill), and only when you press it.
-  function tapLine(u) {
-    const m = S.measuredPourSeconds(u);
-    return m ? `<div class="muted">Your taps: ${fmtClock(m.seconds)} per can (median of ${m.n} gap${m.n > 1 ? "s" : ""}).</div>` : "";
+  // ---- time to half, to the brim and to the suction floor.  The estimate
+  // takes the time trend of the cans (the most recent cans weigh most), and
+  // the typed fill and drain times where the campaign has no trend yet.  The
+  // fill timer keeps its typed time: the button below adopts the trend for
+  // the timer, and only when you press it.
+  function trendLine(u) {
+    const tr = S.timeTrend(u);
+    const bits = [];
+    if (tr.fill) bits.push(`fill ${fmtClock(tr.fill.seconds)}`);
+    if (tr.drain) bits.push(`drain ${fmtClock(tr.drain.seconds)}`);
+    if (tr.gap) bits.push(`cycle ${fmtClock(tr.gap.seconds)}`);
+    if (!bits.length) return "";
+    const n = Math.max(tr.fill ? tr.fill.n : 0, tr.drain ? tr.drain.n : 0, tr.gap ? tr.gap.n : 0);
+    return `<div class="muted">Your trend for ${f(u, 0)} L cans (${n} can${n > 1 ? "s" : ""}, the most recent weigh most) · ${bits.join(" · ")}</div>`;
   }
-  /** The drain time the taps suggest, or null: the tap gap minus the fill time. */
-  function tapDrain(u) {
-    const m = S.measuredPourSeconds(u), fl = fillTimeFor(u);
-    if (!m || !fl || !(m.seconds > fl.seconds)) return null;
-    const v = Math.round(m.seconds - fl.seconds), cur = S.drainSecondsFor(u);
-    return cur && cur.seconds === v ? null : v;
+  function suggestText(sg) {
+    const sz = f(sg.size, 0);
+    return sg.fill != null && sg.drain != null ? `Use the trend: fill ${fmtClock(sg.fill)}, drain ${fmtClock(sg.drain)} per ${sz} L can`
+      : sg.fill != null ? `Use the trend: fill ${fmtClock(sg.fill)} per ${sz} L can`
+        : `Use the trend: drain ${fmtClock(sg.drain)} per ${sz} L can`;
   }
   function tapCheck(u) {
-    const v = tapDrain(u), b = $("eta-use");
-    b.classList.toggle("hidden", v == null);
-    if (v != null) { b.textContent = `Use the taps: drain ${fmtClock(v)} per ${f(u, 0)} L can`; b.dataset.u = String(u); }
+    const sg = S.timerSuggestion(u), b = $("eta-use");
+    b.classList.toggle("hidden", !sg);
+    if (sg) { b.textContent = suggestText(sg); b.dataset.u = String(u); }
   }
-  $("eta-use").addEventListener("click", guard("p-err", () => {
-    const u = Number($("eta-use").dataset.u), v = tapDrain(u);
-    if (v == null) return;
-    S.setTimers({ drainSeconds: { [String(u)]: v } });
+  /** Adopt the trend as the timer settings of one size. */
+  function adoptTrend(u) {
+    const sg = S.timerSuggestion(u);
+    if (!sg) return;
+    const o = {};
+    if (sg.fill != null) o.fillSeconds = { [String(u)]: sg.fill };
+    if (sg.drain != null) o.drainSeconds = { [String(u)]: sg.drain };
+    S.setTimers(o);
     save(); timersSig = ""; render(); tickEta(Date.now());
-  }));
+  }
+  $("eta-use").addEventListener("click", guard("p-err", () => adoptTrend(Number($("eta-use").dataset.u))));
+  $("tm-trend").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-u]");
+    if (b) guard("tm-err", () => adoptTrend(Number(b.dataset.u)))();
+  });
+  /** The suction floor in words, for the drain milestone. */
+  function floorName(plan) { return `To the suction floor (${f(plan.endLevel, 0)} mm)`; }
 
   function tickEta(now) {
     lastEta = now;
@@ -2919,25 +2958,32 @@
     const u = activeUnit() || last, d = cycleFor(u);
     if (!(u > 0)) { box.innerHTML = ""; return; }
     tapCheck(u);
-    if (!d) { box.innerHTML = `<div class="muted">Set the fill time for ${f(u, 0)} L cans (Timers and alarm, below) to see the time to half and to the ${isDrain() ? "bottom" : "brim"}.</div>`; return; }
+    if (!d) { box.innerHTML = `<div class="muted">Set the fill time for ${f(u, 0)} L cans (Timers and alarm, below) to see the time to half and to the ${isDrain() ? "suction floor" : "brim"}.</div>`; return; }
     const pe = T.pour && T.pour.size === u ? (now - T.pour.start) / 1000 : 0;
     const plan = S.fillPlan({ size: u, cycleSeconds: d.seconds, now, pourElapsed: pe, settleSeconds: 0, dipSeconds: 0, cycleFor: cycleSecondsOf });
     if (!plan) { box.innerHTML = ""; return; }
-    const line = etaLine(now, u, plan.mixed);
+    const line = etaLine(now);
     box.innerHTML = line("To half", plan.half, plan.capacity / 2)
-      + (plan.end !== undefined ? line("To bottom", plan.end, plan.endVolume) : line("To brim", plan.brim, plan.capacity))
-      + `<div class="muted">${fmtClock(d.seconds)} per can${cycleNote(d)}. Pouring time only: no settle and no dip time. ${plan.mixed ? "From the running shell and the batch plan." : "From the running shell and the pour advice."}</div>`
-      + tapLine(u);
+      + (plan.end !== undefined ? line(floorName(plan), plan.end, plan.endVolume) : line("To brim", plan.brim, plan.capacity))
+      + `<div class="muted">${fmtClock(d.seconds)} per can${cycleNote(d)}. Pouring time only: no settle and no dip time. ${plan.mixed ? "From the running shell and the batch plan." : "From the running shell and the pour advice."}`
+      + (plan.end !== undefined ? " The pump cannot draw below the suction floor: the liquid under it stays in the tank." : "") + "</div>"
+      + trendLine(u);
   }
 
   /** The cycle time of one can size in s, for the plan's mixed batches; null when not set. */
   function cycleSecondsOf(x) { const c = cycleFor(x); return c ? c.seconds : null; }
-  /** One line of the time estimate.  A plan mixes can sizes: the cans are counted, not sized. */
-  function etaLine(now, u, mixed) {
+  /** "5 × 800 + 2 × 300": a count by size, largest first. */
+  function bySize(list) { return list.map((x) => (x.count === 1 ? f(x.size, 0) : `${x.count} × ${f(x.size, 0)}`)).join(" + "); }
+  /**
+   * One line of the time estimate: the time, the clock, and what is left to
+   * pour: the batches by volume and the cans by size.
+   */
+  function etaLine(now) {
     return (name, m, V) => !m ? `<div><b>${name}</b>: —</div>`
       : m.done ? `<div><b>${name}</b> (${f(V, 0)} L): reached</div>`
-        : `<div><b>${name}</b> (${f(V, 0)} L): ≈ ${esc(fmtSpan(m.seconds))} · done ≈ <b>${hhmm(now + 1000 * m.seconds)}</b> · ${m.levels} level${m.levels > 1 ? "s" : ""} · `
-          + (mixed ? `${m.cans} can${m.cans === 1 ? "" : "s"}` : `${m.cans} × ${f(u, 0)} L`) + "</div>";
+        : `<div><b>${name}</b> (${f(V, 0)} L): ≈ ${esc(fmtSpan(m.seconds))} · done ≈ <b>${hhmm(now + 1000 * m.seconds)}</b> · `
+          + `${m.levels} batch${m.levels === 1 ? "" : "es"}${m.batches && m.batches.length ? `: ${bySize(m.batches)} L` : ""} · `
+          + `${m.cans} can${m.cans === 1 ? "" : "s"}${m.units && m.units.length ? `: ${bySize(m.units)} L` : ""}</div>`;
   }
 
   /** A transfer shares the batches: A counts down to its bottom, B up to its brim. */
@@ -2948,7 +2994,7 @@
     if (!(u > 0)) { box.innerHTML = ""; return; }
     tapCheck(u);
     if (!d) {
-      box.innerHTML = `<div class="muted">Set the fill time for ${f(u, 0)} L cans (Timers and alarm, below) to see the time to the bottom of A and to the brim of B.</div>`;
+      box.innerHTML = `<div class="muted">Set the fill time for ${f(u, 0)} L cans (Timers and alarm, below) to see the time to the suction floor of A and to the brim of B.</div>`;
       return;
     }
     const pe = T.pour && T.pour.size === u ? (now - T.pour.start) / 1000 : 0;
@@ -2958,11 +3004,12 @@
     const planO = S.out.fillPlan(Object.assign({ size: u, cycleSeconds: d.seconds, now, pourElapsed: pe, open }, z));
     const planI = S.in.fillPlan(Object.assign({ size: u, cycleSeconds: d.seconds, now, pourElapsed: pe, open }, z));
     if (!planO || !planI) { box.innerHTML = ""; return; }
-    const line = etaLine(now, u, planO.mixed);
-    box.innerHTML = line(`A (${S.out.cfg.tank}) to bottom`, planO.end, planO.endVolume)
+    const line = etaLine(now);
+    box.innerHTML = line(`A (${S.out.cfg.tank}) to the suction floor (${f(planO.endLevel, 0)} mm)`, planO.end, planO.endVolume)
       + line(`B (${S.in.cfg.tank}) to brim`, planI.brim, planI.capacity)
-      + `<div class="muted">${fmtClock(d.seconds)} per can${cycleNote(d)}. Both tanks take the same batches. Pouring time only: no settle and no dip time. ${planO.mixed ? "From the running shells and the batch plan." : "From the running shells and the pour advice."}</div>`
-      + tapLine(u);
+      + `<div class="muted">${fmtClock(d.seconds)} per can${cycleNote(d)}. Both tanks take the same batches. Pouring time only: no settle and no dip time. ${planO.mixed ? "From the running shells and the batch plan." : "From the running shells and the pour advice."}`
+      + " The pump cannot draw below the suction floor: the liquid under it stays in the tank.</div>"
+      + trendLine(u);
   }
 
   // ---- settings
@@ -2978,26 +3025,31 @@
   function renderTimers() {
     if (!S) return;
     const sizes = timerSizes(), cfg = S.cfg;
+    const trends = sizes.map((u) => [S.timeTrend(u), S.timerSuggestion(u)]);
     const sig = JSON.stringify([sizes, cfg.settleSeconds, cfg.dipSeconds, cfg.alarmLead, cfg.fillSeconds, cfg.drainSeconds,
-      P.anim, P.sound, P.vibrate, P.wake, P.iosTimer, P.iosShortcut]);
+      P.anim, P.sound, P.vibrate, P.wake, P.iosTimer, P.iosShortcut, trends.map((x) => x[1])]);
     if (sig === timersSig) return;
     timersSig = sig;
     $("tm-settle").value = fmtClock(cfg.settleSeconds);
     $("tm-dip").value = fmtClock(cfg.dipSeconds);
     $("tm-lead").value = String(cfg.alarmLead);
-    $("tm-sizes").innerHTML = sizes.length ? sizes.map((u) => {
-      const set = cfg.fillSeconds[String(u)], m = S.measuredPourSeconds(u);
-      return `<label>${f(u, 0)} L can<input id="${sizeId(u)}" value="${set ? fmtClock(set) : ""}" placeholder="${m ? "cycle " + fmtClock(m.seconds) : "1:30"}"></label>`;
+    // The placeholder of an empty field shows the trend: what the campaign measured.
+    $("tm-sizes").innerHTML = sizes.length ? sizes.map((u, i) => {
+      const set = cfg.fillSeconds[String(u)], tr = trends[i][0];
+      return `<label>${f(u, 0)} L can<input id="${sizeId(u)}" value="${set ? fmtClock(set) : ""}" placeholder="${tr.fill ? "trend " + fmtClock(tr.fill.seconds) : "1:30"}"></label>`;
     }).join("") : `<p class="muted">Enter a can size on the pour card first.</p>`;
-    $("tm-drains").innerHTML = sizes.map((u) => {
-      const set = cfg.drainSeconds[String(u)];
-      return `<label>${f(u, 0)} L can<input id="${drainId(u)}" value="${set ? fmtClock(set) : ""}" placeholder="0:40"></label>`;
+    $("tm-drains").innerHTML = sizes.map((u, i) => {
+      const set = cfg.drainSeconds[String(u)], tr = trends[i][0];
+      return `<label>${f(u, 0)} L can<input id="${drainId(u)}" value="${set ? fmtClock(set) : ""}" placeholder="${tr.drain ? "trend " + fmtClock(tr.drain.seconds) : "0:40"}"></label>`;
     }).join("");
+    // One suggestion per size: the trend, adopted with one tap.
+    $("tm-trend").innerHTML = trends.map(([, sg]) => (sg
+      ? `<div class="row" style="margin-top:0.3rem"><button class="secondary small" data-u="${sg.size}">${esc(suggestText(sg))}</button></div>` : "")).join("");
     $("tm-drain-help").textContent = (isTransfer()
-      ? "The time to empty one can into tank B. The time to the bottom of A and to the brim of B adds it to the fill time."
-      : isDrain() ? "The time to empty one can. The time to half and to the bottom adds it to the fill time."
+      ? "The time to empty one can into tank B. The time to the suction floor of A and to the brim of B adds it to the fill time."
+      : isDrain() ? "The time to empty one can. The time to half and to the suction floor adds it to the fill time."
         : "The time to empty one can into the tank. The time to half and to the brim adds it to the fill time.")
-      + " The Now card shows the time between your taps as a check; its button copies it here.";
+      + " The page measures it from +1 can to the next Start fill timer. The time estimate follows the trend of your cans, with the most recent cans weighing most; these fields count where there is no trend yet.";
     $("tm-anim").checked = !!P.anim;
     $("tm-sound").checked = !!P.sound; $("tm-vib").checked = !!P.vibrate; $("tm-wake").checked = !!P.wake;
     // Shortcuts is on iPhone and iPad only; a switch that is on stays in
