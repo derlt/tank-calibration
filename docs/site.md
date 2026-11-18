@@ -677,9 +677,12 @@ The typed times under *Timers, alarm and device* count where the campaign
 has not timed a can yet, and the fill **alarm** always uses the typed fill
 time: the trend changes nothing by itself. The Now card shows the trend as
 *Your trend for 200 L cans (3 cans, the most recent weigh most) · fill
-1:28 · drain 0:40*, and the button *Use the trend: fill 1:28, drain 0:40
-per 200 L can* copies it into the settings — also one button per can size
-in *Timers, alarm and device*. An empty field's placeholder shows the
+1:28 · drain 0:40*. When the trend differs from the setting, the timer card
+has a second start button next to *▶ Start (1:30)*: *▶ Trend 1:28* copies
+the trend (fill and drain) into the settings and starts the fill timer at
+the new time. When only the drain time differs, it shows the setting's fill
+time, copies the drain time and starts as usual. *Timers, alarm and device*
+also has one button per can size that copies the trend without a start. An empty field's placeholder shows the
 trend.
 
 The Now card shows how long it takes to reach half of the capacity and the

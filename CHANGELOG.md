@@ -8,6 +8,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **On-site page: the trend button is a second start button.** *Use the
+  trend* moved from the Now card into the timer card, next to the start
+  button: *▶ Start (1:30)* starts with the setting, *▶ Trend 1:32* copies
+  the trend of your cans (fill and drain) into the settings and starts the
+  fill timer in one tap. It shows only while the timer is idle and the trend
+  differs from the setting; when only the drain differs, it keeps the fill
+  time and copies the drain time.
+
 - **On-site page: Finish sits with the level actions.** *Finish this
   calibration* (a transfer: *Finish (tank)* per tank) and *Reopen* moved
   from the Now card to the row under the verdict, with *Take another

@@ -999,7 +999,7 @@ class TestSitePage(unittest.TestCase):
             "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
             "el('tm-fill-200').value = '1:30'; el('tm-drain-200').value = '0:40'; el('tm-save').click();\n"
             "out.cfg = JSON.parse(store.get('calib-site:active')).config.drainSeconds;\n"
-            "out.eta = el('now-eta').innerHTML; out.useHidden = el('eta-use')._classes.has('hidden');\n"
+            "out.eta = el('now-eta').innerHTML; out.useHidden = el('pt-trend')._classes.has('hidden');\n"
             "// Two taps 150 s apart: the check says 2:30, the button offers drain 1:00.\n"
             "el('t-plus').click(); el('t-plus').click();\n"
             "const s = JSON.parse(store.get('calib-site:active'));\n"
@@ -1007,10 +1007,12 @@ class TestSitePage(unittest.TestCase):
             "store.set('calib-site:active', JSON.stringify(s));\n"
             "p = stub.boot(page, corePath, store); el = p.el;\n"
             "out.eta2 = el('now-eta').innerHTML;\n"
-            "out.use = {hidden: el('eta-use')._classes.has('hidden'), text: el('eta-use').textContent};\n"
-            "el('eta-use').click();\n"
+            "out.use = {hidden: el('pt-trend')._classes.has('hidden'), text: el('pt-trend').textContent,"
+            " title: el('pt-trend').title, start: el('pt-start').textContent};\n"
+            "el('pt-trend').click();\n"
+            "out.run = JSON.parse(store.get('calib-site:timer') || '{}').pour;\n"
             "out.after = JSON.parse(store.get('calib-site:active')).config.drainSeconds;\n"
-            "out.useAfter = el('eta-use')._classes.has('hidden');\n"
+            "out.useAfter = el('pt-trend')._classes.has('hidden');\n"
             "out.eta3 = el('now-eta').innerHTML;\n"
             "console.log(JSON.stringify(out));"
         )
@@ -1021,9 +1023,12 @@ class TestSitePage(unittest.TestCase):
         self.assertIn("Your trend for 200 L cans (1 can, the most recent weigh most) · cycle 2:30", got["eta2"])
         self.assertIn("2:10 per can", got["eta2"], "a tap gap does not replace a typed fill + drain")
         self.assertFalse(got["use"]["hidden"])
-        self.assertEqual(got["use"]["text"], "Use the trend: drain 1:00 per 200 L can")
+        self.assertEqual(got["use"]["text"], "▶ Trend 1:30", "only the drain differs: the fill time stays")
+        self.assertEqual(got["use"]["title"], "Use the trend: drain 1:00 per 200 L can, then start the fill timer")
+        self.assertEqual(got["use"]["start"], "▶ Start (1:30)", "two start buttons: the first one is short")
+        self.assertEqual(got["run"]["dur"], 90, "the trend button starts the fill timer too")
         self.assertEqual(got["after"], {"200": 60})
-        self.assertTrue(got["useAfter"], "once adopted, the button goes away")
+        self.assertTrue(got["useAfter"], "once adopted (and the timer runs), the button goes away")
         self.assertIn("2:30 per can (fill 1:30 + drain 1:00)", got["eta3"])
 
     @unittest.skipUnless(NODE, "node is not installed")
@@ -2936,6 +2941,7 @@ class TestSiteTimeTrend(unittest.TestCase):
             "p = stub.boot(page, corePath, store); el = p.el;\n"
             "el('t-plus').click();\n"
             "out.idle = el('pt-status').textContent; out.startLabel = el('pt-start').textContent;\n"
+            "out.trendHidden = el('pt-trend')._classes.has('hidden');\n"
             "el('pt-start').click();\n"
             "out.run = JSON.parse(store.get('calib-site:timer')).pour;\n"
             "out.status = el('pt-status').textContent;\n"
@@ -2944,6 +2950,7 @@ class TestSiteTimeTrend(unittest.TestCase):
         self.assertIn("Set the fill time for 200 L cans", got["ask"])
         self.assertIn("(the trend of your cans)", got["idle"])
         self.assertIn("Start fill timer (1:40)", got["startLabel"])
+        self.assertTrue(got["trendHidden"], "the timer already runs on the trend: no second start button")
         self.assertEqual(got["run"]["dur"], 100, "the timer runs on the trend when no time is typed")
         self.assertIn("left of 1:40", got["status"])
 
@@ -2972,9 +2979,9 @@ class TestSiteTimeTrend(unittest.TestCase):
             "p = stub.boot(page, corePath, store); el = p.el;\n"
             "el('t-plus').click();\n"
             "out.f = JSON.parse(store.get('calib-site:active')).batch.cans[0].f != null;\n"
-            "out.use = [el('eta-use')._classes.has('hidden'), el('eta-use').textContent];\n"
+            "out.use = [el('pt-trend')._classes.has('hidden'), el('pt-trend').title];\n"
             "out.trendLine = el('now-eta').innerHTML;\n"
-            "el('eta-use').click();\n"
+            "el('pt-trend').click();\n"
             "out.adopted = JSON.parse(store.get('calib-site:active')).config.fillSeconds;\n"
             "console.log(JSON.stringify(out));"
         )
@@ -2988,7 +2995,7 @@ class TestSiteTimeTrend(unittest.TestCase):
         self.assertIn("<dt>suction floor</dt><dd>120 mm", got["kv"])
         self.assertTrue(got["f"])
         self.assertFalse(got["use"][0])
-        self.assertEqual(got["use"][1], "Use the trend: fill 1:40 per 200 L can")
+        self.assertEqual(got["use"][1], "Use the trend: fill 1:40 per 200 L can, then start the fill timer")
         self.assertIn("Your trend for 200 L cans (1 can, the most recent weigh most) · fill 1:40", got["trendLine"])
         self.assertEqual(got["adopted"], {"200": 100}, "one tap adopts the trend for the fill alarm")
 

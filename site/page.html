@@ -305,6 +305,9 @@
   .timer.done .clock { color: var(--ok); }
   .timer .acts { grid-column: 1 / -1; display: flex; gap: 0.4rem; flex-wrap: wrap; }
   .timer .acts button { flex: 1 1 auto; }
+  /* The second start button: adopt the trend of your cans, then start. */
+  .timer .acts #pt-trend { color: var(--info); border-color: var(--info); background: var(--info-bg); }
+  .timer .acts.pair > button { flex: 1 1 0; min-width: 0; padding-left: 0.4rem; padding-right: 0.4rem; white-space: nowrap; }
   .pour-anim { width: 110px; height: 82px; display: block; }
   .pour-anim .tank-bg { fill: var(--surface); }
   .pour-anim .tank { fill: none; stroke: var(--brand); stroke-width: 1.5; }
@@ -543,8 +546,9 @@
             <div class="sr-only" id="pt-status"></div>
             <div class="tally-bar"><i id="pt-bar"></i></div>
           </div>
-          <div class="acts">
+          <div class="acts" id="pt-acts">
             <button class="secondary" id="pt-start">▶ Start fill timer</button>
+            <button class="secondary hidden" id="pt-trend"></button>
             <button class="secondary hidden" id="pt-page">Start without iPhone timer</button>
             <button class="secondary small hidden" id="pt-less">−20 s</button>
             <button class="secondary small hidden" id="pt-more">+20 s</button>
@@ -604,7 +608,6 @@
       <p id="now-pred" class="pred"></p>
       <p id="now-advice" style="margin:0.6rem 0 0;font-weight:650"></p>
       <div id="now-eta" class="eta"></div>
-      <button class="secondary small hidden" id="eta-use"></button>
       <p id="now-drift" class="muted" style="margin:0.3rem 0 0"></p>
     </details>
 
@@ -3292,7 +3295,7 @@
   // ---- fill timer: the pump fills one can.  The alarm rings `lead` seconds
   // before the can is full, so the valve is closed when it is full.  Emptying
   // the can into the tank has no timer.
-  $("pt-start").addEventListener("click", guard("p-err", () => {
+  const startFill = guard("p-err", () => {
     const u = activeUnit();
     if (!(u > 0)) throw new Error("Enter the can size in litres.");
     // The typed fill time runs the alarm; without one, the trend of the
@@ -3316,6 +3319,16 @@
     saveTimer(); render();
     // The iPhone timer rings with the page's first alarm: close the valve.
     iosTimer(run.dur - Math.min(run.lead, run.dur - 1), P.iosShortcut);
+  });
+  $("pt-start").addEventListener("click", startFill);
+  // The second start button: the trend of your cans for this size becomes
+  // the timer setting (fill and drain, also when only the drain differs),
+  // then the fill timer starts at the new fill time.
+  $("pt-trend").addEventListener("click", guard("p-err", () => {
+    const u = Number($("pt-trend").dataset.u);
+    if (!(u > 0)) return;
+    adoptTrend(u);
+    startFill();
   }));
   /** ios: the iPhone timer runs too, so the page's fill alarms stay quiet. */
   function startPour(run, now, ios) {
@@ -3357,6 +3370,8 @@
     $("pt-stop").classList.toggle("hidden", !run && !wait);
     $("pt-stop").textContent = wait ? "Cancel" : "Stop timer";
     $("pt-start").classList.toggle("hidden", run);
+    $("pt-trend").classList.add("hidden");   // the idle timer shows it again
+    $("pt-acts").classList.remove("pair");
     $("pt-page").classList.toggle("hidden", !wait);
     // A drain takes the batch out of the tank; a fill puts it in.  A transfer
     // draws the can from tank A, so the drawing follows A.
@@ -3381,7 +3396,24 @@
       $("pt-status").textContent = !(u > 0) ? "Enter the can size to use the timer."
         : d ? `Fill time of one ${f(u, 0)} L can${d.source === "trend" ? " (the trend of your cans)" : ""}. The alarm rings ${fmtClock(S.cfg.alarmLead)} before it is full.`
           : `Set the fill time for ${f(u, 0)} L cans under Timers and alarm.`;
-      $("pt-start").textContent = d ? `▶ Start fill timer (${fmtClock(d.seconds)})` : "▶ Start fill timer";
+      // The trend of the cans differs from the setting: a second start
+      // button adopts it.  Its time is the trend's fill time, or the
+      // setting's when only the drain time differs.
+      // No button when it would change nothing: no typed fill time, so the
+      // timer already runs on the trend, and the drain time is the same.
+      const sg = u > 0 ? S.timerSuggestion(u) : null;
+      let trendFill = sg ? (sg.fill != null ? sg.fill : d ? d.seconds : null) : null;
+      if (sg && sg.drain == null && d && trendFill != null && Math.abs(trendFill - d.seconds) < 1) trendFill = null;
+      const tb = $("pt-trend");
+      tb.classList.toggle("hidden", trendFill == null);
+      $("pt-acts").classList.toggle("pair", trendFill != null);
+      if (trendFill != null) {
+        tb.textContent = `▶ Trend ${fmtClock(trendFill)}`;
+        tb.dataset.u = String(u);
+        tb.title = `${suggestText(sg)}, then start the fill timer`;
+        tb.setAttribute("aria-label", tb.title);
+      }
+      $("pt-start").textContent = d ? (trendFill != null ? `▶ Start (${fmtClock(d.seconds)})` : `▶ Start fill timer (${fmtClock(d.seconds)})`) : "▶ Start fill timer";
       $("t-plus").classList.remove("pulse");
     } else {
       const left = pt.dur - (now - pt.start) / 1000;
@@ -3548,8 +3580,8 @@
   // ---- time to half, to the brim and to the suction floor.  The estimate
   // takes the time trend of the cans (the most recent cans weigh most), and
   // the typed fill and drain times where the campaign has no trend yet.  The
-  // fill timer keeps its typed time: the button below adopts the trend for
-  // the timer, and only when you press it.
+  // fill timer keeps its typed time: the timer card's trend button adopts the
+  // trend, and only when you press it.
   function trendLine(u) {
     const tr = S.timeTrend(u);
     const bits = [];
@@ -3566,11 +3598,6 @@
       : sg.fill != null ? `Use the trend: fill ${fmtClock(sg.fill)} per ${sz} L can`
         : `Use the trend: drain ${fmtClock(sg.drain)} per ${sz} L can`;
   }
-  function tapCheck(u) {
-    const sg = S.timerSuggestion(u), b = $("eta-use");
-    b.classList.toggle("hidden", !sg);
-    if (sg) { b.textContent = suggestText(sg); b.dataset.u = String(u); }
-  }
   /** Adopt the trend as the timer settings of one size. */
   function adoptTrend(u) {
     const sg = S.timerSuggestion(u);
@@ -3581,7 +3608,6 @@
     S.setTimers(o);
     save(); timersSig = ""; render(); tickEta(Date.now());
   }
-  $("eta-use").addEventListener("click", guard("p-err", () => adoptTrend(Number($("eta-use").dataset.u))));
   $("tm-trend").addEventListener("click", (ev) => {
     const b = ev.target.closest("button[data-u]");
     if (b) guard("tm-err", () => adoptTrend(Number(b.dataset.u)))();
@@ -3592,13 +3618,11 @@
   function tickEta(now) {
     lastEta = now;
     const box = $("now-eta");
-    $("eta-use").classList.add("hidden");
     if (isTransfer()) { tickEtaTransfer(now, box); return; }
     if (!S || S.lastGood() < 0 || S.finished) { box.innerHTML = ""; return; }
     const list = S.canList(), last = list.length ? list[list.length - 1].u : null;
     const u = activeUnit() || last, d = cycleFor(u);
     if (!(u > 0)) { box.innerHTML = ""; return; }
-    tapCheck(u);
     if (!d) { box.innerHTML = ""; return; }
     const pe = T.pour && T.pour.size === u ? (now - T.pour.start) / 1000 : 0;
     const plan = S.fillPlan({ size: u, cycleSeconds: d.seconds, now, pourElapsed: pe, settleSeconds: 0, dipSeconds: 0, cycleFor: cycleSecondsOf });
@@ -3656,7 +3680,6 @@
     const list = S.canList(), last = list.length ? list[list.length - 1].u : null;
     const u = activeUnit() || last, d = cycleFor(u);
     if (!(u > 0)) { box.innerHTML = ""; return; }
-    tapCheck(u);
     if (!d) { box.innerHTML = ""; return; }
     const pe = T.pour && T.pour.size === u ? (now - T.pour.start) / 1000 : 0;
     const open = { volume: S.batchVolume(), cans: S.cans(), units: S.canList().map((c) => c.u) };
