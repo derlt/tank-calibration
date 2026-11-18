@@ -304,7 +304,6 @@
     "+1 can full": "+1 bình đầy",
     "when the can is full.": "khi bình đầy.",
     "Emptying the can into the tank has no timer.": "Việc trút bình vào bồn không có hẹn giờ.",
-    "when the can is full: ↶ removes the last can, ✓ closes the batch.": "khi bình đầy: ↶ xoá bình cuối, ✓ đóng mẻ.",
     "Each can keeps the size set in Options, so one batch can mix sizes.": "Mỗi bình giữ cỡ đặt trong Tuỳ chọn, nên một mẻ có thể gồm nhiều cỡ bình.",
     "The count is saved after each tap.": "Số đếm được lưu sau mỗi lần chạm.",
     "One dip follows the batch.": "Sau mẻ là một lần đo.",

@@ -257,19 +257,14 @@
   .tally-seg > b.lim { position: absolute; top: -0.25rem; bottom: -0.25rem; width: 2px; margin-left: -1px; background: var(--bad); border-radius: 1px; }
   .tally-lab.lim { display: block; position: relative; height: 1.15rem; }
   .tally-lab.lim > span { position: absolute; top: 0; white-space: nowrap; font: 700 0.66rem var(--mono); color: var(--bad); }
-  /* The action bar: Undo last can, the big +1, Batch done, as one bar.  The
-     +1 keeps the full height and text size of the big button; Undo and Batch
-     done are the same width at each end.  Batch done is quiet until the
-     batch's cans are all tapped, then green; amber once a can past it. */
-  .actbar { display: flex; margin-top: 0.3rem; border: 1px solid var(--brand); border-radius: 10px; overflow: hidden; }
-  .actbar > button { border: 0; border-radius: 0; margin: 0; min-height: 4.8rem; }
-  .actbar > #t-plus { flex: 1 1 auto; width: auto; min-width: 0; padding: 0.5rem 0.6rem; }
-  .actbar > #t-undo, .actbar > #p-go { flex: 0 0 3.4rem; padding: 0; font-size: 1.45rem; font-weight: 800; }
-  .actbar > #t-undo { border-right: 1px solid var(--line); }
-  .actbar > #p-go { border-left: 1px solid var(--line); }
-  #p-go.quiet { background: var(--surface); color: var(--muted); }
-  #p-go.ok { background: var(--ok); color: var(--bg); }
-  #p-go.over { background: var(--warn-bg); color: var(--warn); }
+  /* Under the big +1: Undo last can and Batch done side by side, one row,
+     the same size.  Batch done is quiet until the batch's cans are all
+     tapped, then green and bold; amber once a can past it. */
+  .actrow { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+  .actrow > button { flex: 1 1 0; min-width: 0; padding: 0.5rem 0.3rem; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #p-go.quiet { background: var(--surface); border-color: var(--line); color: var(--muted); }
+  #p-go.ok { background: var(--ok); border-color: var(--ok); color: var(--bg); font-weight: 800; }
+  #p-go.over { background: var(--warn-bg); border-color: var(--warn); color: var(--warn); font-weight: 800; }
   /* The title and the batch line sit close; the warning chip follows the
      batch and opens its sentence under the line. */
   #pour-card > h2 { margin-bottom: 0.15rem; }
@@ -557,11 +552,11 @@
             <button class="danger small hidden" id="pt-stop">Stop timer</button>
           </div>
         </div>
-        <p class="muted vb" id="t-help">Start the fill timer when you start the pump. The alarm rings before the can is full: close the valve. Tap <b>+1 can poured</b> when the can is full: ↶ removes the last can, ✓ closes the batch. Emptying the can into the tank has no timer. Each can keeps the size set in Options, so one batch can mix sizes. The count is saved after each tap. One dip follows the batch.</p>
-        <div class="actbar" id="t-act">
-          <button class="secondary" id="t-undo" aria-label="Undo last can" title="Undo last can">↶</button>
-          <button class="huge" id="t-plus"></button>
-          <button class="quiet" id="p-go" aria-label="Poured" title="Poured">✓</button>
+        <p class="muted vb" id="t-help">Start the fill timer when you start the pump. The alarm rings before the can is full: close the valve. Tap <b>+1 can poured</b> when the can is full. Emptying the can into the tank has no timer. Each can keeps the size set in Options, so one batch can mix sizes. The count is saved after each tap. One dip follows the batch.</p>
+        <button class="huge" id="t-plus"></button>
+        <div class="actrow" id="t-act">
+          <button class="secondary" id="t-undo"><span aria-hidden="true">↶</span> Undo last can</button>
+          <button class="quiet" id="p-go" aria-label="Poured"><span aria-hidden="true">✓</span> <span id="p-go-text">Poured</span></button>
         </div>
         <details id="p-opts">
           <summary>Options</summary>
@@ -1214,7 +1209,6 @@
     "+1 can full": "+1 bình đầy",
     "when the can is full.": "khi bình đầy.",
     "Emptying the can into the tank has no timer.": "Việc trút bình vào bồn không có hẹn giờ.",
-    "when the can is full: ↶ removes the last can, ✓ closes the batch.": "khi bình đầy: ↶ xoá bình cuối, ✓ đóng mẻ.",
     "Each can keeps the size set in Options, so one batch can mix sizes.": "Mỗi bình giữ cỡ đặt trong Tuỳ chọn, nên một mẻ có thể gồm nhiều cỡ bình.",
     "The count is saved after each tap.": "Số đếm được lưu sau mỗi lần chạm.",
     "One dip follows the batch.": "Sau mẻ là một lần đo.",
@@ -7497,13 +7491,13 @@
 
     $("t-undo").disabled = n === 0;
     $("t-part").disabled = n === 0;
-    // Batch done at the end of the bar: quiet below the batch, green when
+    // Batch done next to Undo last can: quiet below the batch, green when
     // its cans are all counted, amber past it.  With no can counted it
     // closes a typed or unknown pour (Options), and is green when one is set.
     const go = $("p-go"), typed = $("p-unknown").checked || num("p-vol") > 0;
     const goWord = n ? "Batch done" : transfer ? "Pumped" : drain ? "Drained" : "Poured";
     go.setAttribute("aria-label", goWord);
-    go.setAttribute("title", goWord);
+    $("p-go-text").textContent = goWord;
     const ok = (cans > 0 && n === cans) || (n === 0 && typed);
     go.classList.toggle("ok", ok);
     go.classList.toggle("over", cans > 0 && n > cans);
@@ -7666,7 +7660,7 @@
     $("p-over-text").textContent = drain ? "level still in the neck" : "liquid reached the neck / overflowed";
     $("t-help").innerHTML = drain
       ? "Start the fill timer when you start the pump. The pump fills the can <b>from the tank</b>. The alarm rings before the can is full: close the valve at the calibrated mark. Tap <b>+1 can full</b> when the can is full. A spill is litres that left the tank but not the record. Keep the hose in the same state at every dip. When the pump loses suction, tap the part can and tick <i>pump lost suction: last can part</i>, or enter its measured litres instead. The count is saved after each tap. One dip follows the batch."
-      : "Start the fill timer when you start the pump. The alarm rings before the can is full: close the valve. Tap <b>+1 can poured</b> when the can is full: ↶ removes the last can, ✓ closes the batch. Emptying the can into the tank has no timer. Each can keeps the size set in Options, so one batch can mix sizes. The count is saved after each tap. One dip follows the batch.";
+      : "Start the fill timer when you start the pump. The alarm rings before the can is full: close the valve. Tap <b>+1 can poured</b> when the can is full. Emptying the can into the tank has no timer. Each can keeps the size set in Options, so one batch can mix sizes. The count is saved after each tap. One dip follows the batch.";
   }
 
   // ------------------------------------------------------------ settings

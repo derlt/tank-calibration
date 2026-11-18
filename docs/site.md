@@ -195,9 +195,9 @@ is the same in both modes: only the text changes.
 
 1. **Pour.** Tap *+1 can poured* each time a can is empty, then press
    *Batch done* (see *A batch of cans* below). The card reads from the top:
-   the batch line, the count, the can tally, the timer, and one action bar:
-   *↶* (Undo last can), the big pour button, *✓* (Batch done). Then
-   *Options*. *Options* folds the can size first, then the part-can tick,
+   the batch line, the count, the can tally, the timer, the big pour
+   button, then *↶ Undo last can* and *✓ Batch done* side by side, the same
+   size. Then *Options*. *Options* folds the can size first, then the part-can tick,
    *reached the neck / overflowed*, *level still in the neck*, the note and
    *Enter litres instead* (meter, unknown pour). The Now card follows the
    pour card. Tick *whole pour
@@ -333,15 +333,15 @@ the next batch.
   (`⚠ near the brim`) and the tally has no line. Tap the chip for the full
   sentence; tap it again to fold it.
 - **A second tap in less than 20 s** asks if it is a new can.
-- **Undo last can** (*↶*, the left end of the action bar) asks first
+- **Undo last can** (left, under the big pour button) asks first
   (*Remove the last can from the count?*) and removes one tap on *OK*. *Undo last entry* does the same while a batch is
   open, also with a question. After *Batch done*, *Undo last entry* opens the
   batch again with its cans.
 - **Last can not fully poured** records the batch as `N+?`: the full cans are
   known, and the shell estimates the part can. The part can is the last tap,
   so tap it with its own size. The tick is in *Options*.
-- **Batch done** (*✓*, the right end of the action bar, as wide as *↶*)
-  closes the batch and starts the settle timer from the last can. It is quiet
+- **Batch done** (right, next to *Undo last can* and as wide) closes the
+  batch and starts the settle timer from the last can. It is quiet
   below the batch's cans, green on the last can, and amber one can past it.
   Below the batch it asks first (*Only 2 of 4 cans. Close the batch?*),
   unless *Options* says why: typed litres or a part can. With no can it is

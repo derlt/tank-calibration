@@ -137,13 +137,14 @@ class TestSitePage(unittest.TestCase):
         )
 
     def test_pour_card_foot_order(self):
-        """The foot is one bar (Undo last can, +1 can, Batch done), then Options with the can size first."""
+        """The foot reads +1 can, then Undo last can and Batch done in one row, then Options with the can size first."""
         page = (SITE / "page.html").read_text(encoding="utf-8")
-        order = [page.index(f'id="{i}"') for i in ("t-undo", "t-plus", "p-go", "p-opts", "t-unit", "p-opts-rest")]
+        order = [page.index(f'id="{i}"') for i in ("t-plus", "t-undo", "p-go", "p-opts", "t-unit", "p-opts-rest")]
         self.assertEqual(order, sorted(order), "the pour card's foot is in the set order")
-        bar = page.split('<div class="actbar" id="t-act">', 1)[1].split("</div>", 1)[0]
-        for i in ("t-undo", "t-plus", "p-go"):
-            self.assertIn(f'id="{i}"', bar, f"{i} is in the action bar")
+        row = page.split('<div class="actrow" id="t-act">', 1)[1].split("</div>", 1)[0]
+        for i in ("t-undo", "p-go"):
+            self.assertIn(f'id="{i}"', row, f"{i} is in the row under +1 can")
+        self.assertNotIn('id="t-plus"', row, "+1 can keeps its own full-width line")
         opts = page.split('<details id="p-opts">', 1)[1].split("</details>", 1)[0]
         for i in ("t-unit", "t-units", "t-dec", "t-inc", "t-part", "p-over", "p-neck", "p-unknown", "p-extra", "p-note", "p-vol"):
             self.assertIn(f'id="{i}"', opts, f"{i} is folded into Options")
@@ -343,7 +344,7 @@ class TestSitePage(unittest.TestCase):
             "el('p-unknown').checked = true; el('p-unknown')._listeners.change[0]({});\n"
             "out.typed = { ok: el('p-go')._classes.has('ok'), off: el('p-go').disabled };\n"
             "el('p-unknown').checked = false; el('p-unknown')._listeners.change[0]({});\n"
-            "el('t-plus').click();\n"
+            "out.label0 = el('p-go-text').textContent; el('t-plus').click(); out.label1 = el('p-go-text').textContent;\n"
             "el('p-go').click(); out.kept = [el('t-count').textContent, el('dip-card')._classes.has('hidden')];\n"
             "out.asks = asks.slice();\n"
             "yes = true; el('p-go').click(); out.closed = el('dip-card')._classes.has('hidden');\n"
@@ -351,6 +352,7 @@ class TestSitePage(unittest.TestCase):
         )
         self.assertEqual(got["hdr"], "1 level", "the header has no extra-dip count")
         self.assertEqual(got["typed"], {"ok": True, "off": False}, "no can, a typed pour: Batch done is green")
+        self.assertEqual([got["label0"], got["label1"]], ["Poured", "Batch done"], "the button shows its word")
         self.assertEqual(got["kept"], ["1 / 3 cans · 50 L", True], "No keeps the batch open")
         self.assertEqual(got["asks"], ["Only 1 of 3 cans. Close the batch?"])
         self.assertFalse(got["closed"], "Yes closes the batch: the dip card opens")

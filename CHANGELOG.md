@@ -12,10 +12,10 @@ All notable changes to this project are documented here. The format follows
   the title: `Batch 800 L · 3/8` (the batch size, its number in the group in
   work, `(plan 8)` after a recount), or `Batch ≈ 400 L` without a plan. The
   group chips and the target line (`Target: 6 × 200 L`, `Plan: …`) are gone.
-  *Undo last can*, the big +1 button and *Batch done* are one bar: *↶* and
-  *✓* at the two ends, the same width, and the +1 keeps its full size. *✓*
-  turns green on the last can of the batch and amber past it; below the
-  batch it asks first (*Only 2 of 4 cans. Close the batch?*). The can size
+  Under the full-width +1 button, *↶ Undo last can* and *✓ Batch done* sit
+  side by side in one row, the same size. *Batch done* turns green on the
+  last can of the batch and amber past it; below the batch it asks first
+  (*Only 2 of 4 cans. Close the batch?*). The can size
   moved into *Options*, at the top. The fill timer has no text under the
   clock: its colour tells the state. The Now card follows the pour card, and
   the header drops the extra-dip count.
