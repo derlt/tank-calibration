@@ -558,6 +558,7 @@
         : (b.taps || []).map((time) => ({ t: time, u: b.unit }));
       this.batch = { unit: b.unit, cans };
     }
+    if (saved && saved.finished) this.finished = Object.assign({}, saved.finished);
     if (saved) {
       this.levels = saved.levels.map((l) => {
         const L = Object.assign({}, l, { dips: l.dips.slice(), times: (l.times || []).slice(), tags: (l.tags || []).slice() });
@@ -572,7 +573,9 @@
   Session.prototype.toJSON = function () {
     const c = {};
     for (const k of Object.keys(DEFAULTS)) c[k] = this.cfg[k];
-    return { version: 1, config: c, levels: this.levels, batch: this.batch };
+    const out = { version: 1, config: c, levels: this.levels, batch: this.batch };
+    if (this.finished) out.finished = this.finished;
+    return out;
   };
   Session.fromJSON = function (obj) { return new Session(obj.config, obj); };
 
@@ -704,6 +707,7 @@
    */
   Session.prototype.pour = function (stepText, opts) {
     const o = opts || {};
+    if (this.finished) throw new Error("this tank is finished: reopen it first");
     const cur = this.current();
     if (!cur) throw new Error("start the session first");
     if (cur.state === "pending") throw new Error("finish the dips at the current level first");
@@ -849,8 +853,8 @@
    *         (the prediction is below the suction floor); null otherwise.
    *         The number is a limit, not a level.
    *   why:  "first", "neck", "overflow", "unknown", "extra", "part",
-   *         "to-neck", "no-anchor", "plan-complete", "no-cans" — null when a
-   *         prediction exists
+   *         "to-neck", "no-anchor", "plan-complete", "no-cans", "finished" —
+   *         null when a prediction exists
    *   s:    the litres of the prediction; sd: its 1σ, mm
    *   pending: the prediction is the expected dip of the batch now waiting
    *   planned: the litres are the plan's batch, more than the cans tapped
@@ -874,10 +878,16 @@
     const base = {
       name: sess.cfg.tank, role, dir, from: null, to: null, frac: null,
       wait: !!(cur && cur.state === "pending" && cur.dips && cur.dips.length > 0),
-      edge: null, why: null, s: null, sd: null, pending: false, planned: false, past: null, beyond: null,
+      edge: null, why: null, s: null, sd: null, pending: false, planned: false, past: null, beyond: null, finAt: null,
       left: { now: null, after: null },
     };
     if (!G || G.H == null) return Object.assign(base, { why: "first" });
+    // Finished: the last level stays, with no prediction and no track.  An
+    // overflow reading is that last level when there is one.
+    if (sess.finished) {
+      const H = cur && cur.state === "overflow" && cur.H != null ? cur.H : G.H;
+      return Object.assign(base, { from: H, why: "finished", finAt: sess.finished.time, left: { now: leftOf(sess, H), after: null } });
+    }
     // The last decided reading can be the overflow row: vent-column height,
     // not a shell level, so lastGood() skips it.  It is still the level the
     // operator dipped, and the tile shows it with no prediction.
@@ -1026,8 +1036,12 @@
     return this.cans();
   };
 
-  /** Close the batch: the tally becomes the pour of a new level. */
-  Session.prototype.closeBatch = function (opts) {
+  /**
+   * Close the open tally: the step text of the batch (a part can is N+?) and
+   * its record, and the tally clears.  A finished tank in a transfer still
+   * closes the shared tally this way, without a level of its own.
+   */
+  Session.prototype.closeTally = function (opts) {
     const n = this.cans();
     if (!n) throw new Error("no can is counted yet");
     const o = opts || {}, b = this.batch, cans = b.cans;
@@ -1036,15 +1050,63 @@
     const kept = o.partial ? cans.slice(0, -1) : cans;
     const full = kept.reduce((a, c) => a + c.u, 0);
     const text = o.partial ? (full ? `${round(full, 3)}+?` : "?") : String(round(full, 3));
-    const L = this.pour(text, o);
     const sizes = this.canUnits();
-    L.cans = {
+    const rec = {
       tapped: n, unit: sizes.length === 1 ? sizes[0].unit : null, partial: !!o.partial,
       taps: cans.map((c) => c.t), units: cans.map((c) => c.u),
     };
-    if (cans.some((c) => c.f != null)) L.cans.fills = cans.map((c) => (c.f == null ? null : c.f));
+    if (cans.some((c) => c.f != null)) rec.fills = cans.map((c) => (c.f == null ? null : c.f));
     this.batch = null;
+    return { text, cans: rec };
+  };
+
+  Session.prototype.closeBatch = function (opts) {
+    if (this.finished) throw new Error("this tank is finished: reopen it first");
+    const t = this.closeTally(opts);
+    const L = this.pour(t.text, opts);
+    L.cans = t.cans;
     return L;
+  };
+
+  /**
+   * The tank's calibration is finished: no more pours, dips or predictions
+   * for it, also when it has not reached the brim or the bottom.  A level
+   * that still waits for its dip is discarded (the operator's choice).  The
+   * last dipped row takes the tag `finished at 1700.0 mm`, so the raw file
+   * says why the record stops.  Refused before the first accepted dip:
+   * there is nothing to close.
+   */
+  Session.prototype.finish = function (time) {
+    if (this.finished) return this.finished;
+    const cur = this.current();
+    if (cur && cur.state === "pending") { this.levels.pop(); this._refit(); }
+    const gi = this.lastGood();
+    if (gi < 0) throw new Error("no level to finish yet: dip one first");
+    // The last dipped row: an overflow reading is the last level too, though
+    // it is vent-column height and out of the shell fit.
+    const top = this.current();
+    const L = top && top.state === "overflow" && top.H != null ? top : this.levels[gi];
+    this.finished = { level: L.H, row: L.row, time: time == null ? null : time, levels: this.levels.length, after: 0 };
+    addTag(L, `finished at ${fmt(L.H, 1)} mm`);
+    return this.finished;
+  };
+
+  /** True when no batch has been poured or closed since the finish. */
+  Session.prototype.canReopen = function () {
+    return !!this.finished && !this.finished.after;
+  };
+
+  /**
+   * Take the finish back, before the next batch: the tank dips again as
+   * usual.  After a batch the record would have a gap, so it stays finished.
+   */
+  Session.prototype.reopen = function () {
+    if (!this.finished) return null;
+    if (!this.canReopen()) throw new Error("a batch was pumped while this tank was finished: it stays finished");
+    const row = this.levels.find((l) => l.row === this.finished.row);
+    if (row && row.tags) row.tags = row.tags.filter((t) => !/^finished at /.test(t));
+    delete this.finished;
+    return true;
   };
 
   /** The cans of a closed batch as an open tally again, with their fill starts. */
@@ -2101,9 +2163,18 @@
   };
 
   TransferSession.prototype.tank = function (k) { return this[k === "in" ? "in" : "out"]; };
+  /** The tanks whose calibration is still open, A first. */
+  TransferSession.prototype.liveKeys = function () {
+    return ["out", "in"].filter((k) => !this[k].finished);
+  };
+  /** The tank an action falls on: the chosen one, else the open one. */
+  TransferSession.prototype.liveKey = function () {
+    if (!this[this.active].finished) return this.active;
+    return this.out.finished ? "in" : "out";
+  };
   /** The tank whose level is still being dipped: A first, then B. */
   TransferSession.prototype.pendingTank = function () {
-    for (const k of ["out", "in"]) {
+    for (const k of this.liveKeys()) {
       const cur = this[k].current();
       if (cur && cur.state === "pending") return k;
     }
@@ -2159,6 +2230,7 @@
     for (const k of ["out", "in"]) {
       const v = vals[k];
       if (v == null || (typeof v === "string" && v.trim() === "")) continue;
+      if (this[k].finished) throw new Error(`tank ${this[k].cfg.tank} is finished: reopen it first`);
       const cur = this[k].current();
       if (!cur || cur.state !== "pending") {
         throw new Error(`tank ${this[k].cfg.tank} is decided: take another reading to re-open it`);
@@ -2185,10 +2257,12 @@
     this._guard();
     const o = opts || {};
     const plan = this.planNow() || undefined;
-    const Lo = this.out.pour(stepText, { neck: !!o.neck, note: o.note, plan });
-    const Li = this.in.pour(stepText, { overflow: !!o.overflow, note: o.note, plan });
+    // A finished tank gets no level: its water still moves, but it is not dipped.
+    const Lo = this.out.finished ? null : this.out.pour(stepText, { neck: !!o.neck, note: o.note, plan });
+    const Li = this.in.finished ? null : this.in.pour(stepText, { overflow: !!o.overflow, note: o.note, plan });
+    this._afterFinish();
     this._pair();
-    return Lo;
+    return Lo || Li;
   };
 
   /**
@@ -2198,22 +2272,29 @@
    * either tank is.
    */
   TransferSession.prototype._planRoom = function () {
-    const a = this.out._planRoom(), b = this.in._planRoom();
-    if (!a || !b) return null;
-    const room = a.R <= b.R ? a : b;
-    return { R: room.R, past: a.past || b.past, capacity: room.capacity };
+    // A finished tank is out of the plan: the open tank alone sets the room.
+    const rooms = this.liveKeys().map((k) => this[k]._planRoom()).filter(Boolean);
+    if (!rooms.length) return null;
+    const room = rooms.reduce((x, y) => (y.R < x.R ? y : x));
+    return { R: room.R, past: rooms.some((x) => x.past), capacity: room.capacity };
+  };
+  /** The tank the shared plan runs on: an open one (both configs carry the plan). */
+  TransferSession.prototype._planTank = function () {
+    return this.out.finished ? this.in : this.out;
   };
   TransferSession.prototype.planNow = function () {
-    if (!this.out.cfg.plan) return null;
+    const t = this._planTank();
+    if (!t.cfg.plan) return null;
     const room = this._planRoom();
     if (!room) return null;
-    return this.out._planView(planState(this.out.cfg.plan, this.out._planHist(), room.R, room.past, this.out._planPrev()), room);
+    return t._planView(planState(t.cfg.plan, t._planHist(), room.R, room.past, t._planPrev()), room);
   };
   TransferSession.prototype.planProjection = function () {
-    if (!this.out.cfg.plan) return null;
+    const t = this._planTank();
+    if (!t.cfg.plan) return null;
     const room = this._planRoom();
     if (!room) return null;
-    return this.out._planList(planState(this.out.cfg.plan, this.out._planHist(), room.R, true, this.out._planPrev()));
+    return t._planList(planState(t.cfg.plan, t._planHist(), room.R, true, t._planPrev()));
   };
 
   // The shared can tally lives on the drain session (the pump fills the cans).
@@ -2230,15 +2311,18 @@
     this._guard();
     const o = opts || {};
     const plan = this.planNow() || undefined;
-    const Lo = this.out.closeBatch({ partial: o.partial, neck: o.neck, note: o.note, plan });
-    const Li = this.in.pour(Lo.step.text, { overflow: !!o.overflow, note: o.note, plan });
-    Li.cans = {
-      tapped: Lo.cans.tapped, unit: Lo.cans.unit, partial: Lo.cans.partial,
-      taps: Lo.cans.taps.slice(), units: Lo.cans.units.slice(),
-    };
-    if (Lo.cans.fills) Li.cans.fills = Lo.cans.fills.slice();
+    // The tally lives on A: it closes once, whoever is still open.
+    const t = this.out.closeTally({ partial: o.partial });
+    const Lo = this.out.finished ? null : this.out.pour(t.text, { partial: o.partial, neck: o.neck, note: o.note, plan });
+    const Li = this.in.finished ? null : this.in.pour(t.text, { overflow: !!o.overflow, note: o.note, plan });
+    if (Lo) Lo.cans = t.cans;
+    if (Li) {
+      Li.cans = { tapped: t.cans.tapped, unit: t.cans.unit, partial: t.cans.partial, taps: t.cans.taps.slice(), units: t.cans.units.slice() };
+      if (t.cans.fills) Li.cans.fills = t.cans.fills.slice();
+    }
+    this._afterFinish();
     this._pair();
-    return Lo;
+    return Lo || Li;
   };
 
   /**
@@ -2247,7 +2331,7 @@
    */
   TransferSession.prototype.undo = function () {
     if (this.cans()) { this.out.untap(); return this.current(); }
-    const order = this.lastDip === "in" ? ["in", "out"] : ["out", "in"];
+    const order = (this.lastDip === "in" ? ["in", "out"] : ["out", "in"]).filter((k) => !this[k].finished);
     for (const k of order) {
       const s = this[k], L = s.current();
       if (L && L.dips.length) {
@@ -2260,7 +2344,8 @@
         return this.current();
       }
     }
-    // No reading anywhere: remove the last batch from both tanks.
+    // No reading anywhere: remove the last batch from both open tanks.
+    if (this.out.finished || this.in.finished) return this.current();
     if (this.out.levels.length > 1 && this.in.levels.length > 1) {
       const Lo = this.out.levels.pop(), Li = this.in.levels.pop();
       if (Lo.cans) {
@@ -2277,8 +2362,10 @@
   TransferSession.prototype.override = function (why) {
     // The current tank first: the header switch says which tank the level
     // actions apply to.  A decided current tank leaves the only pending one.
-    const act = this[this.active].current();
-    const k = act && act.state === "pending" ? this.active : (this.pendingTank() || this.active);
+    // A finished tank is never the one (it has no level to decide).
+    const base = this[this.active].finished ? this.liveKey() : this.active;
+    const act = this[base].current();
+    const k = act && act.state === "pending" ? base : (this.pendingTank() || base);
     const v = this[k].override(why);
     this._pair();   // an override is not a prediction test: the pair leaves with it
     return v;
@@ -2364,40 +2451,51 @@
   /**
    * The advice for the shared batch: the tighter of the two 30 mm targets
    * (§3.4), with the bottom watch of the drain tank and the brim watch of
-   * the fill tank (§10 BOTTOM-WARN, BRIM-WARN).
+   * the fill tank (§10 BOTTOM-WARN, BRIM-WARN).  With a tank finished, the
+   * open tank alone sizes the batch and gives the warnings; the shared plan's
+   * batch still sets the size.
    */
   TransferSession.prototype.adviceBatch = function () {
-    const giO = this.out.lastGood(), giI = this.in.lastGood();
-    if (giO < 0 || giI < 0) return null;
-    const aO = this.out.advice(this.out.levels[giO].H);
-    const aI = this.in.advice(this.in.levels[giI].H);
+    const live = this.liveKeys();
+    if (!live.length) return null;
+    const gis = {}, advs = {};
+    for (const k of live) {
+      gis[k] = this[k].lastGood();
+      if (gis[k] < 0) return null;
+      advs[k] = this[k].advice(this[k].levels[gis[k]].H);
+    }
+    const aO = advs.out || null, aI = advs.in || null;
     const unit = this.out.cfg.pourUnit;
-    let target = Math.min(aO.target, aI.target), units = null;
-    if (unit) { units = Math.max(1, Math.round(target / unit)); target = units * unit; }
-    // With a plan the batch is the plan's next batch, for both tanks.
+    let target = live.length === 1 ? advs[live[0]].target : Math.min(aO.target, aI.target);
+    let units = null;
+    if (unit && live.length === 1) { units = advs[live[0]].units; } else if (unit) {
+      units = Math.max(1, Math.round(target / unit)); target = units * unit;
+    }
     const st = this.planNow(), pb = st && st.batch ? Object.assign({ state: st }, st.batch) : null;
     if (pb) { target = pb.size; units = null; }
-    // Where both next dips must land after the advised batch (§10a.2).
-    const GO = this.out.levels[giO], GI = this.in.levels[giI];
-    const prO = GO.neck ? null : this.out.preview(GO.H, target, GO.n);
-    const prI = this.in.preview(GI.H, target, GI.n);
-    const eO = !prO ? "A: in the neck, no level to expect"
-      : prO.empty ? "A runs dry"
-        : `A ≈ ${fmt(prO.H, 1)} ± ${fmt(2 * prO.sd, 1)} mm`;
-    const eI = prI.overflow ? "B reaches the neck" : `B ≈ ${fmt(prI.H, 1)} ± ${fmt(2 * prI.sd, 1)} mm`;
-    const warn = ((aI.halve ? `Tank B near the brim (≈ ${fmt(aI.toBrim, 0)} mm): small batches. ` : "")
-      + (aO.bottom ? `Tank A near the bottom (≈ ${fmt(aO.toBottom, 0)} mm): the pump may lose suction; a part can is fine. ` : "")).trim();
-    const mmO = target / Math.max(aO.slope, 1e-3), mmI = target / Math.max(aI.slope, 1e-3);
+    // Where the next dips must land after the advised batch (§10a.2).
+    const pr = {}, e = {};
+    for (const k of live) {
+      const G = this[k].levels[gis[k]];
+      pr[k] = k === "out" && G.neck ? null : this[k].preview(G.H, target, G.n);
+      e[k] = k === "out"
+        ? (!pr.out ? "A: in the neck, no level to expect" : pr.out.empty ? "A runs dry" : `A ≈ ${fmt(pr.out.H, 1)} ± ${fmt(2 * pr.out.sd, 1)} mm`)
+        : pr.in.overflow ? "B reaches the neck" : `B ≈ ${fmt(pr.in.H, 1)} ± ${fmt(2 * pr.in.sd, 1)} mm`;
+    }
+    const warn = ((aI && aI.halve ? `Tank B near the brim (≈ ${fmt(aI.toBrim, 0)} mm): small batches. ` : "")
+      + (aO && aO.bottom ? `Tank A near the bottom (≈ ${fmt(aO.toBottom, 0)} mm): the pump may lose suction; a part can is fine. ` : "")).trim();
     const head = pb ? `Batch ${pb.index} of ${st.total}: ${fmt(target, 0)} L` + (pb.mix ? ` = ${mixText(pb.mix)} L` : "")
       : `Next batch ≈ ${fmt(target, 0)} L` + (units ? ` = ${units} × ${fmt(unit, 0)} L` : "");
+    const mm = live.map((k) => `≈ ${fmt(target / Math.max(advs[k].slope, 1e-3), 0)} mm ${k === "out" ? "out of A" : "into B"}`).join(", ");
     return {
-      target, units, out: aO, in: aI, halve: aI.halve, bottom: aO.bottom,
+      target, units, out: aO, in: aI,
+      halve: !!(aI && aI.halve), bottom: !!(aO && aO.bottom),
       plan: pb, mix: pb ? pb.mix : null, cans: pb ? pb.cans : null,
-      expect: { out: prO, in: prI }, warn,
+      live, expect: { out: pr.out || null, in: pr.in || null }, warn,
       text: (warn ? warn + " " : "")
         + head
-        + ` (≈ ${fmt(mmO, 0)} mm out of A, ≈ ${fmt(mmI, 0)} mm into B).`
-        + ` Expect the next dips at ${eO} · ${eI} (2σ).`,
+        + ` (${mm}).`
+        + ` Expect the next ${live.length === 1 ? "dip" : "dips"} at ${live.map((k) => e[k]).join(" · ")} (2σ).`,
     };
   };
 
@@ -2418,8 +2516,21 @@
     // The batch is shared: both tanks see the same tally, so both label the
     // prediction the plan's batch, or neither does.
     const planned = !(input && input.s > 0) && target > tapped + 1e-9;
-    a.planned = b.planned = planned;
+    a.planned = planned && !this.out.finished;
+    b.planned = planned && !this.in.finished;
     return { out: a, in: b, frac };
+  };
+
+  /**
+   * A batch went by while a tank was finished: the tank's own record has no
+   * level for it, so the finish can no longer be taken back (that would
+   * leave a gap and a wrong step).
+   */
+  TransferSession.prototype._afterFinish = function () {
+    for (const k of ["out", "in"]) {
+      const f = this[k].finished;
+      if (f) f.after = (f.after || 0) + 1;
+    }
   };
 
   /** One tank's part of the transfer pour panel input. */
@@ -2449,6 +2560,8 @@
     if (Lo) { Lo.transfer = null; setTransferTag(Lo, null); }
     if (Li) { Li.transfer = null; setTransferTag(Li, null); }
     this.pair = null;
+    // One tank finished: the batch has no second residual to compare.
+    if (this.out.finished || this.in.finished) return this.pair;
     if (this.pendingTank() || !Lo || !Li || Lo.start || Li.start) return this.pair;
     if (!PAIR.has(Lo.state) || !PAIR.has(Li.state)) return this.pair;
     const co = Lo.check, ci = Li.check;

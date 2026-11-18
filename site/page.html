@@ -280,6 +280,10 @@
   .eta { margin: 0.6rem 0 0; font-size: 0.93rem; }
   .eta div { margin: 0.15rem 0; }
   .pred { margin: 0.45rem 0 0; font-size: 0.93rem; font-weight: 650; }
+  /* A finished calibration: the banner sits above the Now card, in the card's look. */
+  #fin-banner { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--ok);
+    border-radius: var(--radius); padding: 0.6rem 0.75rem; margin: 0 0 0.8rem; font-weight: 600; }
+  #now-fin-wrap { gap: 0.5rem; }
   .pred.muted { font-weight: 400; }
   .dipfield-h { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
   .dipfield-in { display: flex; gap: 0.5rem; align-items: stretch; margin-top: 0.55rem; flex-wrap: wrap; }
@@ -464,6 +468,7 @@
 
   <!-- ===================================================== live -->
   <section id="live" class="hidden">
+    <p id="fin-banner" class="pred hidden"></p>
     <details class="card" id="now-card" open>
       <summary><h2>Now</h2><span class="now-sum" id="now-sum"></span></summary>
       <div class="kv" id="now-kv"></div>
@@ -472,6 +477,11 @@
       <div id="now-eta" class="eta"></div>
       <button class="secondary small hidden" id="eta-use"></button>
       <p id="now-drift" class="muted" style="margin:0.3rem 0 0"></p>
+      <div class="row" id="now-fin-wrap" style="margin-top:0.5rem">
+        <button class="secondary small" id="now-fin-a"></button>
+        <button class="secondary small" id="now-fin-b"></button>
+      </div>
+      <p id="now-fin-note" class="muted" style="margin:0.3rem 0 0"></p>
     </details>
 
     <div class="card" id="pour-card" style="margin-top:0.8rem">
@@ -1622,7 +1632,7 @@
 
   // ------------------------------------------------------------ level actions
   $("a-redip").addEventListener("click", () => {
-    const L = isTransfer() ? S[S.active].current() : S.current();
+    const L = isTransfer() ? S[S.liveKey()].current() : S.current();
     if (!L) return;
     L.state = "pending"; L.verdict = Object.assign({}, L.verdict || {}, { status: "REDIP", hidden: true, color: "warn", title: "Extra reading", message: "The earlier readings are hidden.", advice: "Dip again." });
     if (isTransfer()) S._pair();   // the pair judged a decided level: it leaves while this one is open again
@@ -1770,6 +1780,7 @@
     $("hdr-mode").classList.toggle("hidden", !has);
     renderMode();   // the header switch shows on every tab
     if (!has) {
+      $("fin-banner").classList.add("hidden");
       $("hdr-phase").textContent = ""; $("hdr-count").textContent = "";
       $("hdr-title").textContent = "calib site";
       $("tiles").classList.add("hidden"); $("tiles").innerHTML = "";
@@ -1781,7 +1792,8 @@
     // tank tiles below carry the roles and the levels.
     $("hdr-title").textContent = isTransfer() ? `${S.out.cfg.tank} → ${S.in.cfg.tank}` : S.cfg.tank;
     $("hdr-phase").textContent = (st.learning ? `learning ${st.intervals}/${S.cfg.learnN}` : "checking")
-      + (isDrain() && !isTransfer() ? " · drain" : "");
+      + (isDrain() && !isTransfer() ? " · drain" : "")
+      + (!isTransfer() && S.finished ? " · finished" : "");
     $("hdr-count").textContent = `${S.levels.length} level${S.levels.length === 1 ? "" : "s"}`
       + (st.redips ? ` · ${st.redips} extra dip${st.redips === 1 ? "" : "s"}` : "");
     renderLive(st); renderLog(); renderShell(st);
@@ -1809,6 +1821,7 @@
     part: "a part can",
     "to-neck": "the pour reaches the neck",
     "still-neck": "in the neck",
+    finished: "finished",
   };
   const TILE_EDGE = {
     brim: "the batch reaches the brim",
@@ -1828,13 +1841,15 @@
     const cur = v.from == null ? "—" : f(v.from);
     const why = v.why ? TILE_WHY[v.why] || "" : "";
     let pred = `<span class="num pred">—</span>`;
-    if (v.why === "no-cans") pred = `<span class="num pred words">${esc("pour to predict")}</span>`;
+    if (v.why === "finished") pred = `<span class="num pred words">${esc("finished")}</span>`;
+    else if (v.why === "no-cans") pred = `<span class="num pred words">${esc("pour to predict")}</span>`;
     else if (v.to != null && v.edge) {
       pred = `<span class="num pred edge" data-edge="${v.edge}"><span aria-hidden="true">${v.edge === "brim" ? "≥" : "≤"}</span>${f(v.to)}</span>`;
     } else if (v.to != null) pred = `<span class="num pred">${f(v.to)}</span>`;
     const now = v.from == null ? "no level" : `${f(v.from)} mm now`;
-    const after = v.to != null ? `${f(v.to)} mm after the batch${v.edge ? ` · ${TILE_EDGE[v.edge]}` : ""}`
-      : v.why === "no-cans" ? "pour to predict" : `no prediction (${why})`;
+    const after = v.why === "finished" ? `finished${v.finAt ? ` at ${hhmm(v.finAt)}` : ""}`
+      : v.to != null ? `${f(v.to)} mm after the batch${v.edge ? ` · ${TILE_EDGE[v.edge]}` : ""}`
+        : v.why === "no-cans" ? "pour to predict" : `no prediction (${why})`;
     const label = `${v.name} · ${now}${v.wait ? " · a newer reading waits" : ""} · ${after}`;
     const dir = v.dir;
     const d = dir === "up" ? "M10 15 V4 M5.5 8.5 L10 4 L14.5 8.5" : "M10 3 V14 M5.5 9.5 L10 14 L14.5 9.5";
@@ -1919,7 +1934,8 @@
     return adv.halve ? "Near the brim: half pour." : adv.bottom ? "Near the bottom: a part can is fine." : "";
   }
   function shortAdviceBatch(adv) {
-    return ((adv.in.halve ? "B near the brim: small batches. " : "") + (adv.bottom ? "A near the bottom: a part can is fine." : "")).trim();
+    if (!adv) return "";
+    return (((adv.in && adv.in.halve) ? "B near the brim: small batches. " : "") + (adv.bottom ? "A near the bottom: a part can is fine." : "")).trim();
   }
 
   /** One verdict in simple mode: the title and the action, plus an unknown pour's estimate. */
@@ -1927,6 +1943,65 @@
     const x = v.unknown && !pend ? `<p class="mono">x = ${f(v.unknown.x)} ± ${f(2 * v.unknown.sigma)} L</p>` : "";
     return `<h3>${name ? esc(name) + " — " : ""}${esc(v.title)}</h3>${x}${v.advice ? `<p class="advice">${esc(v.advice)}</p>` : ""}`;
   }
+
+  // ------------------------------------------------------- a finished tank
+  /** The clock of a finish, in the device's time: 09:42. */
+  function finClock(t) { return t ? hhmm(t) : ""; }
+
+  /** One tank's session for a finish action: "one" is a single tank. */
+  function finSess(k) { return k === "one" ? S : S && S[k]; }
+
+  /** The note under the Now card: the finish, or why it cannot be taken back. */
+  function finNote(k) {
+    const s = finSess(k);
+    if (!s || !s.finished) return "";
+    const who = k === "one" ? "" : `${s.cfg.tank}: `;
+    return `${who}finished at ${f(s.finished.level)} mm${s.finished.time ? ` · ${finClock(s.finished.time)}` : ""}`
+      + (s.canReopen() ? "" : " · reopen is closed: a batch was pumped after it");
+  }
+
+  /**
+   * The Now card's finish buttons: one per tank in a transfer, one for a
+   * single calibration.  A finished tank offers Reopen until the next batch.
+   */
+  function renderFinish() {
+    const transfer = isTransfer();
+    const keys = transfer ? ["out", "in"] : ["one"];
+    for (const [id, k] of [["now-fin-a", keys[0]], ["now-fin-b", keys[1]]]) {
+      const b = $(id), s = k ? finSess(k) : null;
+      b.classList.toggle("hidden", !s);
+      if (!s) continue;
+      b.dataset.tank = k;
+      b.textContent = transfer ? (s.finished ? `Reopen (${s.cfg.tank})` : `Finish (${s.cfg.tank})`)
+        : (s.finished ? "Reopen this calibration" : "Finish this calibration");
+      b.classList.toggle("danger", !s.finished);
+      // Nothing to close before the first accepted dip; a later batch closes Reopen.
+      b.disabled = s.finished ? !s.canReopen() : s.lastGood() < 0;
+      b.title = s.finished
+        ? (s.canReopen() ? "Take the finish back: this tank dips again" : "A batch was pumped while this tank was finished: it stays finished")
+        : (s.lastGood() < 0 ? "No level to finish yet: dip one first" : `Mark ${s.cfg.tank} finished: no more dips, pours or predictions for it`);
+    }
+    const notes = keys.map(finNote).filter(Boolean);
+    $("now-fin-note").textContent = notes.join(" · ");
+  }
+
+  /** Finish or reopen one tank, after a confirm. */
+  function toggleFinish(k) {
+    const s = finSess(k);
+    if (!s) return;
+    if (s.finished) {
+      if (!s.canReopen()) throw new Error("a batch was pumped while this tank was finished: it stays finished");
+      if (!confirm(tr("Take the finish back? The tank dips again after the next batch."))) return;
+      s.reopen();
+    } else {
+      if (s.lastGood() < 0) throw new Error("no level to finish yet: dip one first");
+      if (!confirm(tr("Finish this calibration? No more dips, pours or predictions for this tank."))) return;
+      s.finish(Date.now());
+    }
+    save(); render();
+  }
+  $("now-fin-a").addEventListener("click", guard("p-err", () => toggleFinish($("now-fin-a").dataset.tank)));
+  $("now-fin-b").addEventListener("click", guard("p-err", () => toggleFinish($("now-fin-b").dataset.tank)));
 
   /** The folded Now card's title line: the level, then any warning in red. */
   function nowSummary(level, warns) {
@@ -1967,6 +2042,7 @@
     const adv = G ? (G.neck ? S.advice(G.H) : S.adviceNext(G.H, G.n)) : null;
     const drain = isDrain();
     const sm = simple();
+    const fin = !!S.finished;
     const views = { one: S.tileView(panelInput()) };
     $("now-kv").innerHTML = G && sm ? `<dt>level</dt><dd>${f(G.H)} mm${G.neck ? " · in the neck" : ""}</dd>`
       : G ? [
@@ -1978,7 +2054,7 @@
       ["slope", `${f(adv.slope, 2)} L/mm`],
       planRow(),
     ].filter(Boolean).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("") : "";
-    $("now-advice").textContent = adv && !pend
+    $("now-advice").textContent = adv && !pend && !fin
       ? (sm ? shortAdvice(adv, G)
         : G.neck ? "The level is in the neck. Drain until the level is back in the shell. Tick 'level still in the neck' while it stays in the neck." : adv.warn)
       : "";
@@ -1988,13 +2064,19 @@
         : "";
     $("now-drift").className = st.driftAlarm ? "error" : "muted";
     nowSummary(G ? `${f(G.H)} mm` : "", [
-      G && G.neck ? "in the neck" : "", adv && adv.halve ? "near the brim" : "",
-      adv && adv.bottom ? "near the bottom" : "", st.driftAlarm ? "DRIFT" : "",
+      fin ? "finished" : "",
+      G && G.neck && !fin ? "in the neck" : "", adv && !fin && adv.halve ? "near the brim" : "",
+      adv && !fin && adv.bottom ? "near the bottom" : "", st.driftAlarm && !fin ? "DRIFT" : "",
     ]);
+    $("fin-banner").textContent = fin
+      ? `Calibration finished at ${f(S.finished.level)} mm${S.finished.time ? ` · ${finClock(S.finished.time)}` : ""} · ${S.levels.length} level${S.levels.length === 1 ? "" : "s"}. The pour and dip cards are closed; Reopen below to continue.`
+      : "";
+    $("fin-banner").classList.toggle("hidden", !fin);
+    renderFinish();
 
     // pour and dip cards
-    $("pour-card").classList.toggle("hidden", !!pend);
-    $("dip-card").classList.toggle("hidden", !pend);
+    $("pour-card").classList.toggle("hidden", fin || !!pend);
+    $("dip-card").classList.toggle("hidden", fin || !pend);
     renderTally(adv);
     renderNowPrediction(adv, views);
     if (pend) {
@@ -2056,7 +2138,15 @@
 
   /** One tank's block in the transfer Now card. */
   function tankKv(G, adv, st, role, sess, v) {
-    if (!G || !adv) return "";
+    if (!G) return "";
+    if (v && v.why === "finished") {
+      const rows = [["level", `${f(G.H)} mm (row ${G.row}, ${G.n > 1 ? "2 readings" : "1 reading"})`],
+        ["liquid (running shell)", `${f(C.volume(G.H, st.fit.p), 0)} L of ${f(st.capacity, 0)} L`],
+        ["finished", `${f(sess.finished.level)} mm${sess.finished.time ? ` · ${hhmm(sess.finished.time)}` : ""}`]];
+      return simple() ? `<dt>level</dt><dd>${f(G.H)} mm · finished</dd>`
+        : rows.map(([k, x]) => `<dt>${k}</dt><dd>${x}</dd>`).join("");
+    }
+    if (!adv) return "";
     if (simple()) return `<dt>level</dt><dd>${f(G.H)} mm${G.neck ? " · in the neck" : ""}</dd>`;
     const p = st.fit.p;
     const rows = [
@@ -2069,7 +2159,11 @@
   }
 
   /** One verdict box; the transfer verdict card stacks one per tank plus the pair. */
-  function verdictBox(L, v, name) {
+  function verdictBox(L, v, name, sess) {
+    if (sess && sess.finished) {
+      return `<div class="verdict v-info" style="margin-bottom:0.6rem"><h3>${esc(name)} — finished</h3>`
+        + `<p>Finished at ${f(sess.finished.level)} mm. This tank is no longer dipped.</p></div>`;
+    }
     if (!v) return "";
     const pend = L && L.state === "pending";
     if (simple()) return `<div class="verdict v-${v.color || "info"}" style="margin-bottom:0.6rem">${shortVerdict(v, name, pend)}</div>`;
@@ -2094,6 +2188,7 @@
     const adv = S.adviceBatch();
     const pend = pending();
     const nameO = S.out.cfg.tank, nameI = S.in.cfg.tank;
+    const finO = !!S.out.finished, finI = !!S.in.finished, both = finO && finI;
     const cur = (k) => (S.active === k ? ' <span class="tag t-current">current</span>' : "");
 
     // The heading spans both columns: no empty <dd> after it, or the pairs
@@ -2109,12 +2204,15 @@
       : drifts.join(" · ") + ((stO.driftAlarm || stI.driftAlarm) ? " — DRIFT: stop and audit (tilt? can size? leak?)" : "");
     $("now-drift").className = stO.driftAlarm || stI.driftAlarm ? "error" : "muted";
     nowSummary(GO && GI ? `A ${f(GO.H)} · B ${f(GI.H)} mm` : "", [
+      finO ? "A finished" : "", finI ? "B finished" : "",
       adv && adv.bottom ? "A near the bottom" : "", adv && adv.halve ? "B near the brim" : "",
       stO.driftAlarm || stI.driftAlarm ? "DRIFT" : "",
     ]);
 
-    $("pour-card").classList.toggle("hidden", !!pend);
-    $("dip-card").classList.toggle("hidden", !pend);
+    $("fin-banner").classList.add("hidden");
+    renderFinish();
+    $("pour-card").classList.toggle("hidden", both || !!pend);
+    $("dip-card").classList.toggle("hidden", both || !pend);
     renderTally(adv);
     renderNowPrediction(adv, views);
     // Two fields, one per tank: each says what it waits for, and a decided
@@ -2139,9 +2237,11 @@
     $("dip-role-b").classList.remove("hidden");
     $("d-val").classList.add("dip-out");
     $("d-val-b").classList.add("dip-in");
-    $("d-val").disabled = !pendO;
-    $("d-val-b").disabled = !pendI;
+    $("d-val").disabled = !pendO || finO;
+    $("d-val-b").disabled = !pendI || finI;
     const dipLabel = (name, L, open) => {
+      if (name === nameO && finO) return `${name}: finished at ${f(S.out.finished.level)} mm`;
+      if (name === nameI && finI) return `${name}: finished at ${f(S.in.finished.level)} mm`;
       if (!open) return simple() ? `${name}: decided at ${f(L.H)} mm` : `${name}: decided at ${f(L.H)} mm — take another reading to re-open`;
       if (simple()) return `${name}, mm`;
       if (L.start) return L.dips.length === 0 ? `${name}: first reading, mm`
@@ -2154,12 +2254,14 @@
     renderDipExpect("dip-expect-a", S.out);
     renderDipExpect("dip-expect-b", S.in);
     $("dip-title").textContent = pendO && pendI ? "2 · Dip both tanks"
-      : pendO ? `2 · Dip ${nameO}` : `2 · Dip ${nameI}`;
+      : pendO ? `2 · Dip ${nameO}` : pendI ? `2 · Dip ${nameI}` : "2 · Dip";
     // The batch header and the two tank icons: one batch, two levels.
-    const stepText = curO && curO.step ? curO.step.text : "";
-    $("dip-batch-text").textContent = curO && curO.start
+    const stepL = finO ? curI : curO;
+    const stepText = stepL && stepL.step ? stepL.step.text : "";
+    $("dip-batch-text").textContent = stepL && stepL.start
       ? "Both start levels, before the first batch"
-      : `${stepText === "?" ? "unknown litres" : stepText + " L"}${simple() ? " batch" : " pumped from A into B · both readings belong to this batch"}`;
+      : `${stepText === "?" ? "unknown litres" : stepText + " L"}`
+        + (simple() ? " batch" : ` pumped from A into B · ${finO || finI ? `the reading belongs to ${finO ? nameI : nameO}` : "both readings belong to this batch"}`);
     const hOf = (sess, L) => (L && L.H != null ? L.H : (sess.lastGood() >= 0 ? sess.levels[sess.lastGood()].H : null));
     const fill = (sess, L) => {
       const H = hOf(sess, L);
@@ -2177,15 +2279,17 @@
     // One button per tank: each submits only its own field.
     $("d-go-a").textContent = `Check ${nameO}`;
     $("d-go-b").textContent = `Check ${nameI}`;
-    $("d-go-a").disabled = !pendO;
-    $("d-go-b").disabled = !pendI;
+    $("d-go-a").disabled = !pendO || finO;
+    $("d-go-b").disabled = !pendI || finI;
+    $("d-go-a").classList.toggle("hidden", finO);
+    $("d-go-b").classList.toggle("hidden", finI);
     tickSettle(Date.now());
     tickEta(Date.now());
 
     const box = $("verdict");
     const LO = S.out.current(), LI = S.in.current();
     const vO = LO && LO.verdict, vI = LI && LI.verdict;
-    if (!vO && !vI && !S.pair) box.classList.add("hidden");
+    if (!vO && !vI && !S.pair && !finO && !finI) box.classList.add("hidden");
     else {
       box.classList.remove("hidden");
       box.className = "";
@@ -2193,16 +2297,16 @@
       if (S.pair) {
         pair = `<div class="verdict v-${S.pair.color}" style="margin-bottom:0.6rem"><h3>Both tanks — ${esc(S.pair.title)}</h3>${simple() ? "" : `<p>${esc(S.pair.message)}</p>`}<p class="advice">${esc(S.pair.advice)}</p></div>`;
       }
-      box.innerHTML = verdictBox(LO, vO, nameO) + verdictBox(LI, vI, nameI) + pair;
+      box.innerHTML = verdictBox(LO, vO, nameO, S.out) + verdictBox(LI, vI, nameI, S.in) + pair;
     }
-    const act = S[S.active].current();
-    // The level actions follow the current tank: an override applies to it
-    // while it waits for a reading, else to the only tank that does.
-    const overK = act && act.state === "pending" ? S.active : S.pendingTank();
-    $("a-redip").textContent = `Take another reading (${S[S.active].cfg.tank})`;
-    $("a-override").textContent = `Accept anyway (${S[overK || S.active].cfg.tank})`;
+    // The level actions follow an open tank: a finished one cannot re-dip.
+    const key = S.liveKey(), act = S[key].current();
+    const overK = act && act.state === "pending" ? key : S.pendingTank();
+    $("a-redip").textContent = `Take another reading (${S[key].cfg.tank})`;
+    $("a-override").textContent = `Accept anyway (${S[overK || key].cfg.tank})`;
     $("a-redip").disabled = !act || act.state === "pending";
-    $("a-edit").disabled = !LO || LO.start;
+    const editL = finO ? LI : LO;
+    $("a-edit").disabled = !editL || editL.start;
     $("a-override").disabled = !(overK && S[overK].current().dips.length >= 2);
     $("a-undo").disabled = !S;
   }
@@ -2318,6 +2422,7 @@
     const v = views.one;
     const w = batchWord();
     const set = (t, c) => { box.textContent = t; box.className = c ? `pred ${c}` : "pred"; };
+    if (S.finished) { set("", ""); return; }
     // The first level waits for its pair: no batch to predict yet.
     if (v.from == null || (pending() && !v.pending)) { set("", ""); return; }
     if (blind(v)) { set(simple() ? "Blind repeat: no expected level." : "Expected level hidden for the repeat reading (blind repeat).", "muted"); return; }
@@ -2333,10 +2438,12 @@
       + (sharp ? " · sharp: one reading may do" : " · too wide to judge: expect two readings"), "");
   }
 
-  /** The transfer line: the same batch must land in both tanks. */
+  /** The transfer line: the same batch must land in every open tank. */
   function renderTransferPrediction(box, views) {
     const a = views.out, b = views.in;
     const set = (t, c) => { box.textContent = t; box.className = c ? `pred ${c}` : "pred"; };
+    const ent = [["A", a], ["B", b]].filter(([, v]) => v.why !== "finished");
+    if (!ent.length) { set("Both tanks are finished: close the session on Files.", "muted"); return; }
     if (a.from == null || b.from == null || (pending() && !a.pending && !b.pending)) { set("", ""); return; }
     if (a.why === "no-cans" && b.why === "no-cans") { set("After this batch: pour to predict (tap the cans or enter litres).", "muted"); return; }
     if (a.why && a.why === b.why) { set(`After this batch: no prediction (${nowWhy(a, "batch")}).`, "muted"); return; }
@@ -2349,15 +2456,18 @@
       const d = Math.abs(v.to - v.from);
       return `${k} ${f(v.to)} ± ${f(2 * v.sd)} mm` + (simple() ? "" : v.role === "in" ? ` (+${f(d, 1)} mm rise)` : ` (−${f(d, 1)} mm fall)`);
     };
-    const s = a.s != null ? a.s : b.s;
+    const live = ent.map(([, v]) => v);
+    const s = live.map((v) => v.s).find((x) => x != null);
     const head = simple() ? (s != null ? `After ${f(s, 0)} L: ` : "After this batch: ")
       : s == null ? "After this batch: "
-        : (a.planned || b.planned) ? `${predLabel({ planned: true, s }, "batch", S.batchVolume())}: ` : `After this batch (${f(s, 0)} L): `;
-    const both = [a, b].filter((v) => !v.why && !v.edge && !blind(v));
+        : live.some((v) => v.planned) ? `${predLabel({ planned: true, s }, "batch", S.batchVolume())}: ` : `After this batch (${f(s, 0)} L): `;
+    const both = live.filter((v) => !v.why && !v.edge && !blind(v));
     const sharp = both.length && 2 * Math.max(...both.map((v) => v.sd)) <= S.cfg.sharpMm;
-    const warn = [a, b].some((v) => v.edge || v.why === "to-neck");
-    set(head + `${part(a, "A")} · ${part(b, "B")}`
-      + (simple() || !both.length ? "" : sharp ? " · sharp: one reading per tank may do" : " · too wide to judge: expect two readings per tank"),
+    const warn = live.some((v) => v.edge || v.why === "to-neck");
+    const sharpTxt = live.length === 1 ? (sharp ? " · sharp: one reading may do" : " · too wide to judge: expect two readings")
+      : (sharp ? " · sharp: one reading per tank may do" : " · too wide to judge: expect two readings per tank");
+    set(head + ent.map(([k, v]) => part(v, k)).join(" · ")
+      + (simple() || !both.length ? "" : sharpTxt),
     warn ? "error" : "");
   }
 
@@ -3222,7 +3332,7 @@
     const box = $("now-eta");
     $("eta-use").classList.add("hidden");
     if (isTransfer()) { tickEtaTransfer(now, box); return; }
-    if (!S || S.lastGood() < 0) { box.innerHTML = ""; return; }
+    if (!S || S.lastGood() < 0 || S.finished) { box.innerHTML = ""; return; }
     const list = S.canList(), last = list.length ? list[list.length - 1].u : null;
     const u = activeUnit() || last, d = cycleFor(u);
     if (!(u > 0)) { box.innerHTML = ""; return; }
@@ -3278,7 +3388,9 @@
 
   /** A transfer shares the batches: A counts down to its bottom, B up to its brim. */
   function tickEtaTransfer(now, box) {
-    if (S.out.lastGood() < 0 || S.in.lastGood() < 0) { box.innerHTML = ""; return; }
+    // A finished tank has no time line: the open tanks carry the shared batches.
+    const live = ["out", "in"].filter((k) => !S[k].finished && S[k].lastGood() >= 0);
+    if (!live.length) { box.innerHTML = ""; return; }
     const list = S.canList(), last = list.length ? list[list.length - 1].u : null;
     const u = activeUnit() || last, d = cycleFor(u);
     if (!(u > 0)) { box.innerHTML = ""; return; }
@@ -3286,21 +3398,23 @@
     if (!d) { box.innerHTML = ""; return; }
     const pe = T.pour && T.pour.size === u ? (now - T.pour.start) / 1000 : 0;
     const open = { volume: S.batchVolume(), cans: S.cans(), units: S.canList().map((c) => c.u) };
-    // One shared plan: the tighter tank sets the batches for both.
+    // One shared plan: the tighter open tank sets the batches.
     const z = { settleSeconds: 0, dipSeconds: 0, cycleFor: cycleSecondsOf, planList: S.planProjection() || undefined };
-    const planO = S.out.fillPlan(Object.assign({ size: u, cycleSeconds: d.seconds, now, pourElapsed: pe, open }, z));
-    const planI = S.in.fillPlan(Object.assign({ size: u, cycleSeconds: d.seconds, now, pourElapsed: pe, open }, z));
-    if (!planO || !planI) { box.innerHTML = ""; return; }
+    const plans = {};
+    for (const k of live) plans[k] = S[k].fillPlan(Object.assign({ size: u, cycleSeconds: d.seconds, now, pourElapsed: pe, open }, z));
+    if (live.some((k) => !plans[k])) { box.innerHTML = ""; return; }
+    const views = S.tiles(panelInput());
+    const label = (k, plan) => k === "out" ? `A (${esc(S.out.cfg.tank)}) to the suction floor (${f(plan.endLevel, 0)} mm)` : `B (${esc(S.in.cfg.tank)}) to brim`;
+    const where = (k) => k === "out" ? `A (${S.out.cfg.tank}) to the suction floor (${f(plans.out.endLevel, 0)} mm)` : `B (${S.in.cfg.tank}) to brim`;
     if (simple()) {
-      const views = S.tiles(panelInput());
-      box.innerHTML = shortEta(now, `A (${esc(S.out.cfg.tank)}) to the suction floor (${f(planO.endLevel, 0)} mm)`, planO.end, views.out, "batch")
-        + shortEta(now, `B (${esc(S.in.cfg.tank)}) to brim`, planI.brim, views.in, "batch") + defaultMark(d);
+      box.innerHTML = live.map((k) => shortEta(now, label(k, plans[k]), k === "out" ? plans[k].end : plans[k].brim, views[k], "batch")).join("")
+        + defaultMark(d);
       return;
     }
     const line = etaLine(now);
-    box.innerHTML = line(`A (${S.out.cfg.tank}) to the suction floor (${f(planO.endLevel, 0)} mm)`, planO.end, planO.endVolume)
-      + line(`B (${S.in.cfg.tank}) to brim`, planI.brim, planI.capacity)
-      + `<div class="muted">${fmtClock(d.seconds)} per can${cycleNote(d)}. Both tanks take the same batches. Pouring time only: no settle and no dip time. ${planO.mixed ? "From the running shells and the batch plan." : "From the running shells and the pour advice."}`
+    box.innerHTML = live.map((k) => k === "out"
+      ? line(where(k), plans[k].end, plans[k].endVolume) : line(where(k), plans[k].brim, plans[k].capacity)).join("")
+      + `<div class="muted">${fmtClock(d.seconds)} per can${cycleNote(d)}. ${live.length === 2 ? "Both tanks take the same batches." : "The open tank takes the batches."} Pouring time only: no settle and no dip time. ${plans[live[0]].mixed ? "From the running shells and the batch plan." : "From the running shells and the pour advice."}`
       + " The pump cannot draw below the suction floor: the liquid under it stays in the tank.</div>"
       + trendLine(u);
   }

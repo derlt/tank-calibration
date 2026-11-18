@@ -33,6 +33,20 @@ All notable changes to this project are documented here. The format follows
   the brim, below the suction floor or to a dry shell keeps its number as a
   limit (`≥ 1800.0`, `≤ 52.3`) in the warning colour. While the live can
   state moves that tank's water, the arrow bobs and the wave flows.
+- On-site page: a tank can be **finished**, also before it reaches the brim
+  or the bottom. The Now card has *Finish* per tank (one for a single
+  campaign), with a confirm; a level that still waits for its dip is
+  discarded, and the finish is refused before the first accepted level. A
+  finished tank takes no pour, dip or prediction: its dip field stays,
+  closed, reading `alpha: finished at 1800.0 mm`, its tile says `finished`,
+  and in a transfer the shared tally still closes for the open tank only.
+  The open tank alone sets the batch advice, the plan's room, the pair view
+  and the time line; both finished says so. *Reopen* works until the next
+  batch. The session JSON saves `finished {level, row, time, levels, after}`
+  and the last raw row's note gains `finished at 1700.0 mm` (read as text by
+  `calib`). `Session.closeTally` splits the tally from the level, so a
+  finished A still closes the batch; `TransferSession.liveKeys` / `liveKey`
+  and `_afterFinish` keep the bookkeeping.
 - On-site page: the **Now card's prediction is always there**, and it is the
   same calculation as the tile's. It shows the plan's batch end (or the
   tapped cans, or typed litres), the limit past the brim, the suction floor

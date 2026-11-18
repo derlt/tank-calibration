@@ -265,6 +265,15 @@ mode the time block becomes one short line for the same limit:
 `To brim: 412 mm · ≈ 1800 L · after this pour: 330 mm · ≈ 1400 L · ≈ 2 h 10 ·
 done ≈ 14:35`.
 
+**Finish a tank.** The Now card has *Finish this calibration* once one level
+is accepted: the calibration is done, also when it has not reached the brim
+or the bottom. The pour and dip cards close, the tile says `finished`, and a
+banner names the level and the clock. The last row of the raw CSV carries
+`finished at 1700.0 mm`, so the file says why the record stops; `calib`
+reads that note as text and ignores it. A level still waiting for its dip is
+discarded. *Reopen this calibration* takes the finish back and brings the
+pour and dip cards back.
+
 **Fold the Now card.** Tap its title line to fold it or open it; the device
 keeps the choice. Folded, the line keeps the level and any warning in red,
 for example `NOW 1700.0 mm · near the brim`.
@@ -815,6 +824,23 @@ read-only on Replay and Help, where they change nothing. The Log & charts tab
 has no switch of its own: its table and chart are always the chosen tank's
 own (A's table reads *drained L*, B's *pour L*). The Live tab always shows
 both tanks. *Files* exports one raw CSV per tank.
+
+**Finishing one tank.** Each tank's line in the Now card has a *Finish*
+button once that tank has an accepted level: the tank is done, and the page
+stops asking for its dip. Its dip field stays in place, closed, and reads
+`alpha: finished at 1800.0 mm`; its tile keeps the last level with the word
+`finished`; the verdict box says the tank is finished. The water still moves
+— the pump and the cans still count for the other tank — and *Batch done*
+closes the shared tally for the open tank only, so no level opens on the
+finished one. The open tank alone sets the batch advice, the shared plan's
+room and the time line; the pair view is off while one tank is finished.
+Both tanks finished: `Both tanks are finished: close the session on Files.`
+
+The finish can be taken back with *Reopen* only **before the next batch**: a
+level dipped after the skip would leave the finished tank's step wrong, so
+the page keeps the mark once a batch has gone by. The finished tank's raw
+CSV keeps its rows and their `finished at …` note; *Files* still exports both
+tanks and the session JSON, which saves the mark.
 
 **The pair view.** When both dips of a batch are in, the page compares the
 two residuals of the same batch — but only on levels the prediction test

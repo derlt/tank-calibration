@@ -3593,6 +3593,188 @@ class TestSiteTiles(unittest.TestCase):
 
 
 @unittest.skipUnless(NODE, "node is not installed")
+class TestSiteFinish(unittest.TestCase):
+    """Finishing a tank: no more dips for it, the other tank carries on."""
+
+    def test_finish_and_reopen_a_single_tank(self):
+        got = _node(
+            "const s = new core.Session({D: 1800, Lest: 3000, direction: 'fill', pourUnit: 200});\n"
+            "const out = {};\n"
+            "s.start('?', 1000); s.dip(1000); s.dip(1000);\n"
+            "out.before = { why: s.tileView().why, can: !!s.finished };\n"
+            "try { s.finish !== null; } catch (e) { out.err = e.message; }\n"
+            "const f = s.finish(1700000000000);\n"
+            "out.f = f;\n"
+            "out.tile = s.tileView();\n"
+            "out.csv = s.toRawCsv();\n"
+            "out.json = s.toJSON();\n"
+            "const back = core.Session.fromJSON(JSON.parse(JSON.stringify(out.json)));\n"
+            "out.back = { why: back.tileView().why, level: back.finished.level };\n"
+            "out.pourErr = (() => { try { s.pour('200'); return null; } catch (e) { return e.message; } })();\n"
+            "back.reopen();\n"
+            "out.reopened = { fin: !!back.finished, why: back.tileView().why, csv: back.toRawCsv() };\n"
+            "// No accepted level: nothing to close.\n"
+            "const e = new core.Session({D: 1800, Lest: 3000, direction: 'fill'});\n"
+            "e.start('?', 1000);\n"
+            "out.noLevel = (() => { try { e.finish(1); return null; } catch (x) { return x.message; } })();\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["before"]["why"], "no-cans", "no batch yet")
+        self.assertFalse(got["before"]["can"])
+        self.assertEqual(got["f"]["level"], 1000)
+        self.assertEqual(got["f"]["after"], 0)
+        self.assertEqual(got["tile"]["why"], "finished", "no prediction for a finished tank")
+        self.assertIsNone(got["tile"]["to"])
+        self.assertIn("finished at 1000.0 mm", got["csv"])
+        self.assertEqual(got["back"], {"why": "finished", "level": 1000}, "the mark survives the session JSON")
+        self.assertIn("finished", got["pourErr"], "a finished tank takes no pour")
+        self.assertFalse(got["reopened"]["fin"])
+        self.assertNotIn("finished at", got["reopened"]["csv"], "Reopen takes the tag back")
+        self.assertIn("no level to finish", got["noLevel"])
+
+    def test_finish_discards_the_waiting_level(self):
+        got = _node(
+            "const s = new core.Session({D: 1800, Lest: 3000, direction: 'fill', pourUnit: 200});\n"
+            "s.start('?', 1000); s.dip(1000); s.dip(1000);\n"
+            "s.pour('200'); s.dip(1080);\n"
+            "// One reading: the level still waits.\n"
+            "const rows = s.levels.length;\n"
+            "s.finish(5);\n"
+            "console.log(JSON.stringify({ rows, after: s.levels.length, last: s.levels[s.levels.length - 1].state, f: s.finished }));"
+        )
+        self.assertEqual(got["rows"], 2)
+        self.assertEqual(got["after"], 1, "the waiting level is discarded")
+        self.assertNotEqual(got["last"], "pending")
+        self.assertEqual(got["f"]["level"], 1000)
+
+    def test_transfer_finish_skips_one_tank(self):
+        got = _node(
+            "const t = new core.TransferSession({D: 1800, Lest: 3000, direction: 'drain', pourUnit: 200},\n"
+            "  {tank: 'B', D: 1800, Lest: 3000, direction: 'fill', pourUnit: 200});\n"
+            "t.start('?', 1800, '?', 400); t.dipBoth(1800, 400);\n"
+            "t.tap(1, 200); t.tap(2, 200); t.closeBatch(); t.dipBoth(1700, 500); t.dipBoth(1700, 500);\n"
+            "const out = { pending: t.pendingTank() };\n"
+            "t.out.finish(3);\n"
+            "out.after = { pending: t.pendingTank(), pair: !!t.pair, live: t.liveKeys(), tile: t.tiles().out.why };\n"
+            "out.dipErr = (() => { try { t.dipBoth(1700, null); return null; } catch (e) { return e.message; } })();\n"
+            "t.tap(3, 200); t.closeBatch();\n"
+            "out.levels = { out: t.out.levels.length, in: t.in.levels.length };\n"
+            "out.bBatch = t.in.current().step.text;\n"
+            "out.adv = t.adviceBatch();\n"
+            "out.planRoom = t._planRoom();\n"
+            "out.reopen = (() => { try { t.out.reopen(); return null; } catch (e) { return e.message; } })();\n"
+            "t.dipBoth('', 560); t.dipBoth('', 560);\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertIsNone(got["after"]["pending"], "the finished tank is not asked for a dip")
+        self.assertFalse(got["after"]["pair"], "no pair with one tank finished")
+        self.assertEqual(got["after"]["live"], ["in"])
+        self.assertEqual(got["after"]["tile"], "finished")
+        self.assertIn("finished", got["dipErr"], "a reading for it is refused")
+        self.assertEqual(got["levels"], {"out": 2, "in": 3}, "the batch opens a level only on B")
+        self.assertEqual(got["bBatch"], "200", "B takes the batch step without A")
+        self.assertEqual(got["adv"]["live"], ["in"], "the open tank alone advises")
+        self.assertIsNotNone(got["planRoom"])
+        self.assertIn("a batch was pumped", got["reopen"], "Reopen is closed after a later batch")
+
+    def test_page_finish_a_single_calibration(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "let p = stub.boot(page, corePath, store), el = p.el;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '1000'; el('s-unit').value = '200'; el('s-go').click();\n"
+            "out.noLevel = { disabled: el('now-fin-a').disabled, label: el('now-fin-a').textContent, title: el('now-fin-a').title };\n"
+            "el('d-val').value = '1000'; el('d-go').click();\n"
+            "out.ready = { disabled: el('now-fin-a').disabled, label: el('now-fin-a').textContent };\n"
+            "el('now-fin-a').click();\n"
+            "out.fin = { banner: el('fin-banner').textContent, hidden: el('fin-banner')._classes.has('hidden'),\n"
+            "  pour: el('pour-card')._classes.has('hidden'), dip: el('dip-card')._classes.has('hidden'),\n"
+            "  label: el('now-fin-a').textContent, note: el('now-fin-note').textContent,\n"
+            "  tile: el('tiles').innerHTML, pred: el('now-pred').textContent, eta: el('now-eta').innerHTML,\n"
+            "  phase: el('hdr-phase').textContent };\n"
+            "p = stub.boot(page, corePath, store); el = p.el;\n"
+            "out.reload = { finished: !!JSON.parse(store.get('calib-site:active')).finished, banner: el('fin-banner').textContent };\n"
+            "el('now-fin-a').click();\n"
+            "out.reopened = { pour: el('pour-card')._classes.has('hidden'), banner: el('fin-banner')._classes.has('hidden'),\n"
+            "  csv: JSON.parse(JSON.stringify(store.get('calib-site:active'))).finished || null };\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertTrue(got["noLevel"]["disabled"], "no level to finish: the button is closed")
+        self.assertIn("No level to finish", got["noLevel"]["title"])
+        self.assertFalse(got["ready"]["disabled"])
+        self.assertIn("Finish this calibration", got["ready"]["label"])
+        self.assertIn("Calibration finished at 1000.0 mm", got["fin"]["banner"])
+        self.assertFalse(got["fin"]["hidden"])
+        self.assertTrue(got["fin"]["pour"], "the pour card closes")
+        self.assertTrue(got["fin"]["dip"])
+        self.assertIn("Reopen this calibration", got["fin"]["label"])
+        self.assertIn("finished at 1000.0 mm", got["fin"]["note"])
+        self.assertIn(">finished<", got["fin"]["tile"], "the tile says finished")
+        self.assertEqual(got["fin"]["pred"], "")
+        self.assertEqual(got["fin"]["eta"], "")
+        self.assertIn("finished", got["fin"]["phase"])
+        self.assertTrue(got["reload"]["finished"])
+        self.assertIn("Calibration finished", got["reload"]["banner"])
+        self.assertFalse(got["reopened"]["pour"], "Reopen brings the pour card back")
+        self.assertTrue(got["reopened"]["banner"])
+        self.assertIsNone(got["reopened"]["csv"], "Reopen clears the mark")
+
+    def test_page_finish_one_tank_of_a_transfer(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "el('s-dir-transfer').click();\n"
+            "el('s-tank').value = 'alpha'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('sB-tank').value = 'beta'; el('sB-D').value = '2480'; el('sB-L').value = '5200';\n"
+            "el('s-dip').value = '1800'; el('sB-dip').value = '400'; el('s-unit').value = '200'; el('s-go').click();\n"
+            "el('d-val').value = '1800'; el('d-val-b').value = '400'; el('d-go-a').click(); el('d-go-b').click();\n"
+            "out.buttons = [el('now-fin-a').textContent, el('now-fin-b').textContent];\n"
+            "el('now-fin-a').click();\n"
+            "out.fin = { note: el('now-fin-note').textContent, a: el('d-val').disabled, aLabel: el('dip-label').textContent,\n"
+            "  goA: el('d-go-a')._classes.has('hidden'), b: el('d-val-b').disabled };\n"
+            "el('t-plus').click(); el('t-plus').click(); el('p-go').click();\n"
+            "out.batch = { header: el('dip-batch-text').textContent, title: el('dip-title').textContent,\n"
+            "  bLabel: el('dip-label-b').textContent, pour: el('pour-card')._classes.has('hidden'),\n"
+            "  verdict: el('verdict').innerHTML, eta: el('now-eta').innerHTML };\n"
+            "out.reopenBtn = { disabled: el('now-fin-a').disabled, title: el('now-fin-a').title };\n"
+            "el('d-val-b').value = '441'; el('d-go-b').click();\n"
+            "out.one = { pending: JSON.parse(store.get('calib-site:active')).out.levels.length,\n"
+            "  inLevels: JSON.parse(store.get('calib-site:active')).in.levels.length };\n"
+            "el('now-fin-b').click();\n"
+            "out.both = { pred: el('now-pred').textContent, pour: el('pour-card')._classes.has('hidden'),\n"
+            "  dip: el('dip-card')._classes.has('hidden'), note: el('now-fin-note').textContent };\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["buttons"], ["Finish (alpha)", "Finish (beta)"])
+        self.assertIn("alpha: finished at 1800.0 mm", got["fin"]["note"])
+        self.assertTrue(got["fin"]["a"], "the finished tank's field is closed")
+        self.assertIn("alpha: finished at 1800.0 mm", got["fin"]["aLabel"])
+        self.assertTrue(got["fin"]["goA"], "and its button hides")
+        self.assertIn("alpha: finished", got["fin"]["aLabel"], "only the finished tank's label says finished")
+        self.assertIn("the reading belongs to beta", got["batch"]["header"])
+        self.assertEqual(got["batch"]["title"], "2 · Dip beta")
+        self.assertIn("beta: reading after the 400 L batch", got["batch"]["bLabel"])
+        self.assertTrue(got["batch"]["pour"], "a batch done hides the pour card")
+        self.assertIn("alpha — finished", got["batch"]["verdict"])
+        self.assertIn("beta", got["batch"]["eta"], "the time line keeps the open tank")
+        self.assertNotIn("alpha", got["batch"]["eta"], "and drops the finished one")
+        self.assertTrue(got["reopenBtn"]["disabled"], "Reopen is closed after a batch")
+        self.assertIn("A batch was pumped", got["reopenBtn"]["title"])
+        self.assertEqual(got["one"]["pending"], 1, "no level was opened for alpha")
+        self.assertEqual(got["one"]["inLevels"], 2)
+        self.assertIn("Both tanks are finished", got["both"]["pred"])
+        self.assertTrue(got["both"]["pour"])
+        self.assertTrue(got["both"]["dip"])
+
+
 class TestSiteBrim(unittest.TestCase):
     """The brim reading the operator types: a prior, a CSV note, a Settings field."""
 
