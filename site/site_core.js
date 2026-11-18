@@ -1045,16 +1045,22 @@
     const n = this.cans();
     if (!n) throw new Error("no can is counted yet");
     const o = opts || {}, b = this.batch, cans = b.cans;
+    // Typed litres (o.volume) replace the batch volume: the volume is
+    // measured, not counted, and the taps stay in the record for the note and
+    // the time trend.  A '?' or 'N+?' tick passes through as typed.
+    const typed = o.volume != null;
     // A part can is an unknown extra: the full cans are known, the shell
     // estimates the rest (§3.9 N+?).
-    const kept = o.partial ? cans.slice(0, -1) : cans;
+    const kept = !typed && o.partial ? cans.slice(0, -1) : cans;
     const full = kept.reduce((a, c) => a + c.u, 0);
-    const text = o.partial ? (full ? `${round(full, 3)}+?` : "?") : String(round(full, 3));
+    const text = typed ? String(o.volume)
+      : o.partial ? (full ? `${round(full, 3)}+?` : "?") : String(round(full, 3));
     const sizes = this.canUnits();
     const rec = {
-      tapped: n, unit: sizes.length === 1 ? sizes[0].unit : null, partial: !!o.partial,
+      tapped: n, unit: sizes.length === 1 ? sizes[0].unit : null, partial: typed ? false : !!o.partial,
       taps: cans.map((c) => c.t), units: cans.map((c) => c.u),
     };
+    if (typed) rec.typed = text;
     if (cans.some((c) => c.f != null)) rec.fills = cans.map((c) => (c.f == null ? null : c.f));
     this.batch = null;
     return { text, cans: rec };
@@ -1442,7 +1448,8 @@
     // cans that a changed count explains is a count error before anything else.
     const counts = L.cans && L.cans.units
       ? L.cans.units.reduce((a, u) => { a[u] = (a[u] || 0) + 1; return a; }, {}) : null;
-    const hint = canHint(res.resid, z, L.step.value, cfg, L.cans && L.cans.units, counts);
+    // A typed volume is a measurement, not a can count: no count hint.
+    const hint = L.cans && L.cans.typed ? null : canHint(res.resid, z, L.step.value, cfg, L.cans && L.cans.units, counts);
     if (hint) {
       const k = Math.abs(hint.extra), total = L.step.value + hint.extra * hint.unit;
       // A plain pour has no can record; the setup unit still gives the count.
@@ -2114,6 +2121,7 @@
           .map((u) => `${by[u]}x${fmt(u, 0)}`).join("+");
         bits.push(`cans ${spec} L` + (L.cans.partial ? (drain ? " pump lost suction: last can part" : " last can part") : "")
           + (ts.length ? ` ${clock(ts[0])}-${clock(ts[ts.length - 1])}` : ""));
+        if (L.cans.typed) bits.push(/^\d/.test(L.cans.typed) ? `typed ${L.cans.typed} L` : `typed ${L.cans.typed}`);
       }
       if (L.tags) for (const t of L.tags) if (!(drain && L.entrance && (t === "at brim" || t === "at neck entrance"))) bits.push(t);
       if (L.note) bits.push(L.note);
@@ -2312,13 +2320,14 @@
     const o = opts || {};
     const plan = this.planNow() || undefined;
     // The tally lives on A: it closes once, whoever is still open.
-    const t = this.out.closeTally({ partial: o.partial });
+    const t = this.out.closeTally({ partial: o.partial, volume: o.volume });
     const Lo = this.out.finished ? null : this.out.pour(t.text, { partial: o.partial, neck: o.neck, note: o.note, plan });
     const Li = this.in.finished ? null : this.in.pour(t.text, { overflow: !!o.overflow, note: o.note, plan });
     if (Lo) Lo.cans = t.cans;
     if (Li) {
       Li.cans = { tapped: t.cans.tapped, unit: t.cans.unit, partial: t.cans.partial, taps: t.cans.taps.slice(), units: t.cans.units.slice() };
       if (t.cans.fills) Li.cans.fills = t.cans.fills.slice();
+      if (t.cans.typed) Li.cans.typed = t.cans.typed;
     }
     this._afterFinish();
     this._pair();

@@ -8,6 +8,18 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **On-site page: the pour card's foot.** The card now reads +1 can →
+  *Undo last can* → *Batch done* → can size → *Options*. *Batch done* is
+  short, faded below the batch's target, green and bold on its last can, amber
+  one can past it, and disabled with no can and no litres. *Undo last can*
+  asks before it removes a tap; *Undo last entry* keeps its question. One
+  folded *Options* block holds the part-can and neck ticks, the note and
+  *Enter litres instead*, and the device keeps the fold. Typed litres replace
+  the batch volume also when cans are tapped: the raw note keeps
+  `cans 2x200 L …; typed 487 L`, the taps still feed the time trend, and the
+  count-error hint stays quiet for that level. A transfer records the typed
+  volume on both tanks.
+
 - **Brim reading.** The site page asks for an optional measured brim
   reading and its ± (default 6 mm) at setup, per tank in a transfer, and
   *Settings → This campaign* changes or clears it (the running shell

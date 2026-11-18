@@ -194,10 +194,12 @@ note under the pour card's tally (a changed count still shows in its head line, 
 is the same in both modes: only the text changes.
 
 1. **Pour.** Tap *+1 can poured* each time a can is empty, then press
-   *Batch done* (see *A batch of cans* below). For a meter or an unknown pour,
-   open *Enter litres instead*. Tick *whole pour unknown* for `?`, or *plus an
-   unknown extra* for `N+?`. Tick *reached the neck / overflowed* for the last
-   pour.
+   *Batch done* (see *A batch of cans* below). The card reads from the top:
+   the count, the target, the timer, the big pour button, *Undo last can*,
+   *Batch done*, the can size block and *Options*. *Options* folds the
+   part-can tick, *reached the neck / overflowed*, *level still in the neck*,
+   the note and *Enter litres instead* (meter, unknown pour). Tick *whole pour
+   unknown* for `?`, or *plus an unknown extra* for `N+?`.
 2. **Wait.** The settle timer on the dip card counts down the settle time
    (5:00 unless you change it) and rings when the level is ready to dip
    (§3.5).
@@ -232,7 +234,8 @@ the tank tile, drawn from the same calculation:
 - with a batch plan, the end of the plan's batch, the litres the tile's
   track counts down: `After the plan's batch (400 L, 200 L tapped so far)`;
 - before that plan, or without one, the tapped cans;
-- typed litres (*Enter litres instead*) replace the batch on both, and the
+- typed litres (*Options → Enter litres instead*) replace the batch on both,
+  also when cans are tapped; the
   ticks *whole pour unknown*, *plus an unknown extra*, *part can* and
   *reached the neck* give their reason on both;
 - with no can, no plan and no typed litres it says `pour to predict`, as the
@@ -299,32 +302,46 @@ the next batch.
   narrow (about 9 cans or more on a phone), the row shows one time, the
   last can's (`last 08:04`); hold a finger on a cell (or hover it) for its
   size and time.
-- **One size per can.** *Can size for the next can* sets the size of the next
-  tap, so one batch can mix sizes: 2 × 200 L then 4 × 100 L. The buttons below
-  the field give the sizes already used and the default from the setup. The
-  *−50 L* and *+50 L* buttons beside the field step the size by the
-  campaign's pour unit (*Settings → This campaign → Pour unit*); the size
-  never goes below one pour unit, and with no pour unit set there are no step
-  buttons. The
+- **One size per can.** The block at the foot of the card sets the size of
+  the next tap with *Can size for the next can*, so one batch can mix sizes:
+  2 × 200 L then 4 × 100 L. The buttons under the field give the sizes
+  already used and the default from the setup. The *−50 L* and *+50 L*
+  buttons beside the field step the size by the campaign's pour unit
+  (*Settings → This campaign → Pour unit*); the size never goes below one
+  pour unit, and with no pour unit set there are no step buttons. The
   default can size is optional: with none set, enter the size of the first
   can and the buttons follow. After a reload (and after the return from
   Shortcuts, which reloads the page) the field keeps the size you chose last,
   even before the first can of the batch. With no size chosen on this
-  device, it starts at the last can's size, then at the default.
+  device, it starts at the last can's size, then at the default. The big
+  pour button keeps the size in its label: `+1 can poured (200 L)`.
 - **The advice is a target, not a limit.** The page shows the advised number
   of cans for a rise of about 30 mm. It warns near the brim, and when the
   batch is more than the gap that is left in the shell. With a batch plan,
   the target is the plan's batch in its cans (*Plan: 200 + 100 L = 300 L*).
 - **A second tap in less than 20 s** asks if it is a new can.
-- **Undo last can** removes one tap. *Undo last entry* does the same while a
-  batch is open. After *Batch done*, *Undo last entry* opens the batch again
-  with its cans.
+- **Undo last can** asks first (*Remove the last can from the count?*) and
+  removes one tap on *OK*. *Undo last entry* does the same while a batch is
+  open, also with a question. After *Batch done*, *Undo last entry* opens the
+  batch again with its cans.
 - **Last can not fully poured** records the batch as `N+?`: the full cans are
   known, and the shell estimates the part can. The part can is the last tap,
-  so tap it with its own size.
+  so tap it with its own size. The tick is in *Options*.
 - **Batch done** closes the batch and starts the settle timer from the last
-  can. The raw file keeps the count and the times in the note, for example
-  `cans 6x200 L 14:02-14:19`, or `cans 2x200+4x100 L` for a mixed batch.
+  can. It is faded and quiet below the batch's target, green and bold on the
+  last can of the target, and amber one can past it. With no can and no typed
+  litres it is disabled. The raw file keeps the count and the times in the
+  note, for example `cans 6x200 L 14:02-14:19`, or `cans 2x200+4x100 L` for a
+  mixed batch.
+- **Typed litres replace the batch volume.** Enter the measured volume in
+  *Options → Enter litres instead* also when cans are tapped, for example
+  2 × 200 L then 87 L of a part can. The step records `487`; the note keeps
+  `cans 2x200 L 14:02-14:19; typed 487 L`, and the taps still feed the time
+  trend. A typed volume is a measurement, so the page adds no count-error
+  hint to this level. A transfer records the typed volume for both tanks.
+- **Options folds and stays folded.** The device keeps the choice, as it does
+  for the Now card. The part-can, neck, overflow, note and manual litres
+  fields are inside.
 
 After the dip, a confirmed miss of a whole number of cans names the count
 error: *the miss is 0.99 can of 200 L: 1 can more than the count (7, not 6)
@@ -865,7 +882,8 @@ example `transfer: shared pour error`.
 The batch advice takes the tighter of the two 30 mm targets, and warns for
 both limits at once: A's suction floor (the pump may lose suction — tick
 *pump lost suction: last can part*) and B's brim (tick *tank B: reached the
-neck* on the final batch). The campaign ends when A is down to its suction
+neck* on the final batch). Typed litres in *Options* close the batch on both
+tanks with the typed volume. The campaign ends when A is down to its suction
 floor or B is full, whichever comes first. The noise, the cans and the
 timers are one set for both tanks (§9.1).
 

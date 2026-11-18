@@ -136,6 +136,15 @@ class TestSitePage(unittest.TestCase):
             "the can tally must show: the size field is the only way to tap a can",
         )
 
+    def test_pour_card_foot_order(self):
+        """The foot reads +1 can, Undo last can, Batch done, can size, Options."""
+        page = (SITE / "page.html").read_text(encoding="utf-8")
+        order = [page.index(f'id="{i}"') for i in ("t-plus", "t-undo", "p-go", "t-unit", "p-opts")]
+        self.assertEqual(order, sorted(order), "the pour card's foot is in the set order")
+        opts = page.split('<details id="p-opts">', 1)[1].split("</details>", 1)[0]
+        for i in ("t-part", "p-over", "p-neck", "p-unknown", "p-extra", "p-note", "p-vol"):
+            self.assertIn(f'id="{i}"', opts, f"{i} is folded into Options")
+
     def test_css_colours_come_from_the_theme(self):
         """Every colour in a CSS rule is a theme variable, so dark mode covers it.
 
@@ -270,6 +279,125 @@ class TestSitePage(unittest.TestCase):
         self.assertNotIn('data-state="over"', got["seg"], "the batch is not over the advice")
         self.assertEqual(got["note2"], "Advice ≈ 400 L (≈ 30 mm rise).",
                          "no multiplication when the cans no longer divide the advice evenly")
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_batch_done_button_states(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '50';\n"
+            "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "const state = () => ({text: el('p-go').textContent, ok: el('p-go')._classes.has('ok'),"
+            " over: el('p-go')._classes.has('over'), quiet: el('p-go')._classes.has('quiet'),"
+            " off: el('p-go').disabled});\n"
+            "out.none = state();\n"
+            "el('t-plus').click(); out.one = state();\n"
+            "el('t-plus').click(); out.two = state();\n"
+            "el('t-plus').click(); out.three = state();\n"
+            "el('t-plus').click(); out.four = state();\n"
+            "out.opts = el('p-opts').open;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["none"],
+                         {"text": "Poured", "ok": False, "over": False, "quiet": True, "off": True},
+                         "no cans and no litres: the action is faded and disabled")
+        self.assertEqual(got["one"]["text"], "Batch done", "the label is short once a can is counted")
+        self.assertTrue(got["one"]["quiet"], "below the advice the batch action stays quiet")
+        self.assertEqual(got["two"]["quiet"], True)
+        self.assertEqual(got["three"], {"text": "Batch done", "ok": True, "over": False,
+                                        "quiet": False, "off": False},
+                         "the reached batch is green and bold")
+        self.assertTrue(got["four"]["over"], "one can past the batch is amber")
+        self.assertFalse(got["four"]["ok"])
+        self.assertFalse(got["opts"], "the Options block starts folded")
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_undo_asks_first_and_remembers_options(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map(), asks = [];\n"
+            "let yes = false;\n"
+            "const p = stub.boot(page, corePath, store, { confirm: (m) => { asks.push(m); return yes; } });\n"
+            "const el = p.el;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "el('t-plus').click(); out.saved = el('t-count').textContent;\n"
+            "el('t-undo').click(); out.kept = el('t-count').textContent;\n"
+            "yes = true; el('t-undo').click(); out.removed = el('t-count').textContent;\n"
+            "out.asks = asks.slice();\n"
+            "// The Options fold is a device choice, like the Now card's.\n"
+            "el('p-opts').open = true; el('p-opts')._listeners.toggle[0]();\n"
+            "const p2 = stub.boot(page, corePath, store);\n"
+            "out.reopened = p2.el('p-opts').open;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["saved"], "1 can · 200 L")
+        self.assertEqual(got["kept"], "1 can · 200 L", "Keep leaves the can in the count")
+        self.assertEqual(got["removed"], "0 cans · 0 L", "Undo removes it after the question")
+        self.assertEqual(got["asks"], ["Remove the last can from the count?"] * 2,
+                         "Undo last can asks before each removal")
+        self.assertTrue(got["reopened"], "the device keeps the Options fold")
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_typed_litres_replace_the_batch_volume(self):
+        got = _node(
+            "const p = {r: 900, L: 3000, h0: 0};\n"
+            "const s = new core.Session({D: 1800, Dpm: 100, Lest: 3000, pourUnit: 200});\n"
+            "const out = {};\n"
+            "let V = 400, t = 0;\n"
+            "s.start('400', core.levelFor(V, p)); s.dip(core.levelFor(V, p));\n"
+            "function honest() {\n"
+            "  for (let i = 0; i < 2; i++) s.tap(t += 60000, 200);\n"
+            "  s.closeBatch(); V += 400;\n"
+            "  const H = core.levelFor(V, p); let v = s.dip(H);\n"
+            "  if (v.status === 'REDIP') s.dip(H);\n"
+            "}\n"
+            "for (let i = 0; i < 4; i++) honest();\n"
+            "s.tap(t += 60000, 200); s.tap(t += 60000, 200);\n"
+            "const L = s.closeBatch({volume: '600'});\n"
+            "out.text = L.step.text;\n"
+            "out.cans = {tapped: L.cans.tapped, typed: L.cans.typed, partial: L.cans.partial,\n"
+            " taps: L.cans.taps.length, units: L.cans.units};\n"
+            "V += 400;\n"
+            "const H = core.levelFor(V, p);\n"
+            "let v = s.dip(H); v = s.dip(H);\n"
+            "out.status = v.status;\n"
+            "out.hint = v.cans || null;\n"
+            "out.csv = s.toRawCsv();\n"
+            "// A transfer records the same typed volume on both tanks.\n"
+            "const PA = {r: 900, L: 3000, h0: 0}, PB = {r: 1240, L: 5200, h0: 0};\n"
+            "const X = new core.TransferSession(\n"
+            "  {D: 1800, Dpm: 100, Lest: 3000, tank: 'alpha', pourUnit: 200},\n"
+            "  {D: 2480, Dpm: 200, Lest: 5200, tank: 'beta', pourUnit: 200});\n"
+            "X.start('?', core.brim(PA), '?', core.levelFor(2000, PB), '', null, {at: 'entrance'});\n"
+            "X.dip(core.brim(PA)); X.dip(core.levelFor(2000, PB));\n"
+            "let k = 0; while (X.pendingTank() === 'out' && k++ < 4) X.dip(core.brim(PA));\n"
+            "k = 0; while (X.pendingTank() === 'in' && k++ < 4) X.dip(core.levelFor(2000, PB));\n"
+            "X.tap(60000, 200); X.tap(120000, 200);\n"
+            "X.closeBatch({volume: '487'});\n"
+            "out.transfer = {a: X.out.current().step.text, b: X.in.current().step.text,\n"
+            " typed: [X.out.current().cans.typed, X.in.current().cans.typed]};\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["text"], "600", "typed litres are the batch volume")
+        self.assertEqual(got["cans"], {"tapped": 2, "typed": "600", "partial": False,
+                                       "taps": 2, "units": [200, 200]},
+                         "the can taps stay for the note and the time trend")
+        self.assertEqual(got["status"], "ALARM", "a whole-can miss still alarms")
+        self.assertIsNone(got["hint"], "a typed volume is measured: no count-error hint")
+        self.assertIn("cans 2x200 L", got["csv"])
+        self.assertIn("typed 600 L", got["csv"])
+        self.assertEqual(got["transfer"], {"a": "487", "b": "487", "typed": ["487", "487"]},
+                         "a transfer records the typed volume on both tanks")
 
     @unittest.skipUnless(NODE, "node is not installed")
     def test_page_header_live_indicator(self):
@@ -1279,7 +1407,8 @@ class TestSitePage(unittest.TestCase):
         self.assertIn("L left", got["pred"])
         self.assertIn("runs dry", got["dry"])
         self.assertIn("still in the neck", got["neckLine"])
-        self.assertEqual(got["batch"], "Drained: 1 can, 200 L → dip")
+        self.assertEqual(got["batch"], "Batch done")
+
         self.assertIn("mm fall", got["tally"])
         self.assertIn("draining 200 L", got["dip"])
         self.assertIn("drain", got["dir"])
@@ -1759,7 +1888,7 @@ console.log(JSON.stringify(out));
         self.assertEqual(got["card"]["over"], "tank B: reached the neck / overflowed")
         self.assertEqual(got["card"]["neckText"], "tank A: level still in the neck")
         self.assertNotIn("Next batch", got["card"]["advice"], "the Now card predicts this batch only")
-        self.assertIn("pour into B, then dip both", got["go"])
+        self.assertEqual(got["go"], "Batch done")
         self.assertIn("alpha", got["dip1"]["a"])
         self.assertIn("beta", got["dip1"]["b"])
         self.assertEqual(got["dip1"]["btnA"], "Check alpha")

@@ -237,6 +237,19 @@
   .tally-lab .pill { display: inline-block; background: var(--ok-bg); color: var(--ok); border-radius: 6px; padding: 0 0.25rem; font: 600 0.66rem var(--mono); white-space: nowrap; max-width: 100%; overflow: hidden; }
   .tally-lab .pill.none { background: var(--todo-bg); color: var(--todo); }
   button.huge { width: 100%; min-height: 4.8rem; font-size: 1.3rem; margin-top: 0.3rem; }
+  /* The batch action under Undo last can: quiet until the batch's cans are
+     all tapped, then green and bold; amber once a can past the batch. */
+  #p-go.quiet { background: var(--surface); border-color: var(--line); color: var(--muted); }
+  #p-go.ok { background: var(--ok); border-color: var(--ok); color: var(--bg); font-weight: 800; }
+  #p-go.over { background: var(--warn-bg); border-color: var(--warn); color: var(--warn); font-weight: 800; }
+  /* The pour card's foot: the can size block, then the folded extras. */
+  .sect { border-top: 1px solid var(--line); margin-top: 0.7rem; padding-top: 0.55rem; }
+  #p-opts { border-top: 1px solid var(--line); margin-top: 0.65rem; padding-top: 0.1rem; }
+  #p-opts > summary { list-style: none; min-height: 2.6rem; display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-weight: 600; }
+  #p-opts > summary::-webkit-details-marker { display: none; }
+  #p-opts > summary::after { content: "▸"; font-size: 0.8rem; transition: transform 0.15s; }
+  #p-opts[open] > summary::after { transform: rotate(90deg); }
+  #p-opts .optbody { display: grid; gap: 0.45rem; padding-bottom: 0.2rem; }
   .chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.5rem 0; }
   .chips span { background: var(--ok-bg); color: var(--ok); border-radius: 6px; padding: 0 0.4rem; font: 600 0.78rem var(--mono); }
   .chips span.todo { background: var(--todo-bg); color: var(--todo); }
@@ -492,12 +505,6 @@
           <div class="chips" id="t-plan-chips"></div>
           <p class="muted" id="t-plan-note" style="margin:0"></p>
         </div>
-        <div class="row" style="align-items:end;flex-wrap:nowrap">
-          <label style="min-width:0;flex:1 1 0">Can size for the next can, L<input id="t-unit" type="number" inputmode="decimal" step="0.5"></label>
-          <button class="secondary hidden" id="t-dec"></button>
-          <button class="secondary hidden" id="t-inc"></button>
-        </div>
-        <div class="sizes" id="t-units"></div>
         <div class="big-num" id="t-count" style="margin-top:0.6rem"></div>
         <div class="tally-seg" id="t-bar" role="progressbar" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div>
         <div class="tally-lab" id="t-times" role="group" aria-label="Finish times"></div>
@@ -531,34 +538,48 @@
             <button class="danger small hidden" id="pt-stop">Stop timer</button>
           </div>
         </div>
+        <p class="muted vb" id="t-help">Start the fill timer when you start the pump. The alarm rings before the can is full: close the valve. Tap <b>+1 can poured</b> when the can is full. Emptying the can into the tank has no timer. Each can keeps the size shown below, so one batch can mix sizes. The count is saved after each tap. One dip follows the batch.</p>
         <button class="huge" id="t-plus"></button>
-        <div class="row">
+        <div class="row" style="margin-top:0.5rem">
           <button class="secondary small" id="t-undo">Undo last can</button>
-          <label class="check"><input type="checkbox" id="t-part"> <span id="t-part-text">last can not fully poured</span></label>
         </div>
-        <p class="muted vb" id="t-help">Start the fill timer when you start the pump. The alarm rings before the can is full: close the valve. Tap <b>+1 can poured</b> when the can is full. Emptying the can into the tank has no timer. Each can keeps the size shown above, so one batch can mix sizes. The count is saved after each tap. One dip follows the batch.</p>
-      </div>
-      <details id="p-manual">
-        <summary id="p-manual-text">Enter litres instead (meter, odd can, unknown pour)</summary>
-        <div class="row" style="margin-top:0.5rem">
-          <label style="min-width:9rem"><span id="p-vol-label">Pour, L</span><input id="p-vol" class="big" type="number" inputmode="decimal"></label>
-          <button class="secondary small" id="p-advice">Use advice</button>
-          <button class="secondary small" id="p-minus">− unit</button>
-          <button class="secondary small" id="p-plus">+ unit</button>
+        <button id="p-go" style="margin-top:0.5rem">Poured</button>
+        <div class="sect" id="t-size">
+          <div class="row" style="align-items:end;flex-wrap:nowrap">
+            <label style="min-width:0;flex:1 1 0">Can size for the next can, L<input id="t-unit" type="number" inputmode="decimal" step="0.5"></label>
+            <button class="secondary hidden" id="t-dec"></button>
+            <button class="secondary hidden" id="t-inc"></button>
+          </div>
+          <div class="sizes" id="t-units"></div>
         </div>
-        <div class="row" style="margin-top:0.5rem">
-          <label class="check"><input type="checkbox" id="p-unknown"> <span id="p-unknown-text">whole pour unknown (?)</span></label>
-          <label class="check"><input type="checkbox" id="p-extra"> plus an unknown extra (N+?)</label>
-        </div>
-      </details>
-      <div class="row" style="margin-top:0.5rem">
-        <label class="check"><input type="checkbox" id="p-over"> <span id="p-over-text">liquid reached the neck / overflowed</span></label>
+        <details id="p-opts">
+          <summary>Options</summary>
+          <div class="optbody">
+            <label class="check"><input type="checkbox" id="t-part"> <span id="t-part-text">last can not fully poured</span></label>
+            <div class="row">
+              <label class="check"><input type="checkbox" id="p-over"> <span id="p-over-text">liquid reached the neck / overflowed</span></label>
+            </div>
+            <div class="row hidden" id="p-neck-wrap">
+              <label class="check"><input type="checkbox" id="p-neck"> <span id="p-neck-text">tank A: level still in the neck</span></label>
+            </div>
+            <div class="row">
+              <label class="check"><input type="checkbox" id="p-unknown"> <span id="p-unknown-text">whole pour unknown (?)</span></label>
+              <label class="check"><input type="checkbox" id="p-extra"> plus an unknown extra (N+?)</label>
+            </div>
+            <label>Note (optional)<input id="p-note"></label>
+            <div class="sect">
+              <p class="muted" id="p-vol-title" style="margin:0 0 0.35rem">Enter litres instead</p>
+              <div class="row" style="align-items:end">
+                <label style="min-width:9rem"><span id="p-vol-label">Pour, L</span><input id="p-vol" class="big" type="number" inputmode="decimal"></label>
+                <button class="secondary small" id="p-advice">Use advice</button>
+                <button class="secondary small" id="p-minus">− unit</button>
+                <button class="secondary small" id="p-plus">+ unit</button>
+              </div>
+              <p class="muted" id="p-vol-hint" style="margin:0.35rem 0 0">Typed litres replace the batch volume; the can taps and times stay in the note.</p>
+            </div>
+          </div>
+        </details>
       </div>
-      <div class="row hidden" id="p-neck-wrap" style="margin-top:0.5rem">
-        <label class="check"><input type="checkbox" id="p-neck"> <span id="p-neck-text">tank A: level still in the neck</span></label>
-      </div>
-      <label style="margin-top:0.5rem">Note (optional)<input id="p-note"></label>
-      <div class="row" style="margin-top:0.6rem"><button id="p-go">Poured</button></div>
       <p id="p-err" class="error"></p>
     </div>
 
@@ -1125,6 +1146,10 @@
     "▶ Start fill timer": "▶ Bật hẹn giờ bơm",
     "Stop timer": "Dừng hẹn giờ",
     "Undo last can": "Huỷ bình cuối",
+    "Batch done": "Xong mẻ",
+    "Options": "Tuỳ chọn",
+    "Enter litres instead": "Nhập số lít thay thế",
+    "Typed litres replace the batch volume; the can taps and times stay in the note.": "Số lít đã nhập thay cho thể tích mẻ; số lần bấm bình và giờ vẫn được ghi trong ghi chú.",
     "last can not fully poured": "bình cuối chưa đổ hết",
     "pump lost suction: last can part": "bơm mất hút: bình cuối là bình lẻ",
     "Advice ≈ {0} L = {1} × {2} L (≈ {3} mm rise).": "Khuyên ≈ {0} L = {1} × {2} L (≈ dâng {3} mm).",
@@ -1155,7 +1180,7 @@
     "+1 can full": "+1 bình đầy",
     "when the can is full.": "khi bình đầy.",
     "Emptying the can into the tank has no timer.": "Việc trút bình vào bồn không có hẹn giờ.",
-    "Each can keeps the size shown above, so one batch can mix sizes.": "Mỗi bình giữ cỡ hiển thị ở trên, nên một mẻ có thể gồm nhiều cỡ bình.",
+    "Each can keeps the size shown below, so one batch can mix sizes.": "Mỗi bình giữ cỡ hiển thị ở dưới, nên một mẻ có thể gồm nhiều cỡ bình.",
     "The count is saved after each tap.": "Số đếm được lưu sau mỗi lần chạm.",
     "One dip follows the batch.": "Sau mẻ là một lần đo.",
     "The pump fills the can": "Bơm làm đầy bình",
@@ -3359,16 +3384,22 @@
     const n = this.cans();
     if (!n) throw new Error("no can is counted yet");
     const o = opts || {}, b = this.batch, cans = b.cans;
+    // Typed litres (o.volume) replace the batch volume: the volume is
+    // measured, not counted, and the taps stay in the record for the note and
+    // the time trend.  A '?' or 'N+?' tick passes through as typed.
+    const typed = o.volume != null;
     // A part can is an unknown extra: the full cans are known, the shell
     // estimates the rest (§3.9 N+?).
-    const kept = o.partial ? cans.slice(0, -1) : cans;
+    const kept = !typed && o.partial ? cans.slice(0, -1) : cans;
     const full = kept.reduce((a, c) => a + c.u, 0);
-    const text = o.partial ? (full ? `${round(full, 3)}+?` : "?") : String(round(full, 3));
+    const text = typed ? String(o.volume)
+      : o.partial ? (full ? `${round(full, 3)}+?` : "?") : String(round(full, 3));
     const sizes = this.canUnits();
     const rec = {
-      tapped: n, unit: sizes.length === 1 ? sizes[0].unit : null, partial: !!o.partial,
+      tapped: n, unit: sizes.length === 1 ? sizes[0].unit : null, partial: typed ? false : !!o.partial,
       taps: cans.map((c) => c.t), units: cans.map((c) => c.u),
     };
+    if (typed) rec.typed = text;
     if (cans.some((c) => c.f != null)) rec.fills = cans.map((c) => (c.f == null ? null : c.f));
     this.batch = null;
     return { text, cans: rec };
@@ -3756,7 +3787,8 @@
     // cans that a changed count explains is a count error before anything else.
     const counts = L.cans && L.cans.units
       ? L.cans.units.reduce((a, u) => { a[u] = (a[u] || 0) + 1; return a; }, {}) : null;
-    const hint = canHint(res.resid, z, L.step.value, cfg, L.cans && L.cans.units, counts);
+    // A typed volume is a measurement, not a can count: no count hint.
+    const hint = L.cans && L.cans.typed ? null : canHint(res.resid, z, L.step.value, cfg, L.cans && L.cans.units, counts);
     if (hint) {
       const k = Math.abs(hint.extra), total = L.step.value + hint.extra * hint.unit;
       // A plain pour has no can record; the setup unit still gives the count.
@@ -4428,6 +4460,7 @@
           .map((u) => `${by[u]}x${fmt(u, 0)}`).join("+");
         bits.push(`cans ${spec} L` + (L.cans.partial ? (drain ? " pump lost suction: last can part" : " last can part") : "")
           + (ts.length ? ` ${clock(ts[0])}-${clock(ts[ts.length - 1])}` : ""));
+        if (L.cans.typed) bits.push(/^\d/.test(L.cans.typed) ? `typed ${L.cans.typed} L` : `typed ${L.cans.typed}`);
       }
       if (L.tags) for (const t of L.tags) if (!(drain && L.entrance && (t === "at brim" || t === "at neck entrance"))) bits.push(t);
       if (L.note) bits.push(L.note);
@@ -4626,13 +4659,14 @@
     const o = opts || {};
     const plan = this.planNow() || undefined;
     // The tally lives on A: it closes once, whoever is still open.
-    const t = this.out.closeTally({ partial: o.partial });
+    const t = this.out.closeTally({ partial: o.partial, volume: o.volume });
     const Lo = this.out.finished ? null : this.out.pour(t.text, { partial: o.partial, neck: o.neck, note: o.note, plan });
     const Li = this.in.finished ? null : this.in.pour(t.text, { overflow: !!o.overflow, note: o.note, plan });
     if (Lo) Lo.cans = t.cans;
     if (Li) {
       Li.cans = { tapped: t.cans.tapped, unit: t.cans.unit, partial: t.cans.partial, taps: t.cans.taps.slice(), units: t.cans.units.slice() };
       if (t.cans.fills) Li.cans.fills = t.cans.fills.slice();
+      if (t.cans.typed) Li.cans.typed = t.cans.typed;
     }
     this._afterFinish();
     this._pair();
@@ -6209,11 +6243,22 @@
     if (v > 0) T.unit = v; else delete T.unit;
     saveTimer();
   }
-  $("t-undo").addEventListener("click", guard("p-err", () => { S.untap(); save(); followPlan(); }));
+  $("t-undo").addEventListener("click", guard("p-err", () => {
+    if (!S.cans()) return;
+    if (!confirm(tr("Remove the last can from the count?"))) return;
+    S.untap(); save(); followPlan();
+  }));
   $("t-part").addEventListener("change", () => render());
   $("p-go").addEventListener("click", guard("p-err", () => {
+    // Typed litres in Options replace the batch volume; the can taps stay in
+    // the note and in the time trend.  A '?' or 'N+?' tick wins as usual.
+    const vol = num("p-vol");
+    const typed = $("p-unknown").checked ? "?"
+      : vol > 0 ? ($("p-extra").checked ? `${vol}+?` : String(vol)) : null;
     if (S.cans()) {
-      const L = S.closeBatch(Object.assign({ partial: $("t-part").checked, note: $("p-note").value.trim() }, overNeck()));
+      const o = Object.assign({ partial: $("t-part").checked, note: $("p-note").value.trim() }, overNeck());
+      if (typed != null) o.volume = typed;
+      const L = S.closeBatch(o);
       const ts = L.cans.taps.filter((x) => x != null);
       L.pourTime = ts.length ? ts[ts.length - 1] : Date.now();
       if (isTransfer()) S.in.current().pourTime = L.pourTime;
@@ -7000,16 +7045,13 @@
    */
   function panelInput() {
     if (!S || pending()) return null;
-    const n = S.cans();
+    const n = S.cans(), v = num("p-vol");
     const o = {};
-    if (n) {
-      if ($("t-part").checked) return { why: "part" };
-    } else {
-      const v = num("p-vol");
-      if ($("p-unknown").checked) return { why: "unknown" };
-      if (v > 0 && $("p-extra").checked) return { why: "extra" };
-      if (v > 0) o.s = v;
-    }
+    // Typed litres replace the batch volume, with or without cans.
+    if ($("p-unknown").checked) return { why: "unknown" };
+    if (v > 0 && $("p-extra").checked) return { why: "extra" };
+    if (v > 0) o.s = v;
+    else if (n && $("t-part").checked) return { why: "part" };
     if (isTransfer()) {
       if ($("p-neck").checked) o.out = { why: "still-neck" };
       if ($("p-over").checked) o.in = { why: "to-neck" };
@@ -7167,7 +7209,6 @@
   function renderTally(adv) {
     const def = unit(), n = S.cans();
     $("tally").classList.remove("hidden");
-    $("p-manual").classList.toggle("hidden", n > 0);
     // After a reload the field starts at the size chosen last, then the last
     // can's size, then the default.
     const last = n ? S.canList()[n - 1].u : null;
@@ -7221,7 +7262,7 @@
 
     const sizes = [];
     for (const u of [def, act].concat(S.cfg.canSizes || [], S.canUnits().map((x) => x.unit))) if (u > 0 && sizes.indexOf(u) < 0) sizes.push(u);
-    if (!sizes.length) $("p-manual").open = true;
+    if (!sizes.length) $("p-opts").open = true;
     $("t-units").innerHTML = sizes.map((u) => `<button data-unit="${u}" aria-pressed="${u === act}">${f(u, 0)} L</button>`).join("");
 
     const drain = isDrain();
@@ -7309,11 +7350,14 @@
 
     $("t-undo").disabled = n === 0;
     $("t-part").disabled = n === 0;
-    $("p-go").textContent = transfer
-      ? (n ? `Batch done: ${n} can${n > 1 ? "s" : ""}, ${f(vol, 0)} L → pour into B, then dip both` : "Pumped")
-      : drain
-        ? (n ? `Drained: ${n} can${n > 1 ? "s" : ""}, ${f(vol, 0)} L → dip` : "Drained")
-        : (n ? `Batch done: ${n} can${n > 1 ? "s" : ""}, ${f(vol, 0)} L → dip` : "Poured");
+    // The action under Undo last can: short, and coloured by the batch.  A
+    // reached target is green and bold, a can past it amber, below it quiet.
+    const go = $("p-go");
+    go.textContent = n ? "Batch done" : transfer ? "Pumped" : drain ? "Drained" : "Poured";
+    go.classList.toggle("ok", cans > 0 && n === cans);
+    go.classList.toggle("over", cans > 0 && n > cans);
+    go.classList.toggle("quiet", !(cans > 0 && n >= cans));
+    go.disabled = !(n > 0 || $("p-unknown").checked || num("p-vol") > 0);
     tickPour(Date.now());
   }
 
@@ -7373,7 +7417,6 @@
     if (isTransfer()) {
       $("pour-title").textContent = "1 · Pump out";
       $("t-part-text").textContent = "pump lost suction: last can part";
-      $("p-manual-text").textContent = "Enter litres instead (meter, measured part can, unknown batch)";
       $("p-vol-label").textContent = "Batch, L";
       $("p-unknown-text").textContent = "whole batch unknown (?)";
       $("p-over-text").textContent = "tank B: reached the neck / overflowed";
@@ -7383,13 +7426,12 @@
     }
     $("pour-title").textContent = drain ? "1 · Drain" : "1 · Pour";
     $("t-part-text").textContent = drain ? "pump lost suction: last can part" : "last can not fully poured";
-    $("p-manual-text").textContent = drain ? "Enter litres instead (meter, measured part can, unknown drain)" : "Enter litres instead (meter, odd can, unknown pour)";
     $("p-vol-label").textContent = drain ? "Drained, L" : "Pour, L";
     $("p-unknown-text").textContent = drain ? "whole drain unknown (?)" : "whole pour unknown (?)";
     $("p-over-text").textContent = drain ? "level still in the neck" : "liquid reached the neck / overflowed";
     $("t-help").innerHTML = drain
       ? "Start the fill timer when you start the pump. The pump fills the can <b>from the tank</b>. The alarm rings before the can is full: close the valve at the calibrated mark. Tap <b>+1 can full</b> when the can is full. A spill is litres that left the tank but not the record. Keep the hose in the same state at every dip. When the pump loses suction, tap the part can and tick <i>pump lost suction: last can part</i>, or enter its measured litres instead. The count is saved after each tap. One dip follows the batch."
-      : "Start the fill timer when you start the pump. The alarm rings before the can is full: close the valve. Tap <b>+1 can poured</b> when the can is full. Emptying the can into the tank has no timer. Each can keeps the size shown above, so one batch can mix sizes. The count is saved after each tap. One dip follows the batch.";
+      : "Start the fill timer when you start the pump. The alarm rings before the can is full: close the valve. Tap <b>+1 can poured</b> when the can is full. Emptying the can into the tank has no timer. Each can keeps the size shown below, so one batch can mix sizes. The count is saved after each tap. One dip follows the batch.";
   }
 
   // ------------------------------------------------------------ settings
@@ -7522,12 +7564,19 @@
   const TIMER = "calib-site:timer", PREFS = "calib-site:prefs";
   function loadJSON(k, d) { try { return JSON.parse(localStorage.getItem(k) || "null") || d; } catch (e) { return d; } }
   let T = loadJSON(TIMER, {});   // { pour: { start, dur, size, alarmed }, wait, settled: "row@time", unit: the chosen can size }
-  const P = Object.assign({ anim: true, sound: true, vibrate: true, wake: true, iosTimer: false, iosShortcut: "", nowOpen: true }, loadJSON(PREFS, {}));
+  const P = Object.assign({ anim: true, sound: true, vibrate: true, wake: true, iosTimer: false, iosShortcut: "", nowOpen: true, optsOpen: false }, loadJSON(PREFS, {}));
   // The Now card folds; the device keeps the choice.
   $("now-card").open = P.nowOpen !== false;
   $("now-card").addEventListener("toggle", () => {
     if (P.nowOpen === $("now-card").open) return;
     P.nowOpen = $("now-card").open;
+    localStorage.setItem(PREFS, JSON.stringify(P));
+  });
+  // The pour card's Options block folds the same way, closed by default.
+  $("p-opts").open = P.optsOpen === true;
+  $("p-opts").addEventListener("toggle", () => {
+    if (P.optsOpen === $("p-opts").open) return;
+    P.optsOpen = $("p-opts").open;
     localStorage.setItem(PREFS, JSON.stringify(P));
   });
   P.noise = Object.assign({ sigmaRead: 0.4, pourRel: 0.005, pourAbs: 3, h0pm: 80, suctionFloor: 65 }, P.noise || {});
