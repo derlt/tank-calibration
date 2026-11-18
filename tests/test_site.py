@@ -45,7 +45,7 @@ function inv(V, obj) {
   for (let i = 0; i < 100; i++) { const mid = 0.5 * (lo + hi); if (liq(mid) < V) lo = mid; else hi = mid; }
   return 0.5 * (lo + hi);
 }
-/** rows from the neck entrance down; actual[i] overrides the litres that really left at step i. */
+/** rows from the brim down; actual[i] overrides the litres that really left at step i. */
 function drainRows(obj, actual) {
   const rows = [{step: '?', H: B}];
   let V = CAP - (obj ? obj.d : 0);
@@ -1239,7 +1239,7 @@ class TestSitePage(unittest.TestCase):
             "el('p-go').click(); out.dip = el('dip-label').textContent;\n"
             "el('d-val').value = '1700'; el('d-go').click();\n"
             "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'settings' } }) } });\n"
-            "out.dir = el('set-dir').textContent; out.brim = el('set-brim').value;\n"
+            "out.dir = el('set-dir').textContent; out.brim = el('set-brim').value; out.brimPm = el('set-brimpm').value;\n"
             "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'log' } }) } });\n"
             "out.table = el('log-table').innerHTML;\n"
             "console.log(JSON.stringify(out));"
@@ -1248,11 +1248,11 @@ class TestSitePage(unittest.TestCase):
         self.assertTrue(got["atShown"], "a drain asks where the first level stands")
         self.assertEqual(got["step"], "?", "a drain starts with an unknown volume")
         self.assertEqual(got["pressed"], "true")
-        self.assertEqual(got["atPressed"], "true", "the neck entrance is the default")
+        self.assertEqual(got["atPressed"], "true", "the start at the brim is the default")
         self.assertIn("in the tank", got["stepLabel"])
         self.assertIn("Prime the pump", got["firstNote"])
         self.assertEqual(got["cfg"], {"direction": "drain", "brimStart": 1800, "brimPm": 6})
-        self.assertEqual(got["csv1"], ["at neck entrance"])
+        self.assertEqual(got["csv1"], ["at brim"])
         self.assertEqual(got["roles"], [True, True, False, False, False, True, False],
                          "a single tank shows no role badge, no coloured edge, and one button")
         self.assertEqual(got["plus"], "+1 can full (200 L)")
@@ -1275,13 +1275,14 @@ class TestSitePage(unittest.TestCase):
         self.assertIn("mm fall", got["tally"])
         self.assertIn("draining 200 L", got["dip"])
         self.assertIn("drain", got["dir"])
-        self.assertIn("neck entrance", got["dir"])
-        self.assertEqual(got["brim"], "6")
+        self.assertIn("at the brim (brim B = 1800.0 mm)", got["dir"])
+        self.assertEqual(got["brim"], "", "no brim typed at setup")
+        self.assertEqual(got["brimPm"], "6", "the brim ± is the campaign's own, 6 mm by default")
         self.assertIn("drained L", got["table"])
 
 
 # A synthetic transfer campaign (§3.12): two known shells, one shared batch.
-# Tank A (drain) starts full at the neck entrance; tank B (fill) starts with
+# Tank A (drain) starts full at the brim; tank B (fill) starts with
 # 2000 L.  batches: [{s, aOut?, aIn?}] — s is the recorded batch, aOut the
 # litres that really left A, aIn the litres that really reached B (each
 # defaults to the previous one, so {s: 600} is an honest batch).
@@ -1384,7 +1385,7 @@ console.log(JSON.stringify(out));
         self.assertEqual(got["start"], ["start", "start", 1800.0, None])
         self.assertEqual(got["rows"], [6, 6], "one level per tank per batch")
         self.assertIn("drain campaign", got["csvA"])
-        self.assertIn("at neck entrance", got["csvA"])
+        self.assertIn("at brim", got["csvA"])
         self.assertNotIn("drain campaign", got["csvB"])
         self.assertIsNone(got["pairClean"], "an honest batch has no pair verdict")
         self.assertIn("pour the next batch", got["decided"])
@@ -2383,8 +2384,9 @@ class TestSiteCore(unittest.TestCase):
         self.assertTrue(all(float(r[0]) > 0 for r in rows[2:]), "drain volumes are positive")
         notes = rows[1][2].split("; ")
         self.assertEqual(notes[0], "drain campaign", "the token comes first")
-        self.assertEqual(notes[1], "at neck entrance")
-        self.assertEqual(rows[1][2].count("at neck entrance"), 1)
+        self.assertEqual(notes[1], "at brim")
+        self.assertEqual(rows[1][2].count("at brim"), 1)
+        self.assertNotIn("neck entrance", rows[1][2], "the old note is gone from new files")
         for r in rows[2:]:
             self.assertNotIn("drain campaign", r[2])
         # Charts: travel > 0, the §2 residual, drift = Σ resid.
@@ -3280,7 +3282,7 @@ class TestSiteTiles(unittest.TestCase):
     def test_tile_view_edges(self):
         """A prediction at a limit keeps its number and names the limit.
 
-        Past the brim the level is held at the shell crown; a drain below the
+        Past the brim the level is held at the brim (2r + h0); a drain below the
         suction floor (65 mm by default) is "floor"; one that empties the
         shell is "dry", held at the floor of the shell.
         """
@@ -3300,7 +3302,7 @@ class TestSiteTiles(unittest.TestCase):
         self.assertIsNone(f1["edge"])
         self.assertLess(f1["to"], 1800)
         self.assertEqual((f2["edge"], f2["why"]), ("brim", None), "past the brim: the number stays, marked")
-        self.assertAlmostEqual(f2["to"], 1800, places=6, msg="held at the shell crown (2r + h0)")
+        self.assertAlmostEqual(f2["to"], 1800, places=6, msg="held at the brim (2r + h0)")
         edges = [t["edge"] for t in got["drain"]]
         self.assertEqual(edges[:7], [None] * 7)
         self.assertEqual(edges[7:9], ["floor", "floor"], "below the 65 mm suction floor")
@@ -3407,6 +3409,133 @@ class TestSiteTiles(unittest.TestCase):
                       "half the double-width wave: two whole waves, no jump")
         self.assertIn(".tiles .arw, .tiles .wv svg, .tiles .wt { animation: none !important; }", css,
                       "Reduce Motion stops the bob, the wave and the ring")
+
+
+@unittest.skipUnless(NODE, "node is not installed")
+class TestSiteBrim(unittest.TestCase):
+    """The brim reading the operator types: a prior, a CSV note, a Settings field."""
+
+    def test_typed_brim_is_the_prior(self):
+        got = _node(
+            "const plain = new core.Session({D: 1800, Lest: 3000, pourUnit: 200});\n"
+            "const s = new core.Session({D: 1800, Lest: 3000, pourUnit: 200, brim: 1830, brimPm: 4});\n"
+            "s.start('?', 400); s.dip(400); s.dip(400);\n"
+            "const p0 = s.cfg.prior;\n"
+            "const set = s.setCampaign({brim: 1790}); const p1 = s.cfg.prior;\n"
+            "s.setCampaign({brim: ''}); const p2 = s.cfg.prior;\n"
+            "let bad = null; try { s.setCampaign({brim: -5}); } catch (e) { bad = e.message; }\n"
+            "const blank = new core.Session({D: 1800, Lest: 3000, brim: ''}).cfg.brim;\n"
+            "console.log(JSON.stringify({plain: plain.cfg.prior, p0, p1, p2, bad, blank,\n"
+            "  fitBrim: [2 * s.fit.p.r + s.fit.p.h0], saved: s.toJSON().config.brim}));"
+        )
+        self.assertNotIn("B", got["plain"], "no typed brim: no brim prior")
+        self.assertEqual((got["p0"]["B"], got["p0"]["sB"], got["p0"]["Bsource"]), (1830, 2, "typed"),
+                         "the typed brim is B ± brimPm/2")
+        self.assertEqual(got["p1"]["B"], 1790, "a Settings change moves the prior")
+        self.assertNotIn("B", got["p2"], "a cleared brim drops the prior")
+        self.assertEqual(got["bad"], "the brim reading must be more than 0 mm")
+        self.assertIsNone(got["blank"], "a blank field is no brim")
+        self.assertIsNone(got["saved"], "the cleared brim is saved as none")
+
+    def test_typed_brim_pulls_the_running_shell(self):
+        got = _node(
+            "const a = new core.Session({D: 1800, Lest: 3000, pourUnit: 200});\n"
+            "const b = new core.Session({D: 1800, Lest: 3000, pourUnit: 200, brim: 1840});\n"
+            "for (const s of [a, b]) { s.start('?', 400); s.dip(400); s.dip(400); }\n"
+            "const B = (s) => 2 * s.fit.p.r + s.fit.p.h0;\n"
+            "console.log(JSON.stringify({a: B(a), b: B(b), adv: b.advice(400).brim}));"
+        )
+        self.assertAlmostEqual(got["a"], 1800, delta=1, msg="no typed brim: D and the datum give the brim")
+        self.assertAlmostEqual(got["b"], 1840, delta=3, msg="the typed brim pins 2r + h0")
+        self.assertAlmostEqual(got["adv"], got["b"], places=6, msg="the Now card's brim follows the fit")
+
+    def test_start_reading_wins_and_a_conflict_is_named(self):
+        got = _node(
+            "const mk = (brim) => { const d = new core.Session({D: 1800, Lest: 3000, direction: 'drain', brim});\n"
+            "  const v1 = d.start('?', 1800, '', undefined, {at: 'entrance'}); const v = d.dip(1800);\n"
+            "  return {prior: d.cfg.prior, k: d.brimConflict(), msg: v.message, flag: !!v.brimConflict}; };\n"
+            "console.log(JSON.stringify({ok: mk(1803), off: mk(1830), none: mk(null)}));"
+        )
+        self.assertEqual((got["ok"]["prior"]["B"], got["ok"]["prior"]["Bsource"]), (1800, "start"),
+                         "the start reading at the brim wins over the typed brim")
+        self.assertIsNone(got["ok"]["k"], "3 mm is inside √2 · 6 mm")
+        self.assertNotIn("typed brim", got["ok"]["msg"])
+        self.assertEqual(got["off"]["prior"]["B"], 1800)
+        k = got["off"]["k"]
+        self.assertEqual((k["typed"], k["start"], k["diff"]), (1830, 1800, -30))
+        self.assertAlmostEqual(k["limit"], 6 * 2 ** 0.5)
+        self.assertTrue(got["off"]["flag"])
+        self.assertIn("It differs from the typed brim (1830.0 mm) by 30.0 mm, more than ±8.5 mm.", got["off"]["msg"])
+        self.assertIn("This is the brim B:", got["off"]["msg"])
+        self.assertIsNone(got["none"]["k"])
+
+    def test_raw_csv_carries_the_typed_brim(self):
+        got = _node(
+            "const s = new core.Session({D: 1800, Lest: 3000, pourUnit: 200, brim: 1830.5, brimPm: 4});\n"
+            "s.start('?', 400); s.dip(400); s.dip(400);\n"
+            "s.pour('200'); s.dip(s.preview(400, 200, 2).H);\n"
+            "const d = new core.Session({D: 1800, Lest: 3000, direction: 'drain', brim: 1801});\n"
+            "d.start('?', 1800, '', undefined, {at: 'entrance'}); d.dip(1800);\n"
+            "const plain = new core.Session({D: 1800, Lest: 3000}); plain.start('?', 400); plain.dip(400); plain.dip(400);\n"
+            "console.log(JSON.stringify({fill: s.toRawCsv(), drain: d.toRawCsv(), plain: plain.toRawCsv()}));"
+        )
+        fill = got["fill"].splitlines()
+        self.assertIn("brim 1830.5 ± 4.0 mm", fill[1].split(",")[2].split("; "))
+        self.assertNotIn("brim", fill[2], "only row 1 carries it")
+        notes = got["drain"].splitlines()[1].split(",")[2].split("; ")
+        self.assertEqual(notes[:3], ["drain campaign", "at brim", "brim 1801.0 ± 6.0 mm"])
+        self.assertNotIn("brim", got["plain"].splitlines()[1], "no typed brim: no note")
+
+    def test_transfer_brim_per_tank(self):
+        got = _node(
+            "const t = new core.TransferSession({tank: 'a', D: 1800, Lest: 3000, brim: 1810}, {tank: 'b', D: 2480, Lest: 5200});\n"
+            "t.start('?', 1800, '?', 400, '', Date.now(), {at: 'shell'});\n"
+            "t.out.dip(1800); t.in.dip(400); t.in.dip(400);\n"
+            "t.active = 'in'; t.setCampaign({brim: 2490, brimPm: 3});\n"
+            "console.log(JSON.stringify({a: [t.out.cfg.brim, t.out.cfg.brimPm], b: [t.in.cfg.brim, t.in.cfg.brimPm],\n"
+            "  pb: t.in.cfg.prior.B}));"
+        )
+        self.assertEqual(got["a"], [1810, 6], "tank A keeps its own brim")
+        self.assertEqual(got["b"], [2490, 3], "the Settings card edits the chosen tank only")
+        self.assertEqual(got["pb"], 2490)
+
+    def test_page_setup_settings_and_now_card(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-brim').value = '1830'; el('s-brimpm').value = '4';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click(); el('d-val').value = '400'; el('d-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "let cfg = JSON.parse(store.get('calib-site:active')).config;\n"
+            "out.cfg = [cfg.brim, cfg.brimPm];\n"
+            "out.kv = el('now-kv').innerHTML;\n"
+            "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'settings' } }) } });\n"
+            "out.fields = [el('set-brim').value, el('set-brimpm').value];\n"
+            "el('set-brim').value = ''; el('set-brimpm').value = ''; el('set-save').click();\n"
+            "cfg = JSON.parse(store.get('calib-site:active')).config;\n"
+            "out.cleared = [cfg.brim, cfg.brimPm, el('set-msg').textContent];\n"
+            "el('set-brim').value = '-3'; el('set-save').click(); out.err = el('set-err').textContent;\n"
+            "out.noise = typeof el('set-floor').value;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["cfg"], [1830, 4], "the setup fields go into the campaign")
+        self.assertIn("(typed 1830.0 mm) ·", got["kv"], "the Now card names the typed brim")
+        self.assertEqual(got["fields"], ["1830", "4"], "Settings shows the campaign's brim")
+        self.assertEqual(got["cleared"][:2], [None, 6], "blank: no brim, ± back to 6 mm")
+        self.assertIn("refitted", got["cleared"][2])
+        self.assertEqual(got["err"], "Enter the brim reading, more than 0 mm, or leave it blank.")
+
+    def test_page_noise_card_has_no_brim(self):
+        html = (SITE / "page.html").read_text(encoding="utf-8")
+        noise = html[html.index('id="set-noise"'):html.index('id="set-noise-save"')]
+        self.assertNotIn("brim", noise, "the brim ± is a campaign field, not a noise setting")
+        self.assertNotIn("neck entrance", html)
+        self.assertNotIn("shell crown", html)
 
 
 if __name__ == "__main__":

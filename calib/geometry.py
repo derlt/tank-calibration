@@ -48,7 +48,7 @@ def capacity(r, L):
 
 
 def brim_reading(h0, r):
-    """Tape reading at the shell crown, mm: B = h0 + 2r."""
+    """Tape reading at the brim, mm: B = h0 + 2r."""
     return float(h0) + 2.0 * float(r)
 
 

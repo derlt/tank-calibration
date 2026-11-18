@@ -8,6 +8,19 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Brim reading.** The site page asks for an optional measured brim
+  reading and its ± (default 6 mm) at setup, per tank in a transfer, and
+  *Settings → This campaign* changes or clears it (the running shell
+  refits). It is the brim prior of the running fit, so the Now card's brim,
+  the near-brim warning, the time to the brim, the batch plan and the tile
+  limit follow it; the Now card names it `(typed … mm)`. A drain that starts
+  at the brim keeps its start reading as the prior and warns when the typed
+  brim differs by more than √2 × its ±. Row 1 of the raw CSV carries
+  `brim X ± Y mm`; `calib init` reads it as `brim.declared` /
+  `brim.declared_pm`, and `calib fit` uses it for the first trust marks,
+  still refines the brim, and reports `declared brim … : free fit … (diff,
+  z) — compared, not enforced` in the shell record and the workbook.
+
 - On-site page: the **tank tiles**, a third frozen row under the header and
   the tab labels, on every tab. One thin tile per tank, two short lines: the
   role arrow over a wave for the liquid surface and the tank name; then the
@@ -70,6 +83,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- One word, **brim**: the drain start *At the neck entrance* is now *At the
+  brim*, and "neck entrance" / "shell crown" are "brim" in the page, the
+  docs and the methodology. New raw files write `at brim` on row 1; `calib`
+  still reads `at neck entrance` in older files. `site/replay.js` takes
+  `--at-brim` (`--neck-entrance` still works). The drain setting *brim at
+  the neck entrance ±* left *Noise and limits*: the brim ± is each
+  campaign's own field.
 - On-site page layout, checked in Chromium at 360 px and 760 px, light and
   dark: on a phone the header keeps the status on two lines and shortens a
   long title (a transfer's `A → B`) with "…", so the frozen stack stays

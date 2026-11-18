@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 from itertools import pairwise
 from pathlib import Path
 
@@ -98,11 +99,38 @@ def infer_neck_drain(rows: list[Row], r: float) -> float | None:
     return None
 
 
+def _note_parts(note: str) -> list[str]:
+    return [p.strip().lower() for p in note.split(";")]
+
+
 def infer_neck_entrance(rows: list[Row]) -> float | None:
-    """The brim reading of a drain that starts at the neck entrance."""
+    """The brim reading of a drain that starts at the brim.
+
+    Row 1 says ``at brim`` (older files: ``at neck entrance``): the level
+    stood at the brim, so the reading is the brim B (§3.11).
+    """
     first = rows[0]
-    if "neck entrance" in first.note.lower():
+    parts = _note_parts(first.note)
+    if "at brim" in parts or "neck entrance" in first.note.lower():
         return float(first.height)
+    return None
+
+
+_DECLARED = re.compile(r"^brim\s+([0-9]+(?:\.[0-9]+)?)\s*(?:±\s*([0-9]+(?:\.[0-9]+)?))?\s*mm$")
+
+
+def infer_declared_brim(rows: list[Row]) -> tuple[float, float | None] | None:
+    """The brim reading the operator typed: row 1 says ``brim 2475.0 ± 6.0 mm``.
+
+    It is a reading from outside the campaign: the fit compares it with its
+    own brim and reports the difference, never enforces it (§5.3a).
+    """
+    if not rows:
+        return None
+    for part in _note_parts(rows[0].note):
+        m = _DECLARED.match(part)
+        if m:
+            return float(m.group(1)), (float(m.group(2)) if m.group(2) else None)
     return None
 
 
@@ -191,7 +219,10 @@ def infer_config(
     ``None`` for ``pour_unit``, ``overflow_pour``, ``heel_row`` or
     ``direction`` means: infer it from the data.  A fill never infers
     ``brim``; a missing brim is refined by the fit from the shell.  A drain
-    whose first row says ``at neck entrance`` reads the brim there (§3.11).
+    whose first row says ``at brim`` (older files: ``at neck entrance``)
+    reads the brim there (§3.11).  A row 1 note ``brim 2475.0 ± 6.0 mm`` (a
+    brim typed on the site page) becomes ``brim.declared``: compared and
+    reported, never enforced (§5.3a).
     """
     raw_path = Path(raw_path)
     rows = read_raw(raw_path)
@@ -240,8 +271,13 @@ def infer_config(
     if overflow is not None:
         brim_data["neck_drain" if drain else "overflow_pour"] = float(overflow)
     if drain and neck_entrance is not None and brim == neck_entrance:
-        # The start reading at the neck entrance is the shell crown (§5.3a).
+        # The start reading at the brim is the brim B (§5.3a).
         brim_data["neck_equality"] = True
+    declared = infer_declared_brim(rows)
+    if declared is not None:
+        brim_data["declared"] = declared[0]
+        if declared[1] is not None:
+            brim_data["declared_pm"] = declared[1]
     if brim_data:
         data["brim"] = brim_data
 
@@ -293,6 +329,8 @@ def preflight(config_path: str | Path) -> dict:
     brim = (
         cfg.brim_reading
         if cfg.brim_reading is not None
+        else cfg.brim_declared
+        if cfg.brim_declared is not None
         else cfg.h0_value + 2.0 * cfg.nominal_r
     )
     mark_trusted(

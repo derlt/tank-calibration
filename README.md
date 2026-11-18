@@ -253,7 +253,7 @@ Notes:
   (200 L plus an unknown extra). `x1`/`x2` are read as unknown pours.
 - `object_bands` are level ranges. `litres` is the displacement in that band.
   If omitted, the net residual over the band estimates it.
-- `brim.reading` is the tape reading at the shell crown. `overflow_pour` is the
+- `brim.reading` is the tape reading at the brim. `overflow_pour` is the
   pour that overflowed. The fit then enforces `G <= P` inside the fit.
 - `h0.mode` is `fit` or `locked`. A locked datum reports its cost.
 - `tilt_test` adds the tilt parameter of §5.5 and keeps it only if the F-test

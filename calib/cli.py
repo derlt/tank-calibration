@@ -92,7 +92,7 @@ def _cmd_init(args) -> int:
         )
         sigma_h = _ask_float("dip sigma_h, mm", sigma_h)
         unit = _ask_float("pour unit, L (blank = inferred)", base.get("pour_unit"))
-        brim = _ask_float("brim reading, mm (blank = fit refines it)", brim)
+        brim = _ask_float("brim reading dipped at the brim in this campaign, mm (blank = fit refines it)", brim)
         drain = direction == "drain"
         overflow = _ask_float(
             ("neck drain" if drain else "overflow pour") + ", L (blank = inferred)",
@@ -128,6 +128,9 @@ def _cmd_init(args) -> int:
         print(f"  pour_unit {cfg.pour_unit:g} L")
     if cfg.brim_reading is not None:
         print(f"  brim      {cfg.brim_reading:g} mm")
+    if cfg.brim_declared is not None:
+        pm = f" ± {cfg.brim_declared_pm:g}" if cfg.brim_declared_pm is not None else ""
+        print(f"  declared  brim {cfg.brim_declared:g}{pm} mm (compared, not enforced)")
     if cfg.overflow_pour is not None:
         print(f"  {'neck drain' if cfg.drain else 'overflow  '} {cfg.overflow_pour:g} L")
     if cfg.heel_row:
@@ -156,9 +159,13 @@ def _cmd_check(args) -> int:
     brim = (
         f"{cfg.brim_reading:g} mm"
         if cfg.brim_reading is not None
-        else f"from the fit ({report['brim']:g} mm nominal)"
+        else f"from the fit ({report['brim']:g} mm "
+        f"{'declared' if cfg.brim_declared is not None else 'nominal'})"
     )
     print(f"  brim       {brim}")
+    if cfg.brim_declared is not None:
+        pm = f" ± {cfg.brim_declared_pm:g}" if cfg.brim_declared_pm is not None else ""
+        print(f"  declared   brim {cfg.brim_declared:g}{pm} mm (compared, not enforced)")
     print(f"  bootstrap  {cfg.bootstrap_n} draws, seed {cfg.seed}")
     print()
     print(f"intervals: {report['trusted']} trusted of {report['intervals']}")
@@ -374,7 +381,7 @@ def main(argv: list[str] | None = None) -> int:
     p_init.add_argument(
         "--pour-unit", type=float, dest="pour_unit", help="pour increment, L"
     )
-    p_init.add_argument("--brim", type=float, help="brim reading, mm")
+    p_init.add_argument("--brim", type=float, help="brim reading dipped at the brim in this campaign, mm")
     p_init.add_argument(
         "--overflow-pour", "--neck-drain", type=float, dest="overflow_pour",
         help="overflow pour (fill) or drain out of the neck (drain), L",

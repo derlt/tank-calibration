@@ -404,6 +404,8 @@
       <label>D is good to ±, mm<input id="s-Dpm" type="number" inputmode="decimal" value="200"></label>
       <label>Length estimate L, mm<input id="s-L" type="number" inputmode="decimal" placeholder="5280"></label>
       <label>L is good to ±, mm (blank = 3 %)<input id="s-Lpm" type="number" inputmode="decimal"></label>
+      <label>Brim reading, mm (blank = from the shell)<input id="s-brim" type="number" inputmode="decimal" step="0.5"></label>
+      <label>Brim is good to ±, mm (blank = 6)<input id="s-brimpm" type="number" inputmode="decimal" placeholder="6"></label>
       <label>Default can size, L<input id="s-unit" type="number" inputmode="decimal" placeholder="200"></label>
     </div>
     <h2 style="margin-top:0.9rem">Batch plan</h2>
@@ -429,7 +431,7 @@
     <h2 style="margin-top:0.9rem">First level</h2>
     <div id="s-at-wrap" class="hidden">
       <nav class="seg" id="s-at" aria-label="Where the first level stands">
-        <button id="s-at-entrance" data-at="entrance" aria-pressed="true">At the neck entrance (recommended)</button>
+        <button id="s-at-entrance" data-at="entrance" aria-pressed="true">At the brim (recommended)</button>
         <button id="s-at-neck" data-at="neck" aria-pressed="false">In the neck</button>
         <button id="s-at-shell" data-at="shell" aria-pressed="false">In the shell</button>
       </nav>
@@ -448,6 +450,8 @@
         <label>D is good to ±, mm<input id="sB-Dpm" type="number" inputmode="decimal" value="200"></label>
         <label>Length estimate L, mm<input id="sB-L" type="number" inputmode="decimal" placeholder="5280"></label>
         <label>L is good to ±, mm (blank = 3 %)<input id="sB-Lpm" type="number" inputmode="decimal"></label>
+        <label>Brim reading, mm (blank = from the shell)<input id="sB-brim" type="number" inputmode="decimal" step="0.5"></label>
+        <label>Brim is good to ±, mm (blank = 6)<input id="sB-brimpm" type="number" inputmode="decimal" placeholder="6"></label>
         <label>Tank B nominal capacity, L (batch plan)<input id="sB-nom" type="number" inputmode="decimal"></label>
         <label>Liquid in tank B before the first batch, L (? = unknown heel)<input id="sB-step" value="?"></label>
         <label>Tank B first reading, mm<input id="sB-dip" class="big" type="number" inputmode="decimal" step="0.5"></label>
@@ -655,6 +659,8 @@
         <label>D is good to ±, mm<input id="set-Dpm" type="number" inputmode="decimal"></label>
         <label>Length estimate L, mm<input id="set-L" type="number" inputmode="decimal"></label>
         <label>L is good to ±, mm (blank = 3 %)<input id="set-Lpm" type="number" inputmode="decimal"></label>
+        <label>Brim reading, mm (blank = from the shell)<input id="set-brim" type="number" inputmode="decimal" step="0.5"></label>
+        <label>Brim is good to ±, mm (blank = 6)<input id="set-brimpm" type="number" inputmode="decimal" placeholder="6"></label>
         <label>Pour unit, L<input id="set-unit" type="number" inputmode="decimal"></label>
       </div>
       <p class="muted" id="set-dir"></p>
@@ -672,7 +678,6 @@
         <label>Pour noise, % of pour<input id="set-rel" type="number" inputmode="decimal"></label>
         <label>Pour noise, fixed L<input id="set-abs" type="number" inputmode="decimal"></label>
         <label>Datum: 0 ± mm<input id="set-h0" type="number" inputmode="decimal"></label>
-        <label>Drain: brim at the neck entrance ± mm (blank = 6)<input id="set-brim" type="number" inputmode="decimal"></label>
         <label>Drain: suction floor, mm on the tape (blank = 65)<input id="set-floor" type="number" inputmode="decimal"></label>
       </div>
       <div class="row" style="margin-top:0.6rem"><button id="set-noise-save">Save noise settings</button></div>
@@ -802,7 +807,7 @@
     </div>
     <div class="row" style="margin-top:0.5rem">
       <label class="check"><input type="checkbox" id="r-drain"> drain campaign (found from the heights when they fall)</label>
-      <label class="check"><input type="checkbox" id="r-entrance"> drain: row 1 is at the neck entrance</label>
+      <label class="check"><input type="checkbox" id="r-entrance"> drain: row 1 is at the brim</label>
     </div>
     <div class="row" style="margin-top:0.6rem"><button id="r-go">Replay</button></div>
     <p id="r-err" class="error"></p>
@@ -827,7 +832,7 @@
     <p><b>The first pours.</b> The page does not know the bottom shape yet. For the first 3 intervals a confirmed miss is "learning": the level is kept and teaches the shape.</p>
     <p><b>Too wide to judge.</b> When the band is wider than ±3 mm (very large pours, an early shell), the prediction cannot catch a 3 mm slip. Then the page asks for a second reading.</p>
     <p><b>What it catches.</b> In a simulation of 100 campaigns per slip size, a reading off by 3 mm was caught 92 % of the time, and 4 mm or more every time. An honest reading triggered a second dip 3–6 % of the time.</p>
-    <p><b>Drain campaign (reverse strapping).</b> The tank starts full. A pump draws the water out into calibrated cans; each batch is one step, and the level falls. Start at the neck entrance: pump the neck down until the level just reaches the shell crown and dip. That reading is the brim, and the running shell knows the top from the first level. Keep the hose in the same state at every dip. Fill each can to its mark. When the pump loses suction, tick <i>pump lost suction: last can part</i>.</p>
+    <p><b>Drain campaign (reverse strapping).</b> The tank starts full. A pump draws the water out into calibrated cans; each batch is one step, and the level falls. Start at the brim: pump the neck down until the level just reaches the brim and dip. That reading is the brim, and the running shell knows the top from the first level. Keep the hose in the same state at every dip. Fill each can to its mark. When the pump loses suction, tick <i>pump lost suction: last can part</i>.</p>
     <p><b>Signs in a drain.</b> resid &lt; 0: the fall came too large (an object exposed, a leak, a spill at the can, or more left than the count). resid &gt; 0: the fall came too small (RETURN?: the hose drained back, wall film, or less left than the count).</p>
     <p><b>Two tanks at once (transfer).</b> A pump draws water out of a full tank A into calibrated cans, and the same cans are emptied into tank B. One batch is one step for both tanks: A is a drain, B is a fill. Each tank keeps its own check, its own running shell and its own raw file; switch tanks in the header or in Log &amp; charts. Dip A, then dip B, after each batch — the dip card has one field and one button per tank, so each tank is checked as soon as its reading is in. When both dips are in, the page compares the two residuals of the same batch: the same litres in both tanks means the cans (a count or fill error) — one recount fixes both files; litres that only B misses means a spill on the way; a miss that only one tank shows means that tank or its hose. The pour noise is shared, so the comparison is as sharp as the dips alone.</p>
     <p><b>Batch plan.</b> Before the first pour, declare the can sizes, the nominal capacity and the batches: for example 2 × 300 L, 2 × 600 L, 8 × 800 L, 2 × 600 L, 2 × 300 L. A batch is not a can: a 300 L batch is one 200 L can and one 100 L can. The page gives each batch the fewest cans, and of those the largest, so the pump and the carry take the least time. The pour card shows the group in work and its batches only: the small batches at the bottom and at the top are two groups. The real tank can hold more or less than the nominal. After the halfway level, the page recounts the batches still to come from the litres the running shell says are left: the middle group takes more or fewer batches, and the small batches stay at the end. A count changes once, when the shell's figure is clearly away from it, not back and forth with each dip.</p>
@@ -1250,9 +1255,9 @@
   $("s-at-neck").addEventListener("click", () => pickAt("neck"));
   $("s-at-shell").addEventListener("click", () => pickAt("shell"));
   const AT_NOTE = {
-    entrance: "Pump the neck down until the level just reaches the shell crown, then dip. That reading is the brim B: the running shell knows the top from the first level. Recommended.",
+    entrance: "Pump the neck down until the level just reaches the brim, then dip. That reading is the brim B: the running shell knows the top from the first level. Recommended.",
     neck: "The level is in the neck: the reading is vent-column height, not shell level. Tick 'level still in the neck' on each drain until the level is back in the shell. These intervals feed the brim constraint of the final fit, not the running fit.",
-    shell: "The level is in the shell, below the brim. A plain start: the running shell learns the top from D, L and the datum only.",
+    shell: "The level is in the shell, below the brim. A plain start: the running shell learns the top from D, L, the datum and the typed brim, if any.",
   };
   function renderSetup() {
     const drain = setupDir === "drain";
@@ -1441,10 +1446,12 @@
       if (!(num("sB-L") > 0)) throw new Error("Enter the length estimate L of tank B.");
       if (dipA == null) throw new Error("Enter tank A's first reading.");
       if (dipB == null) throw new Error("Enter tank B's first reading.");
-      const shared = Object.assign({ pourUnit, sigmaRead: n.sigmaRead, pourRel: n.pourRel, pourAbs: n.pourAbs, h0pm: n.h0pm, brimPm: n.brimPm, suctionFloor: n.suctionFloor }, plan);
+      const shared = Object.assign({ pourUnit, sigmaRead: n.sigmaRead, pourRel: n.pourRel, pourAbs: n.pourAbs, h0pm: n.h0pm, suctionFloor: n.suctionFloor }, plan);
       const s = new C.TransferSession(
-        Object.assign({ tank: $("s-tank").value.trim() || "tank", D: num("s-D"), Dpm: num("s-Dpm") || 200, Lest: num("s-L"), Lpm: num("s-Lpm"), nominal: nomA }, shared),
-        Object.assign({ tank: $("sB-tank").value.trim() || "tank-b", D: num("sB-D"), Dpm: num("sB-Dpm") || 200, Lest: num("sB-L"), Lpm: num("sB-Lpm"), nominal: nomB }, shared));
+        Object.assign({ tank: $("s-tank").value.trim() || "tank", D: num("s-D"), Dpm: num("s-Dpm") || 200, Lest: num("s-L"), Lpm: num("s-Lpm"),
+          brim: brimField("s-brim"), brimPm: brimPmField("s-brimpm"), nominal: nomA }, shared),
+        Object.assign({ tank: $("sB-tank").value.trim() || "tank-b", D: num("sB-D"), Dpm: num("sB-Dpm") || 200, Lest: num("sB-L"), Lpm: num("sB-Lpm"),
+          brim: brimField("sB-brim"), brimPm: brimPmField("sB-brimpm"), nominal: nomB }, shared));
       s.start($("s-step").value.trim() || "?", dipA, $("sB-step").value.trim() || "?", dipB, "", Date.now(), { at: setupAt });
       s.out.levels[0].pourTime = null;
       s.in.levels[0].pourTime = null;
@@ -1458,7 +1465,8 @@
       tank: $("s-tank").value.trim() || "tank",
       D: num("s-D"), Dpm: num("s-Dpm") || 200, Lest: num("s-L"), Lpm: num("s-Lpm"),
       pourUnit, sigmaRead: n.sigmaRead,
-      pourRel: n.pourRel, pourAbs: n.pourAbs, h0pm: n.h0pm, brimPm: n.brimPm, suctionFloor: n.suctionFloor,
+      pourRel: n.pourRel, pourAbs: n.pourAbs, h0pm: n.h0pm, suctionFloor: n.suctionFloor,
+      brim: brimField("s-brim"), brimPm: brimPmField("s-brimpm"),
       direction: setupDir, nominal: nomA,
     }, plan);
     if (!(cfg.D > 0)) throw new Error("Enter the diameter estimate D.");
@@ -1959,8 +1967,8 @@
       : G ? [
       ["level", `${f(G.H)} mm (row ${G.row}, ${G.n > 1 ? "2 readings" : "1 reading"})${G.neck ? " · in the neck" : ""}`],
       ["liquid (running shell)", `${f(C.volume(G.H, p), 0)} L of ${f(st.capacity, 0)} L`],
-      drain ? ["brim", `≈ ${f(adv.brim, 0)} ± ${f(2 * adv.brimSd, 0)} mm${S.cfg.brimStart != null ? " (neck-entrance reading " + f(S.cfg.brimStart) + " mm)" : ""}`]
-        : ["brim", `≈ ${f(adv.brim, 0)} ± ${f(2 * adv.brimSd, 0)} mm · ${f(adv.toBrim, 0)} mm to go`],
+      drain ? ["brim", `≈ ${f(adv.brim, 0)} ± ${f(2 * adv.brimSd, 0)} mm${brimNote(S)}`]
+        : ["brim", `≈ ${f(adv.brim, 0)} ± ${f(2 * adv.brimSd, 0)} mm${brimNote(S)} · ${f(adv.toBrim, 0)} mm to go`],
       drain ? suctionRow(adv) : null,
       ["slope", `${f(adv.slope, 2)} L/mm`],
       planRow(),
@@ -2031,8 +2039,23 @@
     return ["batch plan", `${st.poured} of ${st.total} batches poured` + (st.nominal ? ` · nominal ${f(st.nominal, 0)} L` : "")];
   }
 
+  /**
+   * Where the brim prior comes from, after the brim of the running shell:
+   * the start reading at the brim (a drain), else the typed brim.  A typed
+   * brim that disagrees with the start reading says so; the start reading
+   * stays in the fit.
+   */
+  function brimNote(sess) {
+    const c = sess.cfg;
+    if (c.brimStart != null) {
+      const k = sess.brimConflict();
+      return ` (start reading ${f(c.brimStart)} mm)` + (k ? ` · typed ${f(c.brim)} mm differs by ${f(Math.abs(k.diff))} mm` : "");
+    }
+    return c.brim != null ? ` (typed ${f(c.brim)} mm)` : "";
+  }
+
   /** One tank's block in the transfer Now card. */
-  function tankKv(G, adv, st, role) {
+  function tankKv(G, adv, st, role, sess) {
     if (!G || !adv) return "";
     if (simple()) return `<dt>level</dt><dd>${f(G.H)} mm${G.neck ? " · in the neck" : ""}</dd>`;
     const p = st.fit.p;
@@ -2042,7 +2065,7 @@
     ];
     rows.push(role === "pump out"
       ? suctionRow(adv)
-      : ["brim", `≈ ${f(adv.brim, 0)} ± ${f(2 * adv.brimSd, 0)} mm · ${f(adv.toBrim, 0)} mm to go`]);
+      : ["brim", `≈ ${f(adv.brim, 0)} ± ${f(2 * adv.brimSd, 0)} mm${brimNote(sess)} · ${f(adv.toBrim, 0)} mm to go`]);
     rows.push(["slope", `${f(adv.slope, 2)} L/mm`]);
     return rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
   }
@@ -2077,8 +2100,8 @@
 
     // The heading spans both columns: no empty <dd> after it, or the pairs
     // below shift one row and the right column rides high.
-    $("now-kv").innerHTML = `<dt class="hd">${esc(nameO)} — pump out${cur("out")}</dt>` + tankKv(GO, adv && adv.out, stO, "pump out")
-      + `<dt class="hd">${esc(nameI)} — pour in${cur("in")}</dt>` + tankKv(GI, adv && adv.in, stI, "pour in");
+    $("now-kv").innerHTML = `<dt class="hd">${esc(nameO)} — pump out${cur("out")}</dt>` + tankKv(GO, adv && adv.out, stO, "pump out", S.out)
+      + `<dt class="hd">${esc(nameI)} — pour in${cur("in")}</dt>` + tankKv(GI, adv && adv.in, stI, "pour in", S.in);
     $("now-advice").textContent = adv && !pend ? (simple() ? shortAdviceBatch(adv) : adv.warn) : "";
     const drifts = [];
     if (stO.intervals > 2) drifts.push(`${nameO} ${sg(stO.drift)} L (alarm beyond ±${f(stO.driftLimit, 0)} L)`);
@@ -2570,7 +2593,7 @@
   // timers need a session; the noise card also sets the next campaign.
   let settingsSig = "";
   function noiseDraft() {
-    return Object.assign({ sigmaRead: 0.4, pourRel: 0.005, pourAbs: 3, h0pm: 80, brimPm: 6, suctionFloor: 65 }, P.noise || {});
+    return Object.assign({ sigmaRead: 0.4, pourRel: 0.005, pourAbs: 3, h0pm: 80, suctionFloor: 65 }, P.noise || {});
   }
   function pct(x) { return String(Math.round(x * 1000) / 1000); }
   function renderSetupNoise() {
@@ -2581,8 +2604,8 @@
     const has = !!S;
     const n = has ? S.cfg : noiseDraft();
     return JSON.stringify([has,
-      has ? [S.cfg.tank, S.cfg.D, S.cfg.Dpm, S.cfg.Lest, S.cfg.Lpm, S.cfg.pourUnit] : null,
-      n.sigmaRead, n.pourRel, n.pourAbs, n.h0pm, n.brimPm, n.suctionFloor]);
+      has ? [S.cfg.tank, S.cfg.D, S.cfg.Dpm, S.cfg.Lest, S.cfg.Lpm, S.cfg.brim, S.cfg.brimPm, S.cfg.pourUnit] : null,
+      n.sigmaRead, n.pourRel, n.pourAbs, n.h0pm, n.suctionFloor]);
   }
   function renderSettings() {
     const has = !!S;
@@ -2600,12 +2623,13 @@
         // Blank means the 3 % default, so a corrected L takes a new default.
         $("set-Lpm").value = Math.abs(S.cfg.Lpm - 0.03 * S.cfg.Lest) < 1e-9 ? "" : String(S.cfg.Lpm);
         $("set-unit").value = S.cfg.pourUnit == null ? "" : String(S.cfg.pourUnit);
+        $("set-brim").value = S.cfg.brim == null ? "" : String(S.cfg.brim);
+        $("set-brimpm").value = String(S.cfg.brimPm);
       }
       $("set-sr").value = String(n.sigmaRead);
       $("set-rel").value = pct(100 * n.pourRel);
       $("set-abs").value = String(n.pourAbs);
       $("set-h0").value = String(n.h0pm);
-      $("set-brim").value = n.brimPm == null ? "" : String(n.brimPm);
       $("set-floor").value = n.suctionFloor == null ? "" : String(n.suctionFloor);
     }
     if (has) {
@@ -2613,12 +2637,12 @@
       if (isTransfer()) {
         const L0 = S.out.levels[0];
         $("set-dir").textContent = `Direction: transfer — tank A pumps out, tank B pours in. Fixed at the start.`
-          + ` Tank A starts ${L0 && L0.entrance ? "at the neck entrance (brim B = " + f(S.out.cfg.brimStart) + " mm)" : L0 && L0.neck ? "in the neck" : "in the shell"}.`
+          + ` Tank A starts ${L0 && L0.entrance ? "at the brim (brim B = " + f(S.out.cfg.brimStart) + " mm)" : L0 && L0.neck ? "in the neck" : "in the shell"}.`
           + " This card edits the tank named above; the noise, the cans and the timers are shared.";
       } else {
         const L0 = S.levels[0];
         $("set-dir").textContent = isDrain()
-          ? `Direction: drain (pump out), fixed at the start. First level: ${L0 && L0.entrance ? "at the neck entrance (brim B = " + f(S.cfg.brimStart) + " mm)" : L0 && L0.neck ? "in the neck" : "in the shell"}.`
+          ? `Direction: drain (pump out), fixed at the start. First level: ${L0 && L0.entrance ? "at the brim (brim B = " + f(S.cfg.brimStart) + " mm)" : L0 && L0.neck ? "in the neck" : "in the shell"}.`
           : "Direction: fill (pour in), fixed at the start.";
       }
       // The batch plan is declared before the first pour: shown, not edited.
@@ -2636,15 +2660,28 @@
       : "These apply to the next campaign. They stay on this device.";
     if (has) renderTimers();
   }
+  /** A brim reading field: blank = none (the running shell gives the brim). */
+  function brimField(id) {
+    const v = num(id);
+    if (v == null) return null;
+    if (!(v > 0)) throw new Error("Enter the brim reading, more than 0 mm, or leave it blank.");
+    return v;
+  }
+  /** The ± of a brim reading field: blank = 6 mm. */
+  function brimPmField(id) {
+    const v = num(id);
+    if (v == null) return 6;
+    if (!(v > 0)) throw new Error("Enter the brim limit ±, more than 0 mm, or leave it blank for 6 mm.");
+    return v;
+  }
   function readNoise() {
-    const sr = num("set-sr"), rel = num("set-rel"), abs = num("set-abs"), h0 = num("set-h0"), bp = num("set-brim"), fl = num("set-floor");
+    const sr = num("set-sr"), rel = num("set-rel"), abs = num("set-abs"), h0 = num("set-h0"), fl = num("set-floor");
     if (!(sr > 0)) throw new Error("Enter the reading repeatability σ, more than 0 mm.");
     if (rel == null || !(rel >= 0)) throw new Error("Enter the pour noise in %, 0 or more.");
     if (abs == null || !(abs >= 0)) throw new Error("Enter the fixed pour noise in L, 0 or more.");
     if (!(h0 > 0)) throw new Error("Enter the datum limit ±, more than 0 mm.");
-    if (bp != null && !(bp > 0)) throw new Error("Enter the brim limit ±, more than 0 mm, or leave it blank for 6 mm.");
     if (fl != null && !(fl >= 0)) throw new Error("Enter the suction floor, 0 mm or more, or leave it blank for 65 mm.");
-    return { sigmaRead: sr, pourRel: rel / 100, pourAbs: abs, h0pm: h0, brimPm: bp == null ? 6 : bp, suctionFloor: fl == null ? 65 : fl };
+    return { sigmaRead: sr, pourRel: rel / 100, pourAbs: abs, h0pm: h0, suctionFloor: fl == null ? 65 : fl };
   }
   $("set-noise-save").addEventListener("click", guard("set-noise-err", () => {
     $("set-noise-msg").textContent = "";
@@ -2668,6 +2705,7 @@
       tank: $("set-tank").value.trim(),
       D: num("set-D"), Dpm: num("set-Dpm"),
       Lest: num("set-L"), Lpm: num("set-Lpm"), pourUnit: num("set-unit"),
+      brim: brimField("set-brim"), brimPm: brimPmField("set-brimpm"),
     });
     save(); settingsSig = settingsSignature();
     $("set-msg").textContent = "Saved. The running shell is refitted from the accepted levels.";
@@ -2688,7 +2726,9 @@
     P.nowOpen = $("now-card").open;
     localStorage.setItem(PREFS, JSON.stringify(P));
   });
-  P.noise = Object.assign({ sigmaRead: 0.4, pourRel: 0.005, pourAbs: 3, h0pm: 80, brimPm: 6, suctionFloor: 65 }, P.noise || {});
+  P.noise = Object.assign({ sigmaRead: 0.4, pourRel: 0.005, pourAbs: 3, h0pm: 80, suctionFloor: 65 }, P.noise || {});
+  // The brim ± was a noise setting; it is now each campaign's own field.
+  delete P.noise.brimPm;
   let timersSig = "", lastEta = 0;
   function saveTimer() { localStorage.setItem(TIMER, JSON.stringify(T)); }
   function clearTimers() { T = {}; localStorage.removeItem(TIMER); stopAlarm(); releaseWake(); stopPourAnim(); }

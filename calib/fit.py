@@ -65,6 +65,15 @@ class FitResult:
             return None
         return float(math.sqrt(max(self.cov[i, i], 0.0)))
 
+    def brim_sigma(self) -> float | None:
+        """1-sigma of the brim B = 2r + h0 from the covariance; None without one."""
+        if self.cov is None or "r" not in self.free:
+            return None
+        g = [2.0 if n == "r" else 1.0 if n == "h0" else 0.0 for n in self.free]
+        k = min(len(g), self.cov.shape[0])
+        var = sum(g[i] * g[j] * float(self.cov[i, j]) for i in range(k) for j in range(k))
+        return float(math.sqrt(max(var, 0.0)))
+
     def summary(self) -> str:
         s = self.shell
         return (
@@ -292,7 +301,7 @@ def fit_constrained(
     a bug, not a result.  ``h0_mode="locked"`` holds the datum at ``h0_value``.
 
     ``gap_pour=None`` drops the inequality and keeps ``G >= 0`` and the neck
-    equality: a drain that starts at the neck entrance reads the brim but
+    equality: a drain that starts at the brim reads the brim but
     has no neck drain (§3.11).
     """
     data = [iv for iv in intervals if iv.trusted]

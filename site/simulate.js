@@ -12,11 +12,11 @@
  *   alarms   ALARM verdicts at honest levels (after the second dip)
  *
  * --drain builds the campaign top-down (reverse strapping): the first level
- * is the neck-entrance reading (true brim + reading noise), the drain
+ * is the start reading at the brim (true brim + reading noise), the drain
  * schedule is the fill schedule mirrored (small steps near the top, large in
  * the middle, small near the bottom), and the campaign stops above the
  * bottom.  --start shell treats the same first reading as a plain shell
- * start (no brim prior): the ablation for the neck-entrance start.
+ * start (no brim prior): the ablation for the start at the brim.
  */
 "use strict";
 const path = require("path");
@@ -42,7 +42,7 @@ function campaign(R, opt) {
   const cap = core.capacity(truth);
   let levels;
   if (opt.drain) {
-    // Start at the neck entrance: the true level is the brim itself.
+    // Start at the brim: the true level is the brim itself.
     let V = cap;
     const stop = 400 + 100 * R.u();                // stay above the bottom: the pump keeps suction
     levels = [{ step: "?", H: core.brim(truth) }];
@@ -124,7 +124,7 @@ function main(argv) {
     rows.push({ delta, caught: caught / runs, leaked: leak / runs, falseRedip: fr / hon, falseAlarm: al / hon, meanAbsDr: dr / runs, meanAbsDL: dL / runs });
   }
   if (a.json) { console.log(JSON.stringify({ opt, runs, rows }, null, 2)); return; }
-  console.log(`${opt.drain ? `DRAIN (start ${opt.at === "shell" ? "in the shell, no brim prior" : "at the neck entrance"})` : "FILL"}  runs ${runs}  sigmaRead ${opt.sigmaRead} mm  D ± ${opt.Dpm} mm  one slipped reading per run`);
+  console.log(`${opt.drain ? `DRAIN (start ${opt.at === "shell" ? "in the shell, no brim prior" : "at the brim"})` : "FILL"}  runs ${runs}  sigmaRead ${opt.sigmaRead} mm  D ± ${opt.Dpm} mm  one slipped reading per run`);
   console.log("slip mm  caught  kept >1.5 mm off  extra dips at honest levels  false ALARM  |dr| mm  |dL| mm");
   for (const r of rows) {
     console.log(`${String(r.delta).padStart(7)}  ${(100 * r.caught).toFixed(0).padStart(5)} %  ${(100 * r.leaked).toFixed(0).padStart(15)} %  ${(100 * r.falseRedip).toFixed(1).padStart(26)} %  ${(100 * r.falseAlarm).toFixed(2).padStart(9)} %  ${r.meanAbsDr.toFixed(1).padStart(7)}  ${r.meanAbsDL.toFixed(1).padStart(7)}`);

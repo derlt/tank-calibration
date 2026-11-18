@@ -117,7 +117,8 @@
    * ivs: [{H1, H2, s, n1, n2}]  (n = number of dips averaged at the level)
    * H1 is the lower level and H2 the upper one in both directions.
    * prior.B (optional): a brim reading B with its σ prior.sB, one more
-   * residual ((2r + h0) − B)/σB — the neck-entrance dip of a drain (§5.3a).
+   * residual ((2r + h0) − B)/σB — the start dip of a drain at the brim, or
+   * the brim reading the operator typed (§5.3a).
    */
   function fitShell(ivs, prior, cfg, start) {
     const pr = [prior.r, prior.L, prior.h0];
@@ -240,23 +241,32 @@
     learnN: 3,                  // intervals before a confirmed miss is an anomaly
     scalePrior: 4,              // pseudo-count for the noise scale estimate
     direction: "fill",          // "fill": pour in, level rises; "drain": pump out, level falls
-    brimPm: 6,                  // drain: the neck-entrance reading is the brim B ± this (2σ), mm
-    brimStart: null,            // drain: B, the adopted neck-entrance reading (set by the core)
+    brim: null,                 // the brim reading B typed by the operator (measured: a tape reading at the brim), mm
+    brimPm: 6,                  // the brim reading (typed, or the start reading of a drain) is B ± this (2σ), mm
+    brimStart: null,            // drain: B, the adopted start reading at the brim (set by the core)
     suctionFloor: 65,           // drain: the suction floor, a tape reading (as a dip), mm: the pump cannot draw below it
     canSizes: null,             // [200, 100, …]: the can sizes the team has, L (batch plan)
     nominal: null,              // nominal capacity of the tank, L (batch plan)
     plan: null,                 // [{count, size}, …]: batch groups in pour order (batch plan)
   };
 
-  /** Priors of the running fit (§10a.1); the brim prior only with a neck-entrance start. */
+  /**
+   * Priors of the running fit (§10a.1).  The brim prior B ± brimPm/2 comes
+   * from the start reading of a drain that starts at the brim; else from the
+   * brim reading the operator typed; else there is none.  Never both: the
+   * reading taken in this campaign wins.
+   */
   function makePrior(cfg) {
     const pr = {
       r: cfg.D / 2, sr: cfg.Dpm / 4,
       L: cfg.Lest, sL: cfg.Lpm / 2,
       h0: 0, sh0: cfg.h0pm / 2,
     };
-    if (cfg.brimStart != null && isFinite(cfg.brimStart) && cfg.brimPm > 0) {
-      pr.B = cfg.brimStart; pr.sB = cfg.brimPm / 2;
+    const B = cfg.brimStart != null && isFinite(cfg.brimStart) ? cfg.brimStart
+      : cfg.brim != null && isFinite(cfg.brim) ? cfg.brim : null;
+    if (B != null && cfg.brimPm > 0) {
+      pr.B = B; pr.sB = cfg.brimPm / 2;
+      pr.Bsource = cfg.brimStart != null && isFinite(cfg.brimStart) ? "start" : "typed";
     }
     return pr;
   }
@@ -277,6 +287,8 @@
     cfg.dir = cfg.direction === "drain" ? -1 : 1;
     if (!(cfg.brimPm > 0)) cfg.brimPm = DEFAULTS.brimPm;
     if (cfg.brimStart != null && !isFinite(cfg.brimStart)) cfg.brimStart = null;
+    if (cfg.brim === "" || cfg.brim == null || !(Number(cfg.brim) > 0)) cfg.brim = null;
+    else cfg.brim = Number(cfg.brim);
     if (cfg.suctionFloor == null || cfg.suctionFloor === "" || !(Number(cfg.suctionFloor) >= 0)) cfg.suctionFloor = DEFAULTS.suctionFloor;
     cfg.suctionFloor = Number(cfg.suctionFloor);
     cfg.canSizes = normalizeSizes(cfg.canSizes);
@@ -602,14 +614,30 @@
     return ivs;
   };
 
-  /** Drain: the adopted neck-entrance reading is the brim B (§5.3a); null otherwise. */
+  /**
+   * Drain: the adopted start reading at the brim is the brim B (§5.3a);
+   * null otherwise.  The prior follows it, else the typed brim.
+   */
   Session.prototype._syncBrim = function () {
     const cfg = this.cfg, L0 = this.levels[0];
     const B = cfg.dir < 0 && L0 && L0.entrance && L0.state === "start" && L0.H != null ? L0.H : null;
-    if (B !== cfg.brimStart || (B != null) !== (cfg.prior.B != null)) {
-      cfg.brimStart = B;
-      cfg.prior = makePrior(cfg);
-    }
+    cfg.brimStart = B;
+    const want = makePrior(cfg);
+    if (want.B !== cfg.prior.B || want.sB !== cfg.prior.sB) cfg.prior = want;
+  };
+
+  /**
+   * The typed brim and the start reading at the brim disagree: both are
+   * readings good to ± brimPm (2σ), so their difference is good to
+   * √2 · brimPm.  The start reading stays in the fit.  Null when they agree
+   * or when one of them is missing.
+   */
+  Session.prototype.brimConflict = function () {
+    const cfg = this.cfg;
+    if (cfg.brim == null || cfg.brimStart == null) return null;
+    const diff = cfg.brimStart - cfg.brim, limit = Math.SQRT2 * cfg.brimPm;
+    if (!(Math.abs(diff) > limit)) return null;
+    return { typed: cfg.brim, start: cfg.brimStart, diff, limit };
   };
 
   Session.prototype._refit = function () {
@@ -646,7 +674,7 @@
    * Start the campaign: first row of the raw file (heel or first pour).
    * opts.at (drain only) is where the first level stands:
    *   "entrance"  the neck was pumped down until the level just reaches the
-   *               shell crown: the reading is the brim B (recommended)
+   *               brim: the reading is the brim B (recommended)
    *   "neck"      the level is in the neck: vent-column height, not shell level
    *   "shell"     the level is in the shell, below the brim (default)
    */
@@ -657,7 +685,7 @@
     if (at !== "shell" && this.cfg.dir > 0) throw new Error("a start at the neck is for a drain campaign");
     const step = parseStep(stepText);
     const L = { row: 1, step, dips: [], state: "pending", from: null, note: note || "", tags: [], H: null, n: 0, start: true };
-    if (at === "entrance") { L.entrance = true; addTag(L, "at neck entrance"); }
+    if (at === "entrance") { L.entrance = true; addTag(L, "at brim"); }
     if (at === "neck") L.neck = true;
     this.levels.push(L);
     return this.dip(dip, time);
@@ -1183,7 +1211,13 @@
         advice: nextStep(cfg),
       });
       if (L.start && L.entrance) {
-        verdict.message += ` This is the brim B (the shell crown at the neck entrance): the running shell takes 2r + h0 = ${fmt(a.H, 1)} ± ${fmt(cfg.brimPm, 0)} mm (2σ).`;
+        verdict.message += ` This is the brim B: the running shell takes 2r + h0 = ${fmt(a.H, 1)} ± ${fmt(cfg.brimPm, 0)} mm (2σ).`;
+        // The typed brim, if any, must agree with the reading taken now.
+        const lim = Math.SQRT2 * cfg.brimPm;
+        if (cfg.brim != null && Math.abs(a.H - cfg.brim) > lim) {
+          verdict.message += ` It differs from the typed brim (${fmt(cfg.brim, 1)} mm) by ${fmt(Math.abs(a.H - cfg.brim), 1)} mm, more than ±${fmt(lim, 1)} mm. The page keeps this reading; check the typed brim.`;
+          verdict.brimConflict = true;
+        }
       }
       if (!L.start && L.step.kind !== "known" && this.fit) {
         const A = this.levels[L.from], p = this.fit.p, m = Math.max(slope(a.H, p), 1e-3);
@@ -1362,7 +1396,7 @@
     const next = {
       tank: cfg.tank, D: cfg.D, Dpm: cfg.Dpm, Lest: cfg.Lest, Lpm: cfg.Lpm,
       pourUnit: cfg.pourUnit, sigmaRead: cfg.sigmaRead, pourRel: cfg.pourRel,
-      pourAbs: cfg.pourAbs, h0pm: cfg.h0pm, brimPm: cfg.brimPm, suctionFloor: cfg.suctionFloor,
+      pourAbs: cfg.pourAbs, h0pm: cfg.h0pm, brim: cfg.brim, brimPm: cfg.brimPm, suctionFloor: cfg.suctionFloor,
     };
     if (has("direction") && o.direction != null && o.direction !== cfg.direction) {
       throw new Error("the direction (fill or drain) is fixed at the start of the campaign");
@@ -1409,6 +1443,11 @@
     if (has("h0pm")) {
       if (!(o.h0pm > 0)) throw new Error("the datum limit ± must be more than 0 mm");
       next.h0pm = o.h0pm;
+    }
+    if (has("brim")) {
+      if (o.brim == null || o.brim === "") next.brim = null;
+      else if (!(Number(o.brim) > 0)) throw new Error("the brim reading must be more than 0 mm");
+      else next.brim = Number(o.brim);
     }
     if (has("brimPm")) {
       if (o.brimPm == null || o.brimPm === "") next.brimPm = DEFAULTS.brimPm;
@@ -1912,9 +1951,12 @@
   /**
    * Raw file for calib init / calib fit (§3.9).  One row per level, adopted
    * reading.  A drain keeps the same three columns and positive volumes; row
-   * 1 carries "drain campaign" first, then "at neck entrance" or "neck
-   * level"; a neck level carries "neck level" and the first shell level
-   * after the neck "neck interval".
+   * 1 carries "drain campaign" first, then "at brim" or "neck level"; a
+   * neck level carries "neck level" and the first shell level after the
+   * neck "neck interval".  A typed brim goes on row 1 in both directions as
+   * "brim 2475.0 ± 6 mm": calib takes it as the declared brim (compared and
+   * reported, never enforced).  Older files said "at neck entrance" for
+   * "at brim"; calib reads both.
    */
   Session.prototype.toRawCsv = function () {
     const out = ["step_volume,measured_height,note"];
@@ -1924,10 +1966,11 @@
       const bits = [];
       if (drain) {
         if (L.start) bits.push("drain campaign");
-        if (L.entrance) bits.push("at neck entrance");
+        if (L.entrance) bits.push("at brim");
         if (L.neck) bits.push("neck level");
         else if (L.from != null && L.from >= 0 && this.levels[L.from].neck) bits.push("neck interval");
       }
+      if (L.start && this.cfg.brim != null) bits.push(`brim ${fmt(this.cfg.brim, 1)} ± ${fmt(this.cfg.brimPm, 1)} mm`);
       if (L.dips.length > 1) bits.push("dips " + L.dips.map((d) => fmt(d, 1)).join("/"));
       const tm = levelTimes(L);
       if (tm) bits.push(tm);
@@ -1944,7 +1987,7 @@
         bits.push(`cans ${spec} L` + (L.cans.partial ? (drain ? " pump lost suction: last can part" : " last can part") : "")
           + (ts.length ? ` ${clock(ts[0])}-${clock(ts[ts.length - 1])}` : ""));
       }
-      if (L.tags) for (const t of L.tags) if (!(drain && L.entrance && t === "at neck entrance")) bits.push(t);
+      if (L.tags) for (const t of L.tags) if (!(drain && L.entrance && (t === "at brim" || t === "at neck entrance"))) bits.push(t);
       if (L.note) bits.push(L.note);
       const note = bits.join("; ").replace(/[",\r\n]/g, " ");
       out.push(`${L.step.text},${round(L.H, 2)},${note}`);
@@ -2201,8 +2244,9 @@
     if (has("direction")) throw new Error("the direction (fill or drain) is fixed at the start of the campaign");
     const pick = (keys) => { const x = {}; for (const k of keys) if (has(k)) x[k] = o[k]; return x; };
     // The suction floor is tank A's (the pump draws from A); B keeps it unused.
-    const shared = pick(["pourUnit", "sigmaRead", "pourRel", "pourAbs", "h0pm", "brimPm", "suctionFloor"]);
-    const geo = pick(["tank", "D", "Dpm", "Lest", "Lpm"]);
+    // Each tank has its own brim reading and its ±.
+    const shared = pick(["pourUnit", "sigmaRead", "pourRel", "pourAbs", "h0pm", "suctionFloor"]);
+    const geo = pick(["tank", "D", "Dpm", "Lest", "Lpm", "brim", "brimPm"]);
     if (!Object.keys(shared).length && !Object.keys(geo).length) return this.cfg;
     // A bad field must change nothing on either tank: one Session.setCampaign
     // checks before it changes, but two saves in a row do not.  Keep each cfg
@@ -2446,7 +2490,7 @@
    * recorded reading again: the answer a correct reading gives.
    * A drain (config.direction = "drain") takes opts.neckRows (a Set of
    * 1-based rows that are neck levels) and opts.neckEntrance (row 1 is the
-   * neck-entrance reading, the brim B).
+   * start reading at the brim, the brim B).
    */
   function replayRows(rows, config, opts) {
     const o = opts || {};

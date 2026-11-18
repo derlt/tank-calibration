@@ -27,9 +27,10 @@ Add `--interactive` to answer the questions. The inferred fields are:
 | `heel_row` | True when the first pour is far below the volume at the first dip. Always false for a drain. |
 | `direction` | `drain` when most heights fall (or the first note says `drain`), else `fill`. `--direction` overrides it. |
 | `brim.neck_drain` | Drain only: the row with a `neck interval` note, or the first drain from above the nominal brim into the shell. |
-| `brim.reading`, `brim.neck_equality` | Drain only: the first row height, when its note says `at neck entrance`. |
+| `brim.reading`, `brim.neck_equality` | Drain only: the first row height, when its note says `at brim` (older files: `at neck entrance`). |
+| `brim.declared`, `brim.declared_pm` | A row 1 note `brim 1795.0 ± 6.0 mm`: the brim reading typed on the site page. |
 
-`brim.reading` is not inferred. Leave it out and the fit refines the brim from
+`brim.reading` is not inferred for a fill. Leave it out and the fit refines the brim from
 the shell. The command prints a warning for unknown pours, a height that does
 not rise, a repeated height, and a dip above the nominal brim.
 
@@ -174,11 +175,13 @@ per step.
 
 | Field | Type | Default | Unit | Meaning |
 |---|---|---|---|---|
-| `reading` | number | none | mm | Tape reading at the shell crown. If absent, the fit uses `h0 + 2r`. |
+| `reading` | number | none | mm | Tape reading at the brim, dipped in this campaign. If absent, the fit uses `h0 + 2r`. |
 | `overflow_pour` | number | none | L | The pour that overflowed. The fit enforces `G <= P - vent_volume`. |
 | `neck_drain` | number | none | L | Drain only, alias of `overflow_pour`: the litres pumped from a neck reading to the first level in the shell. The same inequality holds. |
 | `vent_volume` | number | `0.0` | L | Liquid that went into the vent. |
-| `neck_equality` | boolean | `false` | — | Add `2r + h0 = B` when the last dip (fill) or the first dip (drain) reads the neck entrance. Without `overflow_pour` the equality is fitted alone. |
+| `declared` | number | none | mm | A brim reading from outside this campaign (typed on the site page). The first trust marks use it; the fit still refines the brim and reports `free fit − declared` with its z. Never enforced. |
+| `declared_pm` | number | none | mm | The ± (2σ) of `declared`. |
+| `neck_equality` | boolean | `false` | — | Add `2r + h0 = B` when the last dip (fill) or the first dip (drain) reads the brim. Without `overflow_pour` the equality is fitted alone. |
 
 ### `object_bands[]`
 
@@ -273,8 +276,8 @@ the first level: a number for a metered prefill, else `?`.
 }
 ```
 
-For a start at the neck entrance, replace `neck_drain` with
+For a start at the brim, replace `neck_drain` with
 `"reading": <first height>, "neck_equality": true`. `calib init` infers both
 from the notes that the site page writes (`neck level`, `neck interval`,
-`at neck entrance`). `examples/demo_drain.json` is a complete example.
+`at brim`; older files say `at neck entrance`). `examples/demo_drain.json` is a complete example.
 

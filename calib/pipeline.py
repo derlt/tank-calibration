@@ -52,6 +52,35 @@ def _band_with_displacement(bands: list[dict], intervals: list[Interval]) -> lis
     return out
 
 
+def _declared_check(cfg: Config, free) -> dict | None:
+    """Compare the free-fit brim with the declared brim (§5.3a).
+
+    A declared brim is a reading from outside the campaign (typed on the
+    site page): the fit never enforces it.  The difference and its z tell
+    whether the reading and the data agree.  Both spreads count: the fit's
+    own 1-sigma of 2r + h0 and the declared ± (2 sigma, so half of it).
+    """
+    if cfg.brim_declared is None:
+        return None
+    fit_b = float(free.shell.brim())
+    fit_sd = free.brim_sigma()
+    dec_sd = cfg.brim_declared_pm / 2.0 if cfg.brim_declared_pm is not None else None
+    parts = [s for s in (fit_sd, dec_sd) if s is not None]
+    sd = math.sqrt(sum(s * s for s in parts)) if parts else None
+    diff = fit_b - float(cfg.brim_declared)
+    z = diff / sd if sd else None
+    pm = f" ± {cfg.brim_declared_pm:g}" if cfg.brim_declared_pm is not None else ""
+    text = (
+        f"declared brim {cfg.brim_declared:.1f}{pm} mm: free fit {fit_b:.1f} mm "
+        f"({diff:+.1f} mm" + (f", z {z:+.1f}" if z is not None else "") + ")"
+    )
+    return {
+        "declared": float(cfg.brim_declared), "declared_pm": cfg.brim_declared_pm,
+        "fit": fit_b, "fit_sigma": fit_sd, "diff": diff, "sigma": sd, "z": z,
+        "agree": z is None or abs(z) <= 2.0, "text": text,
+    }
+
+
 def _resolve_overflow(
     cfg: Config,
     rows,
@@ -132,8 +161,13 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
     rows = apply_corrections(raw_rows, cfg.corrections)
     intervals = build_intervals(rows, cfg.sign)
 
-    brim = cfg.brim_reading if cfg.brim_reading is not None else (
-        cfg.h0_value + 2.0 * cfg.nominal_r
+    # The first trust marks: a brim read in this campaign, else the declared
+    # brim (a reading from outside the campaign), else the nominal shell.
+    # Without a reading the brim is refined from the free fit below.
+    brim = (
+        cfg.brim_reading if cfg.brim_reading is not None
+        else cfg.brim_declared if cfg.brim_declared is not None
+        else cfg.h0_value + 2.0 * cfg.nominal_r
     )
     mark_trusted(intervals, brim=brim, object_bands=cfg.object_bands, excluded_rows=cfg.excluded_interval_rows)
 
@@ -195,6 +229,9 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
         multistart=True,
     )
 
+    # -- declared brim (§5.3a) -----------------------------------------
+    declared = _declared_check(cfg, free)
+
     # -- constrained fit (§5.3a) --------------------------------------
     constraint = {
         "status": "not applicable",
@@ -210,7 +247,7 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
         cfg.overflow_pour is None and cfg.neck_equality and cfg.brim_reading is not None
     )
     if equality_only:
-        # A level read at the neck entrance is the brim B (§5.3a).  A drain
+        # A level read at the brim is the brim B (§5.3a).  A drain
         # that starts there has no neck drain, so the equality stands alone.
         constrained = fit_constrained(
             intervals, cfg.nominal,
@@ -500,6 +537,7 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
         r_sigma=(profile["hi"] - profile["lo"]) / 2.0,
         l_sigma=(profile_l["hi"] - profile_l["lo"]) / 2.0,
         direction=cfg.direction,
+        declared=declared["text"] if declared else None,
     )
 
     result = {
@@ -512,6 +550,7 @@ def run(config_path: str | Path, outdir: str | Path, *, make_charts: bool = True
         "huber": huber,
         "constrained": constrained,
         "constraint": constraint,
+        "declared_brim": declared,
         "profile": profile,
         "profile_L": profile_l,
         "lock": lock,

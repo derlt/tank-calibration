@@ -315,6 +315,7 @@ def shell_record(
     r_sigma: float | None = None,
     l_sigma: float | None = None,
     direction: str = "fill",
+    declared: str | None = None,
 ) -> str:
     s = fit.shell
     rs = r_sigma if r_sigma is not None else fit.param_sigma("r")
@@ -331,7 +332,8 @@ def shell_record(
         f"max liquid {max_liquid_l:.1f} L\n"
         f"  heel {heel_l:.1f} L ({heel_kind})    datum cause: {datum}\n"
         f"  brim constraint: {constraint}\n"
-        f"  RMSE {fit.rmse:.3f} L/step = {rmse_mm:.2f} mm-equiv    σh = {sigma_h:.2f} mm\n"
+        + (f"  {declared} — compared, not enforced\n" if declared else "")
+        + f"  RMSE {fit.rmse:.3f} L/step = {rmse_mm:.2f} mm-equiv    σh = {sigma_h:.2f} mm\n"
         f"  blocked volumes: {blocked:.1f} L    corrected dips: {corrected_dips}    "
         f"watch items: {watch_count}\n"
         f"  unknown {'drains' if direction == 'drain' else 'pours'}: {unknown_text}\n"

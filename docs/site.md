@@ -57,6 +57,8 @@ To keep the one file on a phone, use `site/calib_site.html`.
 | D is good to ± | Your honest limit. ±200 mm is acceptable: the data take over within a few pours. |
 | Length estimate L | Outside length minus the end plates. |
 | L is good to ± | Leave blank for ±3 %. |
+| Brim reading | Optional. A **measured** tape reading at the brim (where the neck meets the shell), for example from an earlier campaign with the same tape and datum plate. Blank: the running shell computes the brim from D, L and the datum. |
+| Brim is good to ± | The limit of that reading. Leave blank for ±6 mm. |
 | Pour unit | Can size or meter step, L. The pour advice rounds to it. |
 | Batch plan | Optional: the can sizes, the nominal capacity and the batches (see *The batch plan* below). Without a plan the page advises each pour for a rise of about 30 mm. |
 | Reading repeatability σ | **Settings → Noise and limits**. From a repeat study (below). Default 0.4 mm. |
@@ -66,6 +68,30 @@ To keep the one file on a phone, use `site/calib_site.html`.
 | First level | The heel volume (or `?`) and the first reading. A drain also asks where the first level stands. |
 
 Every ± means "the truth is almost surely inside" (2σ).
+
+### The brim reading
+
+The brim B is a tape reading: the dip at the top of the shell, where the neck
+starts. In the shell model B = 2r + h0, the diameter plus the datum offset.
+A typed brim does three things:
+
+1. **On the page.** The running shell takes 2r + h0 = B ± the typed limit, as
+   a prior, from the first level. The brim on the Now card, the near-brim
+   warning, the time to the brim, the batch plan and the tile's `≥` limit all
+   follow it. The Now card says where it came from: `(typed 1830.0 mm)`.
+2. **In the raw file.** Row 1 gets the note `brim 1830.0 ± 6.0 mm`.
+3. **In `calib fit`.** `calib init` reads the note as `brim.declared`. The fit
+   compares its own free brim with it and reports the difference, never
+   enforces it (§5.3a): a wrong number cannot bend the shell.
+
+A drain that starts at the brim measures the brim now. That start reading
+wins: it is the prior, and the CSV keeps both notes. If the two differ by
+more than √2 × the limit, the start verdict and the Now card say so. Check the
+typed brim.
+
+A wrong typed brim pulls the early predictions with it, because ±6 mm is a
+strong prior. Type it only when it was measured. Change or clear it in
+*Settings → This campaign*: the running shell refits.
 
 ### Repeat study: measure σ once per tape and team
 
@@ -82,8 +108,8 @@ uses, in four cards:
 | Card | Holds | When |
 |---|---|---|
 | Display | The language of the page (English or Tiếng Việt) and the theme (Auto, Light, Dark) | Any time |
-| This campaign | Tank name, D, L, pour unit and their ± | After the first level |
-| Noise and limits | Reading σ, pour noise, datum ±, brim ± at the neck entrance, suction floor (drain) | Before or during a campaign |
+| This campaign | Tank name, D, L, the brim reading, pour unit and their ± (in a transfer: the chosen tank) | After the first level |
+| Noise and limits | Reading σ, pour noise, datum ±, suction floor (drain) | Before or during a campaign |
 | Timers, alarm and device | Settle and dip times, fill and drain time per can, alarm lead, animation, sound, vibration, screen | After the first level |
 
 The noise card is also the draft for the next campaign: change it before you
@@ -441,7 +467,7 @@ A batch that passes a limit keeps its number, in the warning colour:
 
 | mark | when | the number |
 |---|---|---|
-| `≥ 1800.0` | a fill passes the brim | the shell crown (2r + h0): the water goes into the neck |
+| `≥ 1800.0` | a fill passes the brim | the brim of the running shell (2r + h0): the water goes into the neck |
 | `≤ 52.3` | a drain goes below the suction floor (*Settings*, 65 mm by default) | the predicted level: the pump cannot draw it |
 | `≤ 0.0` | a drain empties the shell | the floor of the shell |
 
@@ -639,11 +665,11 @@ same three columns, and the heights fall.
 
 | Choice | When | What the page does |
 |---|---|---|
-| **At the neck entrance** (recommended) | Pump the neck down until the level just reaches the shell crown. Then dip. | The reading is the brim `B` (§5.3a). The running shell takes `2r + h0 = B ± 6 mm` (2σ) from the first level. Change the ± under **Settings → Noise and limits**. |
+| **At the brim** (recommended) | Pump the neck down until the level just reaches the brim. Then dip. | The reading is the brim `B` (§5.3a). The running shell takes `2r + h0 = B ± 6 mm` (2σ) from the first level. The ± is the campaign's *Brim is good to ±* field. |
 | In the neck | The level is in the neck. | The reading is vent-column height, not shell level. Tick *level still in the neck* on each drain while the level stays in the neck. |
-| In the shell | The level is below the brim. | A plain start: only D, L and the datum teach the shape. |
+| In the shell | The level is below the brim. | A plain start: only D, L, the datum and the typed brim (if any) teach the shape. |
 
-Use the neck entrance when you can. The reading is the brim itself, so the
+Start at the brim when you can. The reading is the brim itself, so the
 running shell knows the top before the first interval. In the simulation
 below this catches more slips and gives fewer false alarms than a plain shell
 start.
@@ -715,7 +741,7 @@ reading per run is slipped by δ.
 | Drain, shell start | 4 mm | 99 % | 2 % | 3.1 % | 0.38 % | 1.2 mm | 8.5 mm |
 
 σr 0.4 mm, pours 0.5 % + 3 L, D ± 200 mm, seed 1. The brim prior of the
-neck-entrance start catches more 3 mm slips (91 % against 88 %) and gives
+start at the brim catches more 3 mm slips (91 % against 88 %) and gives
 fewer false alarms (0.16 % against 0.51 %): the early checks know the top.
 The final running shell is about the same with either start.
 
@@ -805,13 +831,13 @@ terminal:
 
 ```bash
 node site/replay.js examples/demo_raw.csv --D 1760 --L 2950 --unit 50 --overflow 22
-node site/replay.js TANK_raw.csv --D 2480 --L 5280 --drain --neck-entrance   # a drain
+node site/replay.js TANK_raw.csv --D 2480 --L 5280 --drain --at-brim   # a drain
 node site/simulate.js --runs 200       # detection rate for slips of 1–10 mm
 node site/simulate.js --runs 200 --drain
 ```
 
 A drain replay takes `--drain`, `--neck ROWS` (the rows that are neck levels,
-for example `1,2`) and `--neck-entrance` (row 1 is the brim reading). Without
+for example `1,2`) and `--at-brim` (row 1 is the brim reading; `--neck-entrance` still works). Without
 `--drain`, the replay finds a drain from falling heights and says so. The
 *Replay* tab has the same options.
 

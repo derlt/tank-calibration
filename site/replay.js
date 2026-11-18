@@ -4,11 +4,12 @@
  *   node site/replay.js RAW.csv --D 2480 --L 5280 [--Dpm 200] [--Lpm 150]
  *                       [--unit 100] [--sigma-read 0.4] [--json]
  *                       [--overflow ROW]                       (fill)
- *                       [--drain] [--neck ROWS] [--neck-entrance]  (drain)
+ *                       [--drain] [--neck ROWS] [--at-brim]  (drain)
  *
  * A drain campaign (reverse strapping) has falling heights.  The replay
  * detects it from the heights when --drain is not given, and says so.
- * --neck-entrance: row 1 is the neck-entrance reading, the brim B.
+ * --at-brim: row 1 is the start reading at the brim, the brim B
+ *   (--neck-entrance, the older name, still works).
  * --neck 1,2: rows that are neck levels (vent-column height).
  *
  * A raw file holds one reading per level.  When the check asks for a second
@@ -30,12 +31,12 @@ function main(argv) {
     const a = argv[i];
     if (a.startsWith("--")) {
       const k = a.slice(2);
-      if (k === "json" || k === "drain" || k === "neck-entrance") args[k] = true;
+      if (k === "json" || k === "drain" || k === "at-brim" || k === "neck-entrance") args[k] = true;
       else args[k] = argv[++i];
     } else args._.push(a);
   }
   if (!args._[0] || !args.D || !args.L) {
-    console.error("usage: node site/replay.js RAW.csv --D mm --L mm [--Dpm 200] [--Lpm mm] [--unit L] [--sigma-read 0.4] [--overflow ROW] [--drain] [--neck ROWS] [--neck-entrance] [--json]");
+    console.error("usage: node site/replay.js RAW.csv --D mm --L mm [--Dpm 200] [--Lpm mm] [--unit L] [--sigma-read 0.4] [--overflow ROW] [--drain] [--neck ROWS] [--at-brim] [--json]");
     process.exit(2);
   }
   const config = {
@@ -50,13 +51,14 @@ function main(argv) {
   const overflowRows = rowSet(args.overflow);
   const neckRows = rowSet(args.neck);
   const detected = core.detectDirection(rows);
-  const drain = !!args.drain || !!args["neck-entrance"] || neckRows.size > 0 || detected === "drain";
+  const atBrim = !!args["at-brim"] || !!args["neck-entrance"];
+  const drain = !!args.drain || atBrim || neckRows.size > 0 || detected === "drain";
   config.direction = drain ? "drain" : "fill";
   const why = args.drain ? "--drain" : detected === "drain" ? "detected: the heights fall" : "from the neck options";
   if (drain && overflowRows.size) { console.error("--overflow is for a fill campaign; a drain uses --neck"); process.exit(2); }
-  const r = replay(rows, config, drain ? { neckRows, neckEntrance: !!args["neck-entrance"] } : { overflowRows });
+  const r = replay(rows, config, drain ? { neckRows, neckEntrance: atBrim } : { overflowRows });
   if (args.json) { console.log(JSON.stringify({ direction: config.direction, out: r.out, status: r.status }, null, 2)); return; }
-  if (drain) console.log(`drain campaign (${why})${args["neck-entrance"] ? ", row 1 at the neck entrance" : ""}${neckRows.size ? `, neck rows ${[...neckRows].join(",")}` : ""}`);
+  if (drain) console.log(`drain campaign (${why})${atBrim ? ", row 1 at the brim" : ""}${neckRows.size ? `, neck rows ${[...neckRows].join(",")}` : ""}`);
   const f = (x, d = 1) => (x == null || !isFinite(x) ? "" : x.toFixed(d));
   console.log("row      H   step  dips  first     final        pred    ±2σ      e      z");
   for (const o of r.out) {

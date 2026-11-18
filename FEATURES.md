@@ -29,7 +29,7 @@ Every section and rule of [CALIBRATION_METHODOLOGY.md](CALIBRATION_METHODOLOGY.m
 | 3.4 Pour sizing | `FieldValidator.advisor` (30 mm target, 10σ floor, 100 mm ceiling) |
 | 3.9 Unknown cells | `data.parse_step` (`?`, `N+?`, `x1`) |
 | 3.10 Pour unit grid | `pour_unit`; `quantized.quantized_pour_search` |
-| 3.11 Reverse strapping (drain) | `direction` in the config; `Interval.direction`, `travel`, `h_lo`/`h_hi`, `predicted`; every module takes the sign; `fit.end_heel`; `scaffold.infer_neck_drain` / `infer_neck_entrance`; `fit_constrained(gap_pour=None)` for the neck-entrance equality; site `direction: "drain"`. Mirror test: `tests/test_drain.py` |
+| 3.11 Reverse strapping (drain) | `direction` in the config; `Interval.direction`, `travel`, `h_lo`/`h_hi`, `predicted`; every module takes the sign; `fit.end_heel`; `scaffold.infer_neck_drain` / `infer_neck_entrance`; `fit_constrained(gap_pour=None)` for the equality of a start at the brim; site `direction: "drain"`. Mirror test: `tests/test_drain.py` |
 | 3.12 Transfer strapping (two tanks) | site `TransferSession` (`site_core.js`): one can tally shared by a drain session and a fill session, one level per tank per batch, paired residuals that decompose a shared pour error from a transfer loss from a one-tank cause. Tests: `tests/test_site.py::TestSiteTransfer` |
 
 ## §4 Geometry
@@ -45,6 +45,7 @@ Every section and rule of [CALIBRATION_METHODOLOGY.md](CALIBRATION_METHODOLOGY.m
 | 5.2 TRF, multi-start, Huber | `fit_difference` (`loss="huber"`, `f_scale`) |
 | 5.3a Brim constraint | `fit_constrained` (SLSQP, penalty fallback); `overflow_direction` |
 | 5.3a Neck equality | `fit_constrained(neck=True)`; `brim.neck_equality` |
+| 5.3a Declared brim | `brim.declared` / `declared_pm` (`scaffold.infer_declared_brim` reads the row 1 note `brim X ± Y mm`); `pipeline._declared_check`, `FitResult.brim_sigma`: compared and reported, never enforced; site: `cfg.brim` / `brimPm` as the running-fit prior (`makePrior`), `Session.brimConflict`, setup and *Settings → This campaign* fields; `tests/test_brim.py`, `tests/test_site.py::TestSiteBrim` |
 | 5.3b Empty start | `fit.empty_start_check` |
 | 5.3c Monotonic levels | `data.mark_trusted` |
 | 5.4 Joint fit | `fit.fit_joint`; `calib joint` |

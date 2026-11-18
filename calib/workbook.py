@@ -189,7 +189,7 @@ def _settings(wb, result):
         "Pour noise rel": "from the can calibration, not a hope",
         "Pour unit (L)": "the grid pours live on (§3.10)",
         "h0 mode": "locked when the datum is physically set",
-        "Brim reading (mm)": "neck entrance = shell crown (§5.3a)",
+        "Brim reading (mm)": "dipped at the brim in this campaign, else the fit (§5.3a)",
     }
     for label, value in items:
         r = _row(ws, r, [label, value, notes.get(label, "")], formats=[None, "0.000", None])
@@ -336,6 +336,11 @@ def _fit_sheet(wb, result):
     r = _row(ws, r, ["Brim G <= P", c["status"], c["gap"], c["pour"], c["note"]],
              formats=[None, None, "0.0", "0.0", None])
     r = _row(ws, r, ["Neck equality 2r + h0 = B", c["neck_status"], "", "", c["neck_note"]])
+    d = result.get("declared_brim")
+    if d:
+        # A brim reading from outside the campaign: compared, never enforced.
+        r = _row(ws, r, ["Declared brim (compared)", "agrees" if d["agree"] else "differs",
+                         "", "", d["text"]])
 
     if result.get("constrained") is not None:
         r = _section(ws, "FREE VS CONSTRAINED (§5.3a)", r + 1)

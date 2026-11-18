@@ -183,7 +183,7 @@ for (const prefs of [{}, { mode: "simple" }]) {
   const rc = shape(fillRows.slice(0, 6)).map((r, i) => (i ? Object.assign(r, { cans: Math.round(r.step / 50) }) : r));
   rc[3].part = true;
   single(rc, { D: 1760, L: 2950, unit: 50, prefs });
-  // A drain from the neck entrance, with a neck level start.
+  // A drain from the brim, with a neck level start.
   const dr = core.readRawText(fs.readFileSync(path.join(ROOT, "examples", "demo_drain_raw.csv"), "utf8")).slice(0, 12).map((r) => ({ step: r.step, H: r.H }));
   dr[4].dips = [dr[4].H - 8, dr[4].H - 8];
   single(dr, { D: 2480, L: 5280, unit: 200, drain: true, at: "entrance", prefs });

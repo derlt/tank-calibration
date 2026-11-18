@@ -27,6 +27,10 @@ class Config:
     overflow_pour: float | None = None
     vent_volume: float = 0.0
     neck_equality: bool = False
+    # A brim reading from outside this campaign (typed on the site page):
+    # compared with the free-fit brim and reported, never enforced (§5.3a).
+    brim_declared: float | None = None
+    brim_declared_pm: float | None = None  # its ± (2 sigma), mm
     object_bands: list[dict] = field(default_factory=list)
     corrections: list[Correction] = field(default_factory=list)
     excluded_rows: set[int] = field(default_factory=set)
@@ -80,6 +84,10 @@ class Config:
                 raise ValueError("object band needs 'low' and 'high' (mm)")
             if band["high"] <= band["low"]:
                 raise ValueError("object band high must exceed low")
+        if self.brim_declared is not None and self.brim_declared <= 0:
+            raise ValueError("brim.declared must be positive (mm)")
+        if self.brim_declared_pm is not None and self.brim_declared_pm <= 0:
+            raise ValueError("brim.declared_pm must be positive (mm)")
         if any(int(r) < 1 for r in self.excluded_rows):
             raise ValueError("exclude rows are 1-based data rows")
 
@@ -167,6 +175,16 @@ def load_config(path: str | Path) -> Config:
         ),
         vent_volume=float(_get(brim, "vent_volume", default=0.0)),
         neck_equality=bool(_get(brim, "neck_equality", default=False)),
+        brim_declared=(
+            float(_get(brim, "declared"))
+            if _get(brim, "declared") is not None
+            else None
+        ),
+        brim_declared_pm=(
+            float(_get(brim, "declared_pm"))
+            if _get(brim, "declared_pm") is not None
+            else None
+        ),
         object_bands=list(_get(data, "object_bands", default=[]) or []),
         corrections=corrections,
         excluded_rows=excluded,
