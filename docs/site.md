@@ -183,11 +183,13 @@ explanation. **Simple** shows only what to do and the numbers to read:
   overflow, drift alarm);
 - a short settle line (`Settling: 3:20 left.`, `Settled: dip now.`) and the
   expected level in the dip panel (`Expect 572.8 ± 3.3 mm`);
+- the time to the brim (a drain: the suction floor) as one short line: the
+  way left now, after the batch, the time and the clock;
 - each verdict as its title and its action, without the numbers behind it.
 
 Simple mode hides the help paragraphs, the shell figures (liquid, brim,
-slope), the time-to-brim block, the batch plan's note under the pour card's
-tally (a changed count still shows in its head line, `batch 5 of 9 (plan
+slope), the full time block (*To half* and its breakdown), the batch plan's
+note under the pour card's tally (a changed count still shows in its head line, `batch 5 of 9 (plan
 8)`) and the drift line until it alarms. The check
 is the same in both modes: only the text changes.
 
@@ -217,20 +219,51 @@ is the same in both modes: only the text changes.
 running fit and the note says so. *Undo last entry* removes the last reading,
 or the last pour when it has no reading.
 
-**The Now card previews the pour.** As you tap cans or enter litres, the Now
-card shows the level that pour must give, for example
+**The Now card previews the batch.** The line shows the level the batch must
+give, for example
 `After this pour (400 L): 486.0 mm ± 8.7 mm (2σ) · +86.0 mm rise · ≈ 1663 L
 · too wide to judge: expect two readings`. Use it to choose the pour size: a
 large pour has a wide band, and a band wider than 3 mm (2σ) means the check
-will ask for a second reading. A part can, an unknown pour and an overflow
-have no prediction. The line is empty while a level waits for its dip, and
-before the first can of a batch. The litres field clears after a pour, so a
-repeated manual pour needs the value again, or *Use advice*.
+will ask for a second reading.
+
+The line is there whenever a level is decided, and it is the same number as
+the tank tile, drawn from the same calculation:
+
+- with a batch plan, the end of the plan's batch, the litres the tile's
+  track counts down: `After the plan's batch (400 L, 200 L tapped so far)`;
+- before that plan, or without one, the tapped cans;
+- typed litres (*Enter litres instead*) replace the batch on both, and the
+  ticks *whole pour unknown*, *plus an unknown extra*, *part can* and
+  *reached the neck* give their reason on both;
+- with no can, no plan and no typed litres it says `pour to predict`, as the
+  tile does.
+
+Past the brim, below the suction floor or to a dry shell it keeps its number
+as a limit, marked as on the tile:
+`After this pour (400 L): ≥ 1800.0 mm · the brim · ≈ 96 L more than the gap:
+the pour reaches the neck` (a drain: `≤ 52.3 mm · below the suction floor
+(65 mm) · ≈ 80 L the pump cannot draw`). While the dip waits, the line is
+the expected dip: it shows for the first reading only and then hides, the
+blind repeat (§10a.6). The litres field clears after a pour, so a repeated
+manual pour needs the value again, or *Use advice*.
 
 This is the only prediction on the Now card: it does not predict an advised
 next pour, drain or batch. The advised size is the *Target* in the can tally.
 The Now card keeps the warnings: near the brim (halve the pour), near the
 bottom (a part can is fine), in the neck, and the drift alarm.
+
+**The way to the brim, and to the suction floor.** The Now card always shows
+how far the limit is, in height and in litres, from the last accepted dip
+*and* from the predicted level: a fill counts to the brim
+(`brim ≈ 1800 ± 6 mm (typed 1800.0 mm) · 412 mm · ≈ 1800 L to go · after this
+pour: 330 mm · ≈ 1400 L`), a drain to the suction floor
+(`suction floor 65 mm · ≈ 1735 mm to go · ≈ 7546 L to pump · after this
+drain: …`). A batch that passes the limit says so and counts the litres past
+it: `after this pour: reaches the brim · ≈ 96 L more than the gap`, or
+`after this drain: below the floor · ≈ 80 L the pump cannot draw`. In simple
+mode the time block becomes one short line for the same limit:
+`To brim: 412 mm · ≈ 1800 L · after this pour: 330 mm · ≈ 1400 L · ≈ 2 h 10 ·
+done ≈ 14:35`.
 
 **Fold the Now card.** Tap its title line to fold it or open it; the device
 keeps the choice. Folded, the line keeps the level and any warning in red,
@@ -567,7 +600,10 @@ The line also counts what is left to pour: the batches by volume and the
 cans by size, for example `31 batches: 400 + 30 × 200 L · 30 cans:
 30 × 200 L`. The estimate follows the running shell, so early in the
 campaign it can be off by several levels. With no trend and only one typed
-time, the estimate is a lower bound.
+time, the estimate is a lower bound. With no typed time and no trend at all,
+each can counts a fixed guess, fill 1:30 + drain 0:40, the same for every
+size: the line says *default time per can* is a rough guess. The fill alarm
+never takes that guess.
 
 **The suction floor (drain).** A pump cannot suck from below a certain
 height: under it the liquid stays in the tank — a dead region. The floor is
@@ -720,7 +756,8 @@ gives the same `δ` as a fill.
 
 The Now card shows the drain, for example
 `After this drain (400 L): 486.0 mm ± 8.7 mm (2σ) · −86.0 mm fall · ≈ 1663 L
-left`, and the time to half and to the suction floor. The charts and the Levels table
+left`, the way left to the suction floor now and after the drain, and the
+time to half and to the floor. The charts and the Levels table
 work for a falling level: the points run from right to left.
 
 ### Simulation

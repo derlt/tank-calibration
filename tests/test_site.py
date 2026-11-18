@@ -684,8 +684,10 @@ class TestSitePage(unittest.TestCase):
             "out.closed = el('now-pred').textContent;\n"
             "console.log(JSON.stringify(out));"
         )
-        self.assertEqual(got["pending"], "", "the first level has no prediction")
-        self.assertEqual(got["empty"], "", "no pour input, no line")
+        # A half-typed start level has no batch yet, and a decided start level
+        # has no can: both say pour to predict, as the tile does.
+        self.assertIn("pour to predict", got["pending"])
+        self.assertIn("pour to predict", got["empty"], "no plan and no can: the line asks for a pour")
         self.assertTrue(got["manual"].startswith("After this pour (250 L):"), got["manual"])
         self.assertIn("mm ±", got["manual"])
         self.assertIn("(2σ)", got["manual"])
@@ -699,10 +701,13 @@ class TestSitePage(unittest.TestCase):
         self.assertIn("no prediction", got["unknown"])
         self.assertIn("unknown extra", got["extra"])
         self.assertIn("overflow", got["over"])
-        self.assertIn("is more than the gap", got["overflow"])
+        self.assertTrue(got["overflow"].startswith("After this pour (99999 L):"), got["overflow"])
+        self.assertIn("≥ 1800.0 mm", got["overflow"], "past the brim: the limit, marked")
+        self.assertIn("more than the gap", got["overflow"])
         self.assertTrue(got["can"].startswith("After this pour (200 L):"), got["can"])
         self.assertIn("part can", got["part"])
-        self.assertEqual(got["closed"], "", "the line hides while the level waits for its dip")
+        self.assertTrue(got["closed"].startswith("After this pour (200 L):"), got["closed"])
+        self.assertIn("mm ±", got["closed"], "while the dip waits the line shows the expected dip")
 
     @unittest.skipUnless(NODE, "node is not installed")
     def test_page_now_line_agrees_with_the_check(self):
@@ -879,7 +884,10 @@ class TestSitePage(unittest.TestCase):
             "el('tm-settle').value = 'abc'; el('tm-save').click(); out.bad = el('tm-err').textContent;\n"
             "console.log(JSON.stringify(out));"
         )
-        self.assertIn("Set the fill time for 200 L", got["etaBefore"])
+        self.assertIn("2:10 per can (default fill 1:30 + drain 0:40", got["etaBefore"],
+                      "no typed time and no trend: a default per can, marked a rough guess")
+        self.assertIn("To half", got["etaBefore"])
+        self.assertIn("To brim", got["etaBefore"])
         self.assertIn("Set the fill time for 200 L", got["noTime"])
         self.assertEqual(got["liveErr"], "", "the message is not left on the hidden Live tab")
         self.assertTrue(got["opened"], "a missing fill time opens the timer settings")
@@ -3099,6 +3107,106 @@ class TestSiteTiles(unittest.TestCase):
             "plain": 'class="trk plain"' in html,
         }
 
+    def test_page_now_card_and_tile_share_the_prediction(self):
+        """One rule for both: the plan's batch, the typed litres and the ticks.
+
+        The Now card and the tile draw the same view (tileOne), so a typed
+        pour, a tick or a part can changes both, and the numbers agree.
+        """
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "const size = (i, v) => el('s-plan')._listeners.input[0]({ target: { dataset: { i: String(i) }, value: String(v) } });\n"
+            "const tilePred = () => /class=\"num pred\">([^<]*)</.exec(el('tiles').innerHTML)[1];\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1000'; el('s-L').value = '1528';\n"
+            "el('s-step').value = '?'; el('s-dip').value = '10'; el('s-unit').value = '200';\n"
+            "el('s-unit')._listeners.input[0]({});\n"
+            "el('s-nom').value = '1200'; el('s-nom')._listeners.input[0]({});\n"
+            "for (let k = 0; k < 3; k++) { el('s-plan-add').click(); size(k, 400); }\n"
+            "el('s-go').click();\n"
+            "el('d-val').value = '10'; el('d-go').click(); el('d-val').value = '10'; el('d-go').click();\n"
+            "out.zero = { tile: tilePred(), now: el('now-pred').textContent };\n"
+            "el('p-vol').value = '100'; el('p-vol')._listeners.input[0]({target: el('p-vol')});\n"
+            "out.typed = { tile: tilePred(), now: el('now-pred').textContent };\n"
+            "el('p-vol').value = ''; el('p-vol')._listeners.input[0]({target: el('p-vol')});\n"
+            "el('t-plus').click();\n"
+            "out.one = { tile: tilePred(), now: el('now-pred').textContent };\n"
+            "el('t-plus').click();\n"
+            "out.tapped = { tile: tilePred(), now: el('now-pred').textContent };\n"
+            "el('t-part').checked = true; el('t-part')._listeners.change[0]({target: el('t-part')});\n"
+            "out.part = { tile: el('tiles').innerHTML, now: el('now-pred').textContent };\n"
+            "el('t-part').checked = false; el('t-part')._listeners.change[0]({target: el('t-part')});\n"
+            "el('p-unknown').checked = true; el('p-go').click();\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["zero"]["tile"], "368.9", "the tile shows the plan's batch end")
+        self.assertIn("After the plan's batch (400 L, 0 L tapped so far): 368.9 mm", got["zero"]["now"])
+        self.assertEqual(got["one"]["tile"], "368.9", "the tile stays at the plan's batch end")
+        self.assertIn("After the plan's batch (400 L, 200 L tapped so far):", got["one"]["now"])
+        self.assertEqual(got["tapped"]["tile"], "368.9", "the tile stays at the batch end")
+        self.assertIn("After this pour (400 L):", got["tapped"]["now"],
+                      "the tapped cans are the batch: no plan label")
+        self.assertTrue(got["typed"]["now"].startswith("After this pour (100 L):"), got["typed"]["now"])
+        self.assertNotEqual(got["typed"]["tile"], "368.9", "typed litres replace the plan's batch on the tile too")
+        self.assertEqual(got["typed"]["now"].split(": ")[1].split(" mm")[0], got["typed"]["tile"])
+        self.assertIn("part can", got["part"]["now"])
+        self.assertIn("no prediction (a part can)", got["part"]["tile"], "the tile names the part can as no prediction")
+
+    def test_page_now_card_left_to_the_limit(self):
+        """The brim and suction floor rows: the way left now and after the batch."""
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "let p = stub.boot(page, corePath, store), el = p.el;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '1500'; el('s-unit').value = '200';\n"
+            "el('s-go').click(); el('d-val').value = '1500'; el('d-go').click(); el('d-val').value = '1500'; el('d-go').click();\n"
+            "out.fillKv = el('now-kv').innerHTML;\n"
+            "el('p-vol').value = '200'; el('p-vol')._listeners.input[0]({target: el('p-vol')});\n"
+            "out.fillKv2 = el('now-kv').innerHTML;\n"
+            "out.fillPred = el('now-pred').textContent;\n"
+            "el('p-vol').value = '99999'; el('p-vol')._listeners.input[0]({target: el('p-vol')});\n"
+            "out.pastBrim = { pred: el('now-pred').textContent, kv: el('now-kv').innerHTML };\n"
+            "el('p-vol').value = ''; el('p-vol')._listeners.input[0]({target: el('p-vol')});\n"
+            "el('t-plus').click();\n"
+            "// A drain: the suction floor instead of the brim.\n"
+            "const s2 = new Map(); const p2 = stub.boot(page, corePath, s2), e2 = p2.el;\n"
+            "e2('s-dir-drain').click();\n"
+            "e2('s-tank').value = 't2'; e2('s-D').value = '1800'; e2('s-L').value = '3000';\n"
+            "e2('s-dip').value = '1790'; e2('s-unit').value = '200'; e2('s-go').click();\n"
+            "e2('d-val').value = '1790'; e2('d-go').click(); e2('d-val').value = '1790'; e2('d-go').click();\n"
+            "e2('t-plus').click(); e2('t-plus').click();\n"
+            "out.drain = { kv: e2('now-kv').innerHTML, pred: e2('now-pred').textContent };\n"
+            "// Simple mode: one short line to the brim.\n"
+            "el('hdr-mode').click(); out.simple = el('now-eta').innerHTML;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertIn("<dt>brim</dt><dd>≈ 1800", got["fillKv"])
+        self.assertIn("mm · ≈", got["fillKv"])
+        self.assertIn("L to go", got["fillKv"], "a fill shows the height and the litres left")
+        self.assertIn("after this pour:", got["fillKv2"], "the row also counts from the predicted level")
+        self.assertIn("After this pour (200 L):", got["fillPred"])
+        self.assertIn("mm ±", got["fillPred"])
+        self.assertIn("rise", got["fillPred"])
+        self.assertIn("≥ 1800.0 mm · the brim", got["pastBrim"]["pred"])
+        self.assertIn("more than the gap", got["pastBrim"]["pred"])
+        self.assertIn("after this pour: reaches the brim", got["pastBrim"]["kv"])
+        self.assertIn("<dt>suction floor</dt><dd>65 mm", got["drain"]["kv"])
+        self.assertIn("L to pump", got["drain"]["kv"])
+        self.assertIn("after this drain:", got["drain"]["kv"])
+        self.assertIn("mm fall", got["drain"]["pred"])
+        self.assertIn("<b>To brim</b>:", got["simple"], "simple mode keeps one short line")
+        self.assertIn("mm · ≈", got["simple"])
+        self.assertIn("done ≈ <b>", got["simple"])
+        self.assertIn("rough guess", got["simple"], "the default time says it is a guess")
+
     def test_page_tiles_plan_and_no_plan(self):
         stub = (HERE / "tests" / "page_stub.js").as_posix()
         got = _node(
@@ -3310,6 +3418,79 @@ class TestSiteTiles(unittest.TestCase):
         self.assertLess(got["drain"][7]["to"], 65)
         self.assertGreater(got["drain"][6]["to"], 65)
         self.assertTrue(all(t["why"] is None and t["to"] is not None for t in got["drain"]))
+
+    def test_tile_view_pour_panel_input(self):
+        """Typed litres and the ticks reach the view the tile and the Now card share."""
+        got = _node(
+            "const f = new core.Session({D: 1800, Lest: 3000, direction: 'fill', pourUnit: 200});\n"
+            "f.start('?', 1000); f.dip(1000); f.dip(1000);\n"
+            "const out = { none: f.tileView() };\n"
+            "out.typed = f.tileView({ s: 100 });\n"
+            "out.part = f.tileView({ why: 'part' });\n"
+            "f.tap(1, 200);\n"
+            "out.tapped = f.tileView();\n"
+            "const d = new core.Session({D: 1800, Lest: 3000, direction: 'drain', pourUnit: 200});\n"
+            "d.start('?', 400); d.dip(400); d.dip(400);\n"
+            "out.drainLeft = d.tileView().left;\n"
+            "// A transfer shares the tally: both tanks label the plan's batch, or neither does.\n"
+            "const t = new core.TransferSession({D: 1800, Lest: 3000, direction: 'transfer', pourUnit: 200},\n"
+            "  {tank: 'B', D: 1800, Lest: 3000, direction: 'fill', pourUnit: 200});\n"
+            "t.start('?', 1800, '?', 400); t.dipBoth(1800, 400);\n"
+            "t.tap(1, 200);\n"
+            "out.transfer = t.tiles();\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["none"]["why"], "no-cans", "no plan and no can")
+        self.assertAlmostEqual(got["none"]["left"]["now"]["mm"], 800, places=6)
+        self.assertEqual(got["typed"]["s"], 100, "typed litres replace the batch")
+        self.assertLess(got["typed"]["to"], got["none"]["left"]["now"]["level"] + 1)
+        self.assertEqual(got["part"]["why"], "part")
+        self.assertIsNone(got["part"]["to"], "a part can has no prediction")
+        self.assertEqual(got["tapped"]["s"], 200, "the tally is the batch without a plan")
+        self.assertFalse(got["tapped"]["planned"])
+        self.assertIsNotNone(got["tapped"]["sd"], "the view carries the band §10a.2 shows")
+        self.assertAlmostEqual(got["tapped"]["left"]["after"]["mm"], 800 - (got["tapped"]["to"] - 1000), places=0)
+        self.assertEqual(got["transfer"]["out"]["planned"], got["transfer"]["in"]["planned"],
+                         "one shared tally: both tanks agree on the plan's batch")
+        self.assertFalse(got["transfer"]["out"]["planned"], "no plan: the tapped cans are the batch")
+        self.assertEqual(got["drainLeft"]["now"]["limit"], "floor", "a drain counts to the suction floor")
+        self.assertAlmostEqual(got["drainLeft"]["now"]["level"], 65, places=6)
+
+    def test_tile_view_left_past_the_limit(self):
+        """The litres past the brim or the floor, and the emptied left figures."""
+        got = _node(
+            "const f = new core.Session({D: 1800, Lest: 3000, direction: 'fill', pourUnit: 200});\n"
+            "f.start('?', 1780); f.dip(1780); f.dip(1780);\n"
+            "f.tap(1, 200);\n"
+            "const t = f.tileView();\n"
+            "const d = new core.Session({D: 1800, Lest: 3000, direction: 'drain', pourUnit: 50});\n"
+            "d.start('?', 200); d.dip(200); d.dip(200);\n"
+            "for (let k = 0; k < 10; k++) d.tap(1000 + k, 50);\n"
+            "console.log(JSON.stringify({ t, d: d.tileView() }));"
+        )
+        t = got["t"]
+        self.assertEqual((t["edge"], t["past"] is not None, t["beyond"] is not None), ("brim", True, True))
+        self.assertGreater(t["past"], 0)
+        self.assertGreater(t["beyond"], 0)
+        self.assertTrue(t["left"]["after"]["reached"], "past the brim the way left is 0")
+        self.assertEqual((t["left"]["after"]["mm"], t["left"]["after"]["L"]), (0, 0))
+        d = got["d"]
+        self.assertEqual(d["edge"], "dry")
+        self.assertGreater(d["beyond"], 0, "past the suction floor too")
+        self.assertGreater(d["left"]["now"]["L"], 0)
+
+    def test_cycle_default_time(self):
+        """No typed time and no trend: a fixed 1:30 + 0:40 per can, marked default."""
+        got = _node(
+            "const s = new core.Session({D: 1800, Lest: 3000, direction: 'fill'});\n"
+            "const d = s.cycleSecondsFor(200);\n"
+            "s.setTimers({ fillSeconds: { 200: 120 }, drainSeconds: { 200: 60 } });\n"
+            "const set = s.cycleSecondsFor(200);\n"
+            "console.log(JSON.stringify({ d, set }));"
+        )
+        self.assertEqual(got["d"], {"seconds": 130, "source": "default", "fill": 90, "drain": 40})
+        self.assertEqual(got["set"]["source"], "set", "a typed time wins over the default")
+        self.assertEqual(got["set"]["seconds"], 180)
 
     def test_tile_view_edge_while_the_dip_waits(self):
         """Batch done past the brim: the dip card has no number, the tile has the limit."""

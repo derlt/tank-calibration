@@ -33,6 +33,20 @@ All notable changes to this project are documented here. The format follows
   the brim, below the suction floor or to a dry shell keeps its number as a
   limit (`≥ 1800.0`, `≤ 52.3`) in the warning colour. While the live can
   state moves that tank's water, the arrow bobs and the wave flows.
+- On-site page: the **Now card's prediction is always there**, and it is the
+  same calculation as the tile's. It shows the plan's batch end (or the
+  tapped cans, or typed litres), the limit past the brim, the suction floor
+  or a dry shell (`≥ … · the brim · ≈ … L more than the gap`), and the
+  expected dip while the dip waits (first reading only). The ticks and typed
+  litres now reach the tile too. The brim and suction floor rows always
+  count the way left in mm and L, from the last dip and from the predicted
+  level; a batch past the limit counts the litres over it. Simple mode gets
+  one short line to the limit with the time and the clock. With no typed
+  time and no trend, the time estimate uses a marked default of 1:30 + 0:40
+  per can. `Session.tileView(input)` / `TransferSession.tiles(input)` take
+  the pour panel; the view carries the band, the limit, the litres past it
+  and the left figures. `Session.cycleSecondsFor` reports the default with
+  source `default` (`DEFAULT_CYCLE`).
 - On-site page: the time trend of the cans. With the fill timer running,
   *Start fill timer* to *+1 can* measures a can's fill time and *+1 can* to
   the next start its drain time; the trend is a weighted mean in which the

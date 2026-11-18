@@ -219,6 +219,12 @@
   }
 
   // ---------------------------------------------------------------- configuration
+  /**
+   * The time one can costs when the campaign has no typed time and no
+   * trend: fill 1:30 + drain 0:40, the same for every can size.  A rough
+   * guess for the time to the brim or the suction floor; the page marks it.
+   */
+  const DEFAULT_CYCLE = { fill: 90, drain: 40 };
   const DEFAULTS = {
     tank: "tank",
     D: null, Dpm: 200,          // diameter estimate and its ± (taken as 2σ)
@@ -830,9 +836,10 @@
   };
 
   /**
-   * One tank tile: the last accepted level, the predicted level at the end of
-   * the current batch, the track fraction and a reason when there is no
-   * prediction.  The page draws it; the rules stay here.
+   * One tank's prediction: the last accepted level, the predicted level at
+   * the end of the current batch, the track fraction and a reason when there
+   * is no prediction.  The tank tile and the Now card draw the same view, so
+   * they always agree.  The page draws it; the rules stay here.
    *   role: "in" (a fill) or "out" (a drain)
    *   dir:  "up" or "down"
    *   wait: a reading at the open level is not decided yet (a first dip
@@ -841,10 +848,25 @@
    *         (the drain empties the shell: `to` is its floor) or "floor"
    *         (the prediction is below the suction floor); null otherwise.
    *         The number is a limit, not a level.
-   *   why:  "first", "neck", "overflow", "unknown", "no-anchor",
-   *         "plan-complete", "no-cans" — null when a prediction exists
+   *   why:  "first", "neck", "overflow", "unknown", "extra", "part",
+   *         "to-neck", "no-anchor", "plan-complete", "no-cans" — null when a
+   *         prediction exists
+   *   s:    the litres of the prediction; sd: its 1σ, mm
+   *   pending: the prediction is the expected dip of the batch now waiting
+   *   planned: the litres are the plan's batch, more than the cans tapped
+   *   past: litres past the limit (edge only): more than the gap (brim),
+   *         more than the liquid left (dry), below the suction floor (floor)
+   *   beyond: litres past the campaign's limit (edge only): a fill the
+   *         brim, a drain the suction floor (also for a dry shell)
+   *   left: { now, after }: the way to the limit (a fill: the brim, a drain:
+   *         the suction floor) from the last accepted level and from the
+   *         prediction; each { limit, level, mm, L, reached }.  after is null
+   *         without a prediction.
+   *
+   * input is the pour panel, when no level waits: { s } typed litres (they
+   * replace the plan's batch), { why } a tick that leaves no prediction.
    */
-  function tileOne(sess, role, dir, target, frac) {
+  function tileOne(sess, role, dir, target, frac, input) {
     const gi = sess.lastGood();
     const G = gi >= 0 ? sess.levels[gi] : null;
     const cur = sess.current();
@@ -852,20 +874,23 @@
     const base = {
       name: sess.cfg.tank, role, dir, from: null, to: null, frac: null,
       wait: !!(cur && cur.state === "pending" && cur.dips && cur.dips.length > 0),
-      edge: null, why: null,
+      edge: null, why: null, s: null, sd: null, pending: false, planned: false, past: null, beyond: null,
+      left: { now: null, after: null },
     };
     if (!G || G.H == null) return Object.assign(base, { why: "first" });
     // The last decided reading can be the overflow row: vent-column height,
     // not a shell level, so lastGood() skips it.  It is still the level the
     // operator dipped, and the tile shows it with no prediction.
     if (cur && cur.state === "overflow" && cur.H != null) {
-      return Object.assign(base, { from: cur.H, why: "overflow" });
+      return Object.assign(base, { from: cur.H, why: "overflow", left: { now: leftOf(sess, cur.H), after: null } });
     }
     base.from = G.H;
+    base.left.now = leftOf(sess, G.H);
     // The batch is done and the dip waits: the prediction is the expected
     // dip, and the track is full.
     if (pend) {
       base.frac = 1;
+      base.pending = true;
       const e = sess.expectPending();
       if (!e) return Object.assign(base, { why: "no-anchor" });
       if (e.why === "the pour reaches the neck" || e.why === "the drain runs the tank dry") {
@@ -873,15 +898,54 @@
         // shows the limit, marked.
         const pr = sess._predict(pend, 1);
         if (!pr) return Object.assign(base, { why: "no-anchor" });
-        return Object.assign(base, { to: pr.H, edge: tileEdge(sess, pr) });
+        return withPrediction(sess, base, pr, pend.step.value);
       }
       if (e.why) return Object.assign(base, { why: whyCode(e.why) });
-      return Object.assign(base, { to: e.pr.H, edge: tileEdge(sess, e.pr) });
+      return withPrediction(sess, base, e.pr, pend.step.value);
     }
     if (G.neck) return Object.assign(base, { why: "neck" });
-    if (!(target > 0)) return Object.assign(base, { why: sess.cfg.plan ? "plan-complete" : "no-cans" });
-    const pr = sess.preview(base.from, target, G.n);
-    return Object.assign(base, { to: pr.H, frac, edge: tileEdge(sess, pr) });
+    if (input && input.why) return Object.assign(base, { why: input.why });
+    // Typed litres replace the batch; the track still counts the tapped cans.
+    const s = input && input.s > 0 ? input.s : target;
+    if (!(s > 0)) return Object.assign(base, { why: sess.cfg.plan ? "plan-complete" : "no-cans" });
+    const pr = sess.preview(base.from, s, G.n);
+    return Object.assign(withPrediction(sess, base, pr, s), {
+      frac, planned: !(input && input.s > 0) && s > sess.batchVolume() + 1e-9,
+    });
+  }
+
+  /** The view with a prediction: the level, its band, the limit and the way left. */
+  function withPrediction(sess, base, pr, s) {
+    const p = sess.fit.p, edge = tileEdge(sess, pr);
+    const V1 = volume(pr.anchor, p);
+    let past = null;
+    if (edge === "brim") past = V1 + s - capacity(p);
+    else if (edge === "dry") past = s - V1;
+    else if (edge === "floor") past = floorVolume(sess.cfg, p) - (V1 - s);
+    const after = edge ? Object.assign(leftOf(sess, pr.H), { mm: 0, L: 0, reached: true }) : leftOf(sess, pr.H);
+    // Past the limit of the campaign: a fill the brim, a drain the suction
+    // floor (a dry shell is past it too).
+    const beyond = sess.cfg.dir > 0 ? V1 + s - capacity(p) : floorVolume(sess.cfg, p) - (V1 - s);
+    return Object.assign(base, {
+      to: pr.H, edge, s, sd: pr.sd, past: past == null ? null : Math.max(0, past),
+      beyond: edge ? Math.max(0, beyond) : null,
+      left: { now: base.left.now, after },
+    });
+  }
+
+  /**
+   * The way from level H to the limit of the campaign: a fill to the brim
+   * (2r + h0 of the running shell), a drain to the suction floor.  mm and L
+   * are never below 0: reached says the level is at or past the limit.
+   */
+  function leftOf(sess, H) {
+    const p = sess.fit.p, cfg = sess.cfg;
+    if (cfg.dir > 0) {
+      const b = brim(p), mm = b - H, L = capacity(p) - volume(Math.min(H, b), p);
+      return { limit: "brim", level: b, mm: Math.max(0, mm), L: Math.max(0, L), reached: mm <= 0 || L <= 1e-6 };
+    }
+    const fl = cfg.suctionFloor, mm = H - fl, L = volume(H, p) - floorVolume(cfg, p);
+    return { limit: "floor", level: fl, mm: Math.max(0, mm), L: Math.max(0, L), reached: mm <= 0 || L <= 1e-6 };
   }
 
   /** The tile's mark for a prediction at a limit: brim, dry or the suction floor. */
@@ -902,8 +966,8 @@
     }[why] || "no-anchor";
   }
 
-  /** The tile of a single tank. */
-  Session.prototype.tileView = function () {
+  /** The tile (and the Now card's prediction) of a single tank; input: the pour panel (tileOne). */
+  Session.prototype.tileView = function (input) {
     const plan = this.planNow();
     const pb = plan && plan.batch ? plan.batch : null;
     const tapped = this.batchVolume();
@@ -911,7 +975,7 @@
     // past it, the end of the pour is the batch.
     const target = pb ? Math.max(pb.size, tapped) : tapped;
     const frac = pb && pb.size > 0 ? Math.min(1, tapped / pb.size) : null;
-    return tileOne(this, this.cfg.dir > 0 ? "in" : "out", this.cfg.dir > 0 ? "up" : "down", target, frac);
+    return tileOne(this, this.cfg.dir > 0 ? "in" : "out", this.cfg.dir > 0 ? "up" : "down", target, frac, input);
   };
 
   // ---- batch: several cans, then one dip (§3.10).  One tap per can, so the
@@ -1624,7 +1688,9 @@
     if (tr.gap) return { seconds: tr.gap.seconds, source: "taps", n: tr.gap.n };
     if (f) return { seconds: f.seconds, source: "fill", fill: f.seconds, fillSource: f.source };
     if (d) return { seconds: d.seconds, source: "drain", drain: d.seconds, drainSource: d.source };
-    return null;
+    // Nothing typed and nothing timed: a fixed guess per can, for the time
+    // estimate only.  The fill alarm never takes it (fillSecondsFor).
+    return { seconds: DEFAULT_CYCLE.fill + DEFAULT_CYCLE.drain, source: "default", fill: DEFAULT_CYCLE.fill, drain: DEFAULT_CYCLE.drain };
   };
 
   /**
@@ -2336,18 +2402,32 @@
   };
 
   /** The two tiles of a transfer: one shared batch, one level per tank. */
-  TransferSession.prototype.tiles = function () {
+  /**
+   * Both tiles of a transfer (and the Now card's predictions).  input is the
+   * pour panel: { s } typed litres for both tanks, { out: { why }, in: { why } }
+   * a tick for one tank, { why } a tick for both.
+   */
+  TransferSession.prototype.tiles = function (input) {
     const plan = this.planNow();
     const pb = plan && plan.batch ? plan.batch : null;
     const tapped = this.out.batchVolume();
     const target = pb ? Math.max(pb.size, tapped) : tapped;
     const frac = pb && pb.size > 0 ? Math.min(1, tapped / pb.size) : null;
-    return {
-      out: tileOne(this.out, "out", "down", target, frac),
-      in: tileOne(this.in, "in", "up", target, frac),
-      frac,
-    };
+    const a = tileOne(this.out, "out", "down", target, frac, tankInput(input, "out"));
+    const b = tileOne(this.in, "in", "up", target, frac, tankInput(input, "in"));
+    // The batch is shared: both tanks see the same tally, so both label the
+    // prediction the plan's batch, or neither does.
+    const planned = !(input && input.s > 0) && target > tapped + 1e-9;
+    a.planned = b.planned = planned;
+    return { out: a, in: b, frac };
   };
+
+  /** One tank's part of the transfer pour panel input. */
+  function tankInput(input, k) {
+    if (!input) return null;
+    const own = input[k] && input[k].why;
+    return { s: input.s, why: own || input.why || null };
+  }
 
   /** One transfer tag per level; a recompute replaces it. */
   function setTransferTag(L, text) {
@@ -2583,6 +2663,7 @@
   function sgn(x, d) { return (x >= 0 ? "+" : "−") + fmt(Math.abs(x), d); }
 
   const api = {
+    DEFAULT_CYCLE,
     area, volume, slope, capacity, brim, levelFor, fitShell, predictLevel, parseStep,
     resolveConfig, Session, TransferSession, DEFAULTS, adopt, canHint, NAMES, replayRows,
     readRawText, detectDirection, makePrior, levelTimes, clock,

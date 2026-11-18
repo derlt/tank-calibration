@@ -469,7 +469,7 @@
       <div class="kv" id="now-kv"></div>
       <p id="now-pred" class="pred"></p>
       <p id="now-advice" style="margin:0.6rem 0 0;font-weight:650"></p>
-      <div id="now-eta" class="eta vb"></div>
+      <div id="now-eta" class="eta"></div>
       <button class="secondary small hidden" id="eta-use"></button>
       <p id="now-drift" class="muted" style="margin:0.3rem 0 0"></p>
     </details>
@@ -1805,6 +1805,10 @@
     unknown: "an unknown pour",
     "no-anchor": "no anchor level",
     "plan-complete": "the plan is complete",
+    extra: "an unknown extra",
+    part: "a part can",
+    "to-neck": "the pour reaches the neck",
+    "still-neck": "in the neck",
   };
   const TILE_EDGE = {
     brim: "the batch reaches the brim",
@@ -1852,11 +1856,11 @@
     box.classList.remove("hidden");
     const readOnly = tab === "replay" || tab === "help";
     if (isTransfer()) {
-      const t = S.tiles();
+      const t = S.tiles(panelInput());
       box.innerHTML = tileHtml(t.out, "out", S.active === "out", readOnly)
         + tileHtml(t.in, "in", S.active === "in", readOnly);
     } else {
-      box.innerHTML = tileHtml(S.tileView(), "one", true, true);
+      box.innerHTML = tileHtml(S.tileView(panelInput()), "one", true, true);
     }
     tileLive(liveState(Date.now()));
     chromePad();
@@ -1963,13 +1967,14 @@
     const adv = G ? (G.neck ? S.advice(G.H) : S.adviceNext(G.H, G.n)) : null;
     const drain = isDrain();
     const sm = simple();
+    const views = { one: S.tileView(panelInput()) };
     $("now-kv").innerHTML = G && sm ? `<dt>level</dt><dd>${f(G.H)} mm${G.neck ? " · in the neck" : ""}</dd>`
       : G ? [
       ["level", `${f(G.H)} mm (row ${G.row}, ${G.n > 1 ? "2 readings" : "1 reading"})${G.neck ? " · in the neck" : ""}`],
       ["liquid (running shell)", `${f(C.volume(G.H, p), 0)} L of ${f(st.capacity, 0)} L`],
       drain ? ["brim", `≈ ${f(adv.brim, 0)} ± ${f(2 * adv.brimSd, 0)} mm${brimNote(S)}`]
-        : ["brim", `≈ ${f(adv.brim, 0)} ± ${f(2 * adv.brimSd, 0)} mm${brimNote(S)} · ${f(adv.toBrim, 0)} mm to go`],
-      drain ? suctionRow(adv) : null,
+        : brimRow(adv, views.one, S, batchWord()),
+      drain ? suctionRow(adv, views.one, batchWord()) : null,
       ["slope", `${f(adv.slope, 2)} L/mm`],
       planRow(),
     ].filter(Boolean).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("") : "";
@@ -1991,7 +1996,7 @@
     $("pour-card").classList.toggle("hidden", !!pend);
     $("dip-card").classList.toggle("hidden", !pend);
     renderTally(adv);
-    renderNowPrediction(adv);
+    renderNowPrediction(adv, views);
     if (pend) {
       const n = pend.dips.length;
       $("dip-title").textContent = n === 0 ? "2 · Dip" : `2 · Dip again (reading ${n + 1})`;
@@ -2027,11 +2032,6 @@
     $("a-undo").disabled = !L;
   }
 
-  /** The Now card's drain line: the suction floor, the way down to it, and the litres the pump can still draw. */
-  function suctionRow(adv) {
-    return ["suction floor", `${f(adv.suction, 0)} mm · ≈ ${f(adv.toSuction, 0)} mm to go · ≈ ${f(adv.aboveSuction, 0)} L to pump`];
-  }
-
   /** The Now card's plan line: the batches poured of the plan, and the nominal. */
   function planRow() {
     const st = S.planNow ? S.planNow() : null;
@@ -2055,7 +2055,7 @@
   }
 
   /** One tank's block in the transfer Now card. */
-  function tankKv(G, adv, st, role, sess) {
+  function tankKv(G, adv, st, role, sess, v) {
     if (!G || !adv) return "";
     if (simple()) return `<dt>level</dt><dd>${f(G.H)} mm${G.neck ? " · in the neck" : ""}</dd>`;
     const p = st.fit.p;
@@ -2063,9 +2063,7 @@
       ["level", `${f(G.H)} mm (row ${G.row}, ${G.n > 1 ? "2 readings" : "1 reading"})${G.neck ? " · in the neck" : ""}`],
       ["liquid (running shell)", `${f(C.volume(G.H, p), 0)} L of ${f(st.capacity, 0)} L`],
     ];
-    rows.push(role === "pump out"
-      ? suctionRow(adv)
-      : ["brim", `≈ ${f(adv.brim, 0)} ± ${f(2 * adv.brimSd, 0)} mm${brimNote(sess)} · ${f(adv.toBrim, 0)} mm to go`]);
+    rows.push(role === "pump out" ? suctionRow(adv, v, "batch") : brimRow(adv, v, sess, "batch"));
     rows.push(["slope", `${f(adv.slope, 2)} L/mm`]);
     return rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
   }
@@ -2100,8 +2098,9 @@
 
     // The heading spans both columns: no empty <dd> after it, or the pairs
     // below shift one row and the right column rides high.
-    $("now-kv").innerHTML = `<dt class="hd">${esc(nameO)} — pump out${cur("out")}</dt>` + tankKv(GO, adv && adv.out, stO, "pump out", S.out)
-      + `<dt class="hd">${esc(nameI)} — pour in${cur("in")}</dt>` + tankKv(GI, adv && adv.in, stI, "pour in", S.in);
+    const views = S.tiles(panelInput());
+    $("now-kv").innerHTML = `<dt class="hd">${esc(nameO)} — pump out${cur("out")}</dt>` + tankKv(GO, adv && adv.out, stO, "pump out", S.out, views.out)
+      + `<dt class="hd">${esc(nameI)} — pour in${cur("in")}</dt>` + tankKv(GI, adv && adv.in, stI, "pour in", S.in, views.in);
     $("now-advice").textContent = adv && !pend ? (simple() ? shortAdviceBatch(adv) : adv.warn) : "";
     const drifts = [];
     if (stO.intervals > 2) drifts.push(`${nameO} ${sg(stO.drift)} L (alarm beyond ±${f(stO.driftLimit, 0)} L)`);
@@ -2117,7 +2116,7 @@
     $("pour-card").classList.toggle("hidden", !!pend);
     $("dip-card").classList.toggle("hidden", !pend);
     renderTally(adv);
-    renderNowPrediction(adv);
+    renderNowPrediction(adv, views);
     // Two fields, one per tank: each says what it waits for, and a decided
     // tank's field is closed until "Take another reading" re-opens it.
     const curO = S.out.current(), curI = S.in.current();
@@ -2235,115 +2234,156 @@
     el.className = "pred";
   }
 
-  /** The pour now in the pour panel: a known volume, or why it has none. */
-  function pourInput() {
+  /**
+   * The pour panel as the prediction's input (tileOne in the core): typed
+   * litres, or a tick that leaves no prediction.  The tick and the typed
+   * litres win over the plan's batch and the tapped cans, on the Now card
+   * and on the tiles alike.  Null while a level waits for its dip.
+   */
+  function panelInput() {
+    if (!S || pending()) return null;
     const n = S.cans();
+    const o = {};
     if (n) {
-      if ($("t-part").checked) return { unknown: isTransfer() ? "the pump lost suction: the last can is a part can" : isDrain() ? "the pump lost suction: the last can is a part can" : "the last can is a part can" };
-      const s = S.batchVolume();
-      return s > 0 ? { s } : null;
+      if ($("t-part").checked) return { why: "part" };
+    } else {
+      const v = num("p-vol");
+      if ($("p-unknown").checked) return { why: "unknown" };
+      if (v > 0 && $("p-extra").checked) return { why: "extra" };
+      if (v > 0) o.s = v;
     }
-    const w = isTransfer() ? "batch" : isDrain() ? "drain" : "pour";
-    if ($("p-unknown").checked) return { unknown: `the ${w} is unknown` };
-    const v = num("p-vol");
-    if (!(v > 0)) return null;
-    if ($("p-extra").checked) return { unknown: `the ${w} has an unknown extra` };
-    return { s: v };
+    if (isTransfer()) {
+      if ($("p-neck").checked) o.out = { why: "still-neck" };
+      if ($("p-over").checked) o.in = { why: "to-neck" };
+    } else if ($("p-over").checked) o.why = isDrain() ? "still-neck" : "to-neck";
+    return o;
+  }
+
+  /** The word for one batch of the campaign. */
+  function batchWord() { return isTransfer() ? "batch" : isDrain() ? "drain" : "pour"; }
+
+  /** Why a view has no prediction, in words (the Now card). */
+  function nowWhy(v, w) {
+    const drain = v.role === "out";
+    return {
+      first: "the first level",
+      neck: drain ? "the level is in the neck now: the drain spans the neck" : "the level is in the neck",
+      "still-neck": "the level is still in the neck",
+      overflow: "an overflow reading",
+      unknown: `the ${w} is unknown`,
+      extra: `the ${w} has an unknown extra`,
+      part: drain ? "the pump lost suction: the last can is a part can" : "the last can is a part can",
+      "to-neck": "the liquid reached the neck",
+      "no-anchor": "no anchor level",
+      "plan-complete": "the plan is complete",
+    }[v.why] || "no anchor level";
+  }
+
+  /** A view's prediction hides while a typed reading waits: the repeat stays blind (§10a.6). */
+  function blind(v) { return v.pending && v.wait; }
+
+  /** The predicted level, or the limit after ≥ or ≤. */
+  function predNum(v) {
+    return v.edge ? `${v.edge === "brim" ? "≥" : "≤"} ${f(v.to)} mm` : `${f(v.to)} mm`;
+  }
+
+  /** The limit a marked prediction stops at, and the litres past it. */
+  function edgeText(v) {
+    if (v.edge === "brim") return `the brim · ≈ ${f(v.past, 0)} L more than the gap: the ${isTransfer() ? "batch" : "pour"} reaches the neck`;
+    if (v.edge === "dry") return `the tank runs dry · ≈ ${f(v.past, 0)} L more than the liquid left`;
+    return `below the suction floor (${f(S1(v).cfg.suctionFloor, 0)} mm) · ≈ ${f(v.past, 0)} L the pump cannot draw`;
+  }
+  /** The session a view belongs to. */
+  function S1(v) { return isTransfer() ? (v.role === "out" ? S.out : S.in) : S; }
+
+  /** "After this pour (400 L)", or the plan's batch with the cans tapped so far. */
+  function predLabel(v, w, tapped) {
+    if (v.planned) return `After the plan's batch (${f(v.s, 0)} L, ${f(tapped, 0)} L tapped so far)`;
+    return `After this ${w} (${f(v.s, 0)} L)`;
   }
 
   /**
-   * The Now card shows where the pour now in the pour panel must land
-   * (§10a.2).  It is a planning aid for the pour size, and it does show the
-   * expected level before the dip: that weakens the blind repeat (§10a.6).
-   * The page hides the check's own prediction while a level is pending, but
-   * it cannot hide a number already read.  An operator who wants the dip
-   * blind must not read this line before dipping.
+   * The Now card shows where the batch lands (§10a.2): the plan's batch, else
+   * the tapped cans; typed litres and the ticks win.  The same view as the
+   * tank tile, so both show the same number.  A batch past the brim, below
+   * the suction floor or to a dry shell keeps its number as a limit.  While
+   * the dip waits it is the expected dip, for the first reading only.  It
+   * does show the expected level before the dip: that weakens the blind
+   * repeat (§10a.6).  An operator who wants the dip blind must not read this
+   * line before dipping.
    */
-  function renderNowPrediction(adv) {
+  function renderNowPrediction(adv, views) {
     const box = $("now-pred");
-    if (isTransfer()) { renderTransferPrediction(box, adv); return; }
-    const gi = S.lastGood();
-    const q = !pending() && gi >= 0 ? pourInput() : null;
-    if (!q) { box.textContent = ""; box.className = "pred"; return; }
-    if (isDrain()) { renderDrainPrediction(box, q, S.levels[gi], adv); return; }
-    if (q.unknown) {
-      box.textContent = `After this pour: no prediction (${q.unknown}).`;
-      box.className = "pred muted";
-      return;
-    }
-    if ($("p-over").checked) {
-      box.textContent = "After this pour: overflow (the liquid reached the neck).";
-      box.className = "pred error";
-      return;
-    }
-    const G = S.levels[gi];
-    const pr = S.preview(G.H, q.s, G.n);
-    if (pr.overflow) {
-      box.textContent = `After this pour: overflow. ${f(q.s, 0)} L is more than the gap (≈ ${f(adv.gap, 0)} L).`;
-      box.className = "pred error";
-      return;
-    }
-    const sharp = 2 * pr.sd <= S.cfg.sharpMm;
-    if (simple()) { box.textContent = `After ${f(q.s, 0)} L: ${f(pr.H)} ± ${f(2 * pr.sd)} mm`; box.className = "pred"; return; }
-    box.textContent = `After this pour (${f(q.s, 0)} L): ${f(pr.H)} mm ± ${f(2 * pr.sd)} mm (2σ)`
-      + ` · ${sg(pr.H - G.H)} mm rise · ≈ ${f(C.volume(pr.H, S.fit.p), 0)} L`
-      + (sharp ? " · sharp: one reading may do" : " · too wide to judge: expect two readings");
-    box.className = "pred";
-  }
-
-  /** The drain line: the level falls, and the volume left replaces the gap. */
-  function renderDrainPrediction(box, q, G, adv) {
-    const why = q.unknown ? q.unknown
-      : $("p-over").checked ? "the level is still in the neck"
-        : G.neck ? "the level is in the neck now: the drain spans the neck" : null;
-    if (why) {
-      box.textContent = `After this drain: no prediction (${why}).`;
-      box.className = "pred muted";
-      return;
-    }
-    const pr = S.preview(G.H, q.s, G.n);
-    if (pr.empty) {
-      box.textContent = `After this drain: the tank runs dry. ${f(q.s, 0)} L is more than the liquid left (≈ ${f(adv.left, 0)} L).`;
-      box.className = "pred error";
-      return;
-    }
-    const sharp = 2 * pr.sd <= S.cfg.sharpMm;
-    if (simple()) { box.textContent = `After ${f(q.s, 0)} L: ${f(pr.H)} ± ${f(2 * pr.sd)} mm`; box.className = "pred"; return; }
-    box.textContent = `After this drain (${f(q.s, 0)} L): ${f(pr.H)} mm ± ${f(2 * pr.sd)} mm (2σ)`
-      + ` · ${sg(pr.H - G.H)} mm fall · ≈ ${f(C.volume(pr.H, S.fit.p), 0)} L left`
-      + (sharp ? " · sharp: one reading may do" : " · too wide to judge: expect two readings");
-    box.className = "pred";
+    if (isTransfer()) { renderTransferPrediction(box, views); return; }
+    const v = views.one;
+    const w = batchWord();
+    const set = (t, c) => { box.textContent = t; box.className = c ? `pred ${c}` : "pred"; };
+    // The first level waits for its pair: no batch to predict yet.
+    if (v.from == null || (pending() && !v.pending)) { set("", ""); return; }
+    if (blind(v)) { set(simple() ? "Blind repeat: no expected level." : "Expected level hidden for the repeat reading (blind repeat).", "muted"); return; }
+    if (v.why === "no-cans") { set(`After this ${w}: pour to predict (tap the cans or enter litres).`, "muted"); return; }
+    if (v.why === "to-neck") { set(`After this ${w}: overflow (the liquid reached the neck).`, "error"); return; }
+    if (v.why) { set(`After this ${w}: no prediction (${nowWhy(v, w)}).`, "muted"); return; }
+    if (simple()) { set(`After ${f(v.s, 0)} L: ` + (v.edge ? predNum(v) : `${f(v.to)} ± ${f(2 * v.sd)} mm`), v.edge ? "error" : ""); return; }
+    const head = `${predLabel(v, w, S.batchVolume())}: `;
+    if (v.edge) { set(head + `${predNum(v)} · ${edgeText(v)}`, "error"); return; }
+    const sharp = 2 * v.sd <= S.cfg.sharpMm;
+    set(head + `${f(v.to)} mm ± ${f(2 * v.sd)} mm (2σ)`
+      + ` · ${sg(v.to - v.from)} mm ${v.role === "in" ? "rise" : "fall"} · ≈ ${f(C.volume(v.to, S.fit.p), 0)} L${v.role === "in" ? "" : " left"}`
+      + (sharp ? " · sharp: one reading may do" : " · too wide to judge: expect two readings"), "");
   }
 
   /** The transfer line: the same batch must land in both tanks. */
-  function renderTransferPrediction(box, adv) {
-    const giO = S.out.lastGood(), giI = S.in.lastGood();
-    const q = !pending() && giO >= 0 && giI >= 0 && adv ? pourInput() : null;
-    if (!q) { box.textContent = ""; box.className = "pred"; return; }
-    if (q.unknown) {
-      box.textContent = `After this batch: no prediction (${q.unknown}).`;
-      box.className = "pred muted";
-      return;
-    }
-    const GO = S.out.levels[giO], GI = S.in.levels[giI];
-    const prO = S.out.preview(GO.H, q.s, GO.n);
-    const prI = S.in.preview(GI.H, q.s, GI.n);
-    const neckA = $("p-neck").checked;
-    const overB = $("p-over").checked || prI.overflow;
-    const aTxt = neckA ? "A: still in the neck, no prediction"
-      : prO.empty ? `A runs dry (${f(q.s, 0)} L > ≈ ${f(adv.out.left, 0)} L left): the pump loses suction — tick the part can`
-        : `A ${f(prO.H)} ± ${f(2 * prO.sd)} mm (−${f(GO.H - prO.H, 1)} mm fall)`;
-    const bTxt = overB ? `B overflows (${f(q.s, 0)} L > gap ≈ ${f(adv.in.gap, 0)} L): the final batch — tick "tank B reached the neck"`
-      : `B ${f(prI.H)} ± ${f(2 * prI.sd)} mm (+${f(prI.H - GI.H, 1)} mm rise)`;
-    const sharp = 2 * Math.max(prO.sd, prI.sd) <= S.cfg.sharpMm;
-    if (simple() && !neckA && !overB && !prO.empty) {
-      box.textContent = `After ${f(q.s, 0)} L: A ${f(prO.H)} ± ${f(2 * prO.sd)} mm · B ${f(prI.H)} ± ${f(2 * prI.sd)} mm`;
-      box.className = "pred";
-      return;
-    }
-    box.textContent = `After this batch (${f(q.s, 0)} L): ${aTxt} · ${bTxt}`
-      + (sharp ? " · sharp: one reading per tank may do" : " · too wide to judge: expect two readings per tank");
-    box.className = "pred" + (!neckA && !overB && (prO.empty || prI.overflow) ? " error" : "");
+  function renderTransferPrediction(box, views) {
+    const a = views.out, b = views.in;
+    const set = (t, c) => { box.textContent = t; box.className = c ? `pred ${c}` : "pred"; };
+    if (a.from == null || b.from == null || (pending() && !a.pending && !b.pending)) { set("", ""); return; }
+    if (a.why === "no-cans" && b.why === "no-cans") { set("After this batch: pour to predict (tap the cans or enter litres).", "muted"); return; }
+    if (a.why && a.why === b.why) { set(`After this batch: no prediction (${nowWhy(a, "batch")}).`, "muted"); return; }
+    const part = (v, k) => {
+      if (blind(v)) return `${k}: hidden for the repeat reading`;
+      if (v.why === "to-neck") return `${k} overflows: the final batch — tick "tank B reached the neck"`;
+      if (v.why) return `${k}: no prediction (${nowWhy(v, "batch")})`;
+      if (v.edge) return simple() ? `${k} ${predNum(v)}` : `${k} ${predNum(v)} · ${edgeText(v)}`
+        + (v.edge === "brim" ? "" : " — tick the part can");
+      const d = Math.abs(v.to - v.from);
+      return `${k} ${f(v.to)} ± ${f(2 * v.sd)} mm` + (simple() ? "" : v.role === "in" ? ` (+${f(d, 1)} mm rise)` : ` (−${f(d, 1)} mm fall)`);
+    };
+    const s = a.s != null ? a.s : b.s;
+    const head = simple() ? (s != null ? `After ${f(s, 0)} L: ` : "After this batch: ")
+      : s == null ? "After this batch: "
+        : (a.planned || b.planned) ? `${predLabel({ planned: true, s }, "batch", S.batchVolume())}: ` : `After this batch (${f(s, 0)} L): `;
+    const both = [a, b].filter((v) => !v.why && !v.edge && !blind(v));
+    const sharp = both.length && 2 * Math.max(...both.map((v) => v.sd)) <= S.cfg.sharpMm;
+    const warn = [a, b].some((v) => v.edge || v.why === "to-neck");
+    set(head + `${part(a, "A")} · ${part(b, "B")}`
+      + (simple() || !both.length ? "" : sharp ? " · sharp: one reading per tank may do" : " · too wide to judge: expect two readings per tank"),
+    warn ? "error" : "");
+  }
+
+  /**
+   * The way to the limit, for the Now card's brim and suction floor rows:
+   * from the last accepted dip, then from the predicted level.
+   */
+  function leftAfter(v, w) {
+    const a = v.left && v.left.after;
+    if (!a || blind(v)) return "";
+    if (v.edge === "brim") return ` · after this ${w}: reaches the brim · ≈ ${f(v.beyond, 0)} L more than the gap`;
+    if (v.edge === "dry") return ` · after this ${w}: reaches the bottom · ≈ ${f(v.beyond, 0)} L more than the liquid left`;
+    if (v.edge === "floor") return ` · after this ${w}: below the floor · ≈ ${f(v.beyond, 0)} L the pump cannot draw`;
+    return a.limit === "brim" ? ` · after this ${w}: ${f(a.mm, 0)} mm · ≈ ${f(a.L, 0)} L to go`
+      : ` · after this ${w}: ${f(a.mm, 0)} mm to go · ≈ ${f(a.L, 0)} L to pump`;
+  }
+  function brimRow(adv, v, sess, w) {
+    const n = v.left.now;
+    const to = !n ? "" : n.reached ? " · reached" : ` · ${f(n.mm, 0)} mm · ≈ ${f(n.L, 0)} L to go`;
+    return ["brim", `≈ ${f(adv.brim, 0)} ± ${f(2 * adv.brimSd, 0)} mm${brimNote(sess)}${to}${leftAfter(v, w)}`];
+  }
+  /** The Now card's drain line: the suction floor, the way down to it, and the litres the pump can still draw. */
+  function suctionRow(adv, v, w) {
+    const n = v && v.left.now;
+    const to = n && n.reached ? " · reached" : ` · ≈ ${f(adv.toSuction, 0)} mm to go · ≈ ${f(adv.aboveSuction, 0)} L to pump`;
+    return ["suction floor", `${f(adv.suction, 0)} mm${to}${v ? leftAfter(v, w) : ""}`];
   }
 
   function activeUnit() {
@@ -2778,6 +2818,7 @@
     if (d.source === "trend") return ` (fill ${fmtClock(d.fill)} + drain ${fmtClock(d.drain)}, from the trend)`;
     if (d.source === "taps") return " (the trend of your tap gaps)";
     if (d.source === "drain") return " (drain time only: a lower bound)";
+    if (d.source === "default") return ` (default fill ${fmtClock(d.fill)} + drain ${fmtClock(d.drain)}: a rough guess; set the times under Timers and alarm)`;
     return " (fill time only: a lower bound)";
   }
 
@@ -3186,16 +3227,37 @@
     const u = activeUnit() || last, d = cycleFor(u);
     if (!(u > 0)) { box.innerHTML = ""; return; }
     tapCheck(u);
-    if (!d) { box.innerHTML = `<div class="muted">Set the fill time for ${f(u, 0)} L cans (Timers and alarm, below) to see the time to half and to the ${isDrain() ? "suction floor" : "brim"}.</div>`; return; }
+    if (!d) { box.innerHTML = ""; return; }
     const pe = T.pour && T.pour.size === u ? (now - T.pour.start) / 1000 : 0;
     const plan = S.fillPlan({ size: u, cycleSeconds: d.seconds, now, pourElapsed: pe, settleSeconds: 0, dipSeconds: 0, cycleFor: cycleSecondsOf });
     if (!plan) { box.innerHTML = ""; return; }
+    const v = S.tileView(panelInput());
+    if (simple()) {
+      box.innerHTML = (plan.end !== undefined ? shortEta(now, floorName(plan), plan.end, v, "drain") : shortEta(now, "To brim", plan.brim, v, "pour"))
+        + defaultMark(d);
+      return;
+    }
     const line = etaLine(now);
     box.innerHTML = line("To half", plan.half, plan.capacity / 2)
       + (plan.end !== undefined ? line(floorName(plan), plan.end, plan.endVolume) : line("To brim", plan.brim, plan.capacity))
       + `<div class="muted">${fmtClock(d.seconds)} per can${cycleNote(d)}. Pouring time only: no settle and no dip time. ${plan.mixed ? "From the running shell and the batch plan." : "From the running shell and the pour advice."}`
       + (plan.end !== undefined ? " The pump cannot draw below the suction floor: the liquid under it stays in the tank." : "") + "</div>"
       + trendLine(u);
+  }
+
+  /**
+   * Simple mode's line to the brim or the suction floor: the way left now,
+   * then after the batch in the pour panel, then the time and the clock.
+   */
+  function shortEta(now, name, m, v, w) {
+    const n = v && v.left.now;
+    const left = !n ? "" : n.reached ? "reached" : `${f(n.mm, 0)} mm · ≈ ${f(n.L, 0)} L`;
+    const time = m && !m.done ? ` · ≈ ${esc(fmtSpan(m.seconds))} · done ≈ <b>${hhmm(now + 1000 * m.seconds)}</b>` : "";
+    return `<div><b>${name}</b>: ${left}${v ? leftAfter(v, w) : ""}${time}</div>`;
+  }
+  /** The default time per can is a guess: say so, in both modes. */
+  function defaultMark(d) {
+    return d.source === "default" ? `<div class="muted">Default time per can (fill ${fmtClock(d.fill)} + drain ${fmtClock(d.drain)}): a rough guess.</div>` : "";
   }
 
   /** The cycle time of one can size in s, for the plan's mixed batches; null when not set. */
@@ -3221,10 +3283,7 @@
     const u = activeUnit() || last, d = cycleFor(u);
     if (!(u > 0)) { box.innerHTML = ""; return; }
     tapCheck(u);
-    if (!d) {
-      box.innerHTML = `<div class="muted">Set the fill time for ${f(u, 0)} L cans (Timers and alarm, below) to see the time to the suction floor of A and to the brim of B.</div>`;
-      return;
-    }
+    if (!d) { box.innerHTML = ""; return; }
     const pe = T.pour && T.pour.size === u ? (now - T.pour.start) / 1000 : 0;
     const open = { volume: S.batchVolume(), cans: S.cans(), units: S.canList().map((c) => c.u) };
     // One shared plan: the tighter tank sets the batches for both.
@@ -3232,6 +3291,12 @@
     const planO = S.out.fillPlan(Object.assign({ size: u, cycleSeconds: d.seconds, now, pourElapsed: pe, open }, z));
     const planI = S.in.fillPlan(Object.assign({ size: u, cycleSeconds: d.seconds, now, pourElapsed: pe, open }, z));
     if (!planO || !planI) { box.innerHTML = ""; return; }
+    if (simple()) {
+      const views = S.tiles(panelInput());
+      box.innerHTML = shortEta(now, `A (${esc(S.out.cfg.tank)}) to the suction floor (${f(planO.endLevel, 0)} mm)`, planO.end, views.out, "batch")
+        + shortEta(now, `B (${esc(S.in.cfg.tank)}) to brim`, planI.brim, views.in, "batch") + defaultMark(d);
+      return;
+    }
     const line = etaLine(now);
     box.innerHTML = line(`A (${S.out.cfg.tank}) to the suction floor (${f(planO.endLevel, 0)} mm)`, planO.end, planO.endVolume)
       + line(`B (${S.in.cfg.tank}) to brim`, planI.brim, planI.capacity)
