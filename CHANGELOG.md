@@ -186,6 +186,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Batch plan: past the mid-dip, the litres over or under the plan go to
+  the open group whose batch size is nearest to them, not always to the
+  middle group. A tank 600 L larger than the nominal takes one 600 L batch
+  more, not one 800 L batch and 200 L too many at the top; a larger extra
+  is a sum of batches, the nearest size first (+1400 L = 800 + 600). The
+  last group still fills the gap. The hold now keeps the choice of group
+  too: the counts the last batch was poured with stay while the litres
+  they leave to the last group are within ¾ of a batch of each group they
+  changed, so the choice does not flip between 300 L and 600 L.
+
 - **On-site page: file names carry the workspace.** The raw CSV is
   `workspace_tank_raw.csv` and the session JSON `workspace_tank_site.json`
   (also for a closed campaign in *Files*). The workspace is the campaign's

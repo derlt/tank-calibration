@@ -438,6 +438,7 @@
     ": reached": ": đã đạt",
     "≈ {0} min": "≈ {0} phút",
     "≈ {0} h {1} min": "≈ {0} giờ {1} phút",
+    "≈ {0} h": "≈ {0} giờ",
     "≈ < 1 min": "≈ < 1 phút",
     "Default time per can (fill {0} + drain {1}): a rough guess.": "Thời gian mặc định mỗi bình (bơm đầy {0} + trút {1}): ước lượng thô.",
     "{0} per can (default fill {1} + drain {2}: a rough guess; set the times under Timers and alarm).": "{0} mỗi bình (mặc định bơm đầy {1} + trút {2}: ước lượng thô; đặt thời gian trong Hẹn giờ và báo động).",
@@ -1364,8 +1365,8 @@
     "From the running shell and the batch plan.": "Theo mô hình bồn tạm và kế hoạch mẻ.",
     "From the running shells and the batch plan.": "Theo các mô hình bồn tạm và kế hoạch mẻ.",
     "Batch plan.": "Kế hoạch mẻ.",
-    "Before the first pour, declare the can sizes, the nominal capacity and the batches: for example 2 × 300 L, 2 × 600 L, 8 × 800 L, 2 × 600 L, 2 × 300 L. A batch is not a can: a 300 L batch is one 200 L can and one 100 L can. The page gives each batch the fewest cans, and of those the largest, so the pump and the carry take the least time. The pour card shows the group in work and its batches only: the small batches at the bottom and at the top are two groups. The real tank can hold more or less than the nominal. After the halfway level, the page recounts the batches still to come from the litres the running shell says are left: the middle group takes more or fewer batches, and the small batches stay at the end. A count changes once, when the shell's figure is clearly away from it, not back and forth with each dip.":
-      "Trước lần đổ đầu tiên, khai báo các cỡ bình, dung tích danh định và các mẻ: ví dụ 2 × 300 L, 2 × 600 L, 8 × 800 L, 2 × 600 L, 2 × 300 L. Một mẻ không phải là một bình: một mẻ 300 L là một bình 200 L và một bình 100 L. Trang chọn cho mỗi mẻ ít bình nhất, và trong số đó là các bình lớn nhất, để việc bơm và mang bình mất ít thời gian nhất. Thẻ đổ chỉ hiện nhóm đang làm và các mẻ của nhóm đó: các mẻ nhỏ ở đáy và ở đỉnh là hai nhóm. Bồn thật có thể chứa nhiều hơn hoặc ít hơn dung tích danh định. Sau mức giữa, trang đếm lại các mẻ còn lại theo số lít mà mô hình bồn tạm cho là còn lại: nhóm giữa thêm hoặc bớt mẻ, và các mẻ nhỏ vẫn ở cuối. Một số đếm chỉ đổi một lần, khi con số của mô hình bồn lệch rõ, không đổi qua đổi lại sau mỗi lần đo.",
+    "Before the first pour, declare the can sizes, the nominal capacity and the batches: for example 2 × 300 L, 2 × 600 L, 8 × 800 L, 2 × 600 L, 2 × 300 L. A batch is not a can: a 300 L batch is one 200 L can and one 100 L can. The page gives each batch the fewest cans, and of those the largest, so the pump and the carry take the least time. The pour card shows the group in work and its batches only: the small batches at the bottom and at the top are two groups. The real tank can hold more or less than the nominal. After the halfway level, the page recounts the batches still to come from the litres the running shell says are left: the litres over or under the plan go to the group whose batch size is nearest to them (600 L more is one 600 L batch more), and the last group fills the gap. A count changes once, when the shell's figure is clearly away from it, not back and forth with each dip.":
+      "Trước lần đổ đầu tiên, khai báo các cỡ bình, dung tích danh định và các mẻ: ví dụ 2 × 300 L, 2 × 600 L, 8 × 800 L, 2 × 600 L, 2 × 300 L. Một mẻ không phải là một bình: một mẻ 300 L là một bình 200 L và một bình 100 L. Trang chọn cho mỗi mẻ ít bình nhất, và trong số đó là các bình lớn nhất, để việc bơm và mang bình mất ít thời gian nhất. Thẻ đổ chỉ hiện nhóm đang làm và các mẻ của nhóm đó: các mẻ nhỏ ở đáy và ở đỉnh là hai nhóm. Bồn thật có thể chứa nhiều hơn hoặc ít hơn dung tích danh định. Sau mức giữa, trang đếm lại các mẻ còn lại theo số lít mà mô hình bồn tạm cho là còn lại: số lít dư hoặc thiếu so với kế hoạch đi vào nhóm có cỡ mẻ gần nhất với số đó (dư 600 L là thêm một mẻ 600 L), và nhóm cuối lấp phần còn lại. Một số đếm chỉ đổi một lần, khi con số của mô hình bồn lệch rõ, không đổi qua đổi lại sau mỗi lần đo.",
 
     // Time trend, timer suggestions, suction floor, and the time estimate's counts
     "suction floor": "mức hút",
@@ -1410,6 +1411,8 @@
     "{0} batches: {1} + {2} × {3} + {4} × {5} L": "{0} mẻ: {1} + {2} × {3} + {4} × {5} L",
     "{0} batches: {1} + {2} × {3} + {4} × {5} + {6} × {7} L": "{0} mẻ: {1} + {2} × {3} + {4} × {5} + {6} × {7} L",
     "{0} batches: {1} × {2} + {3} L": "{0} mẻ: {1} × {2} + {3} L",
+    "{0} batches: {1} × {2} + {3} + {4} × {5} L": "{0} mẻ: {1} × {2} + {3} + {4} × {5} L",
+    "{0} batches: {1} + {2} + {3} × {4} L": "{0} mẻ: {1} + {2} + {3} × {4} L",
     "{0} batches: {1} × {2} + {3} × {4} + {5} L": "{0} mẻ: {1} × {2} + {3} × {4} + {5} L",
     "{0} batches: {1} × {2} + {3} × {4} + {5} × {6} + {7} L": "{0} mẻ: {1} × {2} + {3} × {4} + {5} × {6} + {7} L",
     "{0} can: {1} L": "{0} bình: {1} L",

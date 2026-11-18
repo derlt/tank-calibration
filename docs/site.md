@@ -421,24 +421,34 @@ drain half of it out), the plan stands as declared. After that level, the
 page recounts the batches still to come from the litres the running shell
 says are left:
 
-- while the middle (largest) group is still in work, it takes a batch more
-  for a larger tank, or a batch less for a smaller one; the groups after it
-  keep their counts, so the small batches stay at the top (fill) or the
-  bottom (drain);
-- in a later group, that group takes the change;
+- the extra litres (the shell's figure less the planned batches still to
+  come; negative for a smaller tank) go to the group still to come whose
+  batch size is nearest to them: 600 L more is one 600 L batch more, not
+  one 800 L batch and 200 L too many at the top; 600 L less is one 600 L
+  batch less;
+- a larger extra is a sum of batches, the nearest size first: 1400 L more
+  is one 800 L batch and one 600 L batch. When 300 L and 600 L are equally
+  near, the larger batch wins: fewer batches;
+- the page adds (or takes out) a batch only when it brings the litres
+  closer to the plan. What is left goes to the last group;
 - the last group takes as many batches as the gap needs: a fill ends with
   the planned overflow pour (§3.7), a drain with a part can.
 
+A small extra therefore lands in a small group near the end, where the
+tank is narrower and a small batch keeps the rise per batch low.
+
 The pour card then shows the new count with the planned one, for example
-`batch 5 of 9 (plan 8)`, and says why: *The running shell puts the tank at
-≈ 10600 L (nominal 10000 L): the end of the plan changes. Group 3: 9 × 800 L
-(plan 8).* At the end of a campaign, the counts are not symmetric any more;
+`batch 1 of 3 (plan 2)`, and says why: *The running shell puts the tank at
+≈ 10600 L (nominal 10000 L): the end of the plan changes. Group 4: 3 × 600 L
+(plan 2).* At the end of a campaign, the counts are not symmetric any more;
 this is correct.
 
-The shell's figure moves a little with each dip. So a count changes only
-when the recount is clearly away from it: more than ¾ of a batch from the
-count the last batch was poured with. A count changes once, not back and
-forth (`8`, `9`, `8`). A small surplus can stay with the last group: it
+The shell's figure moves a little with each dip. So the counts change only
+when the recount is clearly away from them: the counts the last batch was
+poured with stay while the litres they leave to the last group are within
+¾ of a batch of each group they changed. A count changes once, not back and
+forth (`8`, `9`, `8`), and the choice of group does not flip either (one
+600 L batch more, then one 300 L batch, then 600 L again). A small surplus can stay with the last group: it
 takes as many batches as the gap needs. A group that is finished keeps the
 batches poured into it; its count never drops below them.
 

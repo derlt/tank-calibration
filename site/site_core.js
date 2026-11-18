@@ -452,19 +452,23 @@
    * are left (fill: the gap to the brim; drain: the liquid left).  adapt:
    * the level is past the mid-dip, so the shell counts the end again.
    *
-   * The count changes land on the middle (largest) group while it is still
-   * to come, else on the group in work; the groups after it keep their
-   * counts, so the small batches stay at the end.  The last group takes as
-   * many batches as the gap needs: a fill reaches the brim (the planned
+   * The extra litres (R less the planned batches still to come; negative
+   * for a smaller tank) go to the open groups whose size is nearest to
+   * them (planSpread): +600 L is one 600 L batch more, not one 800 L batch
+   * and 200 L too many at the top.  A larger extra is a sum of batches,
+   * the nearest size first.  The last group takes what is left: as many
+   * batches as the gap needs, so a fill reaches the brim (the planned
    * overflow pour, §3.7), a drain the bottom.  Without adapt the plan is as
    * declared; a campaign that runs past it goes on with the last size.
    *
    * A group behind the group in work is closed: its count is the batches
    * poured into it, never less.  prev: the counts the last batch was poured
    * with (L.plan.counts), or null.  The shell's figure moves a little with
-   * each dip, so a group keeps its previous count while the recount stays
-   * within PLAN_HOLD batches of it: the count changes once, not back and
-   * forth.  The last group has no hold: it must reach the end.
+   * each dip, so the open groups keep their previous counts while the
+   * litres those counts leave to the last group stay within PLAN_HOLD
+   * batches of each group they changed: a count changes once, and the
+   * choice of group does not flip (300 L, 600 L, 300 L) either.  The last
+   * group has no hold: it must reach the end.
    *
    * -> { groups: [{size, planned, count, done}], next (group index or
    *    null when the plan is complete), adapted, total, poured }
@@ -479,27 +483,24 @@
     for (let i = 0; i < g; i++) G[i].count = G[i].done;   // closed: what was poured
     const held = prev && prev.length === G.length ? prev : null;
     if (adapt && R != null && isFinite(R)) {
-      let m = 0;
-      for (let i = 1; i < G.length; i++) if (G[i].size > G[m].size) m = i;
-      const f0 = Math.max(g, m);
-      let avail = R;
-      for (let i = g; i < f0; i++) avail -= Math.max(0, G[i].count - G[i].done) * G[i].size;
-      for (let f = f0; f <= last; f++) {
-        let tail = 0;
-        for (let i = f + 1; i <= last; i++) tail += G[i].count * G[i].size;
-        let want;
-        if (f === last) want = Math.ceil(avail / G[f].size - 1e-9);
-        else {
-          const raw = (avail - tail) / G[f].size;
-          want = Math.round(raw);
-          const keep = held && held[f] != null ? held[f] - G[f].done : null;
-          if (keep != null && keep >= 0 && Math.abs(raw - keep) <= PLAN_HOLD) want = keep;
+      for (let f = g; f <= last; f++) G[f].count = Math.max(G[f].count, G[f].done);
+      // The batches still to come in each open group but the last.
+      let rest = planSpread(G, g, R);
+      if (held) {
+        const keep = [];
+        let off = 0;   // the largest size the held counts changed
+        for (let f = g; f < last; f++) {
+          keep[f] = Math.max(0, held[f] - G[f].done);
+          if (keep[f] !== rest[f]) off = Math.max(off, G[f].size);
         }
-        const n = Math.max(0, want);
-        G[f].count = G[f].done + n;
-        avail -= n * G[f].size;
-        if (want >= 0 && f < last) break;   // the tail fits: it keeps its counts
+        if (off && Math.abs(planLeft(G, g, R, keep)) <= PLAN_HOLD * off) rest = keep;
       }
+      let avail = R;
+      for (let f = g; f < last; f++) {
+        G[f].count = G[f].done + rest[f];
+        avail -= rest[f] * G[f].size;
+      }
+      G[last].count = G[last].done + Math.max(0, Math.ceil(avail / G[last].size - 1e-9));
     } else if (hist.length >= G.reduce((a, x) => a + x.count, 0)) {
       G[last].count = G[last].done + 1;    // past the plan: go on with the last size
     }
@@ -511,6 +512,47 @@
       total: G.reduce((a, x) => a + Math.max(x.count, x.done), 0),
       poured: hist.length,
     };
+  }
+
+  /**
+   * The litres R leaves to the last group past its planned batches, when
+   * the open groups g … last−1 take rest[f] batches more: 0 = the plan fits.
+   */
+  function planLeft(G, g, R, rest) {
+    const last = G.length - 1;
+    let left = R - (G[last].count - G[last].done) * G[last].size;
+    for (let f = g; f < last; f++) left -= rest[f] * G[f].size;
+    return left;
+  }
+
+  /**
+   * The batches still to come in each open group but the last, with the
+   * extra litres spread on them: one batch at a time, of the open group
+   * whose size is nearest to the litres still out of place (a tie: the
+   * larger size, the fewer batches; then the later group).  A batch is
+   * added (or taken out, for a smaller tank) only when it brings the
+   * litres closer to 0.  When the nearest size is the last group's, the
+   * rest stays to it: the last group fills the gap.  -> rest[f], f < last.
+   */
+  function planSpread(G, g, R) {
+    const last = G.length - 1, rest = [];
+    for (let f = g; f < last; f++) rest[f] = G[f].count - G[f].done;
+    let E = planLeft(G, g, R, rest);
+    for (let k = 0; k < 10000 && E !== 0; k++) {
+      const sign = E > 0 ? 1 : -1, need = Math.abs(E);
+      let pick = -1;
+      for (let f = g; f <= last; f++) {
+        const left = f < last ? rest[f] : G[last].count - G[last].done;
+        if (sign < 0 && !(left > 0)) continue;   // no batch to take out
+        if (pick < 0) { pick = f; continue; }
+        const d = Math.abs(G[f].size - need), dp = Math.abs(G[pick].size - need);
+        if (d < dp - 1e-9 || (Math.abs(d - dp) <= 1e-9 && G[f].size >= G[pick].size - 1e-9)) pick = f;
+      }
+      if (pick < 0 || pick === last || !(G[pick].size < 2 * need)) break;
+      rest[pick] += sign;
+      E -= sign * G[pick].size;
+    }
+    return rest;
   }
 
   // ---------------------------------------------------------------- step cells (§3.9)

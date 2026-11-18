@@ -3083,6 +3083,30 @@ class TestSitePlan(unittest.TestCase):
         self.assertEqual(got["first"]["next"], 0)
 
     @unittest.skipUnless(NODE, "node is not installed")
+    def test_plan_state_extra_goes_to_the_nearest_group(self):
+        got = _node(
+            "const G = [{count: 2, size: 300}, {count: 2, size: 600}, {count: 8, size: 800},"
+            " {count: 2, size: 600}, {count: 2, size: 300}];\n"
+            "const hist = [0, 0, 1, 1, 2, 2, 2, 2, 2, 2];   // 6 of the 8 middle batches poured: 3400 L to come\n"
+            "const c = (E, prev) => core.planState(G, hist, 3400 + E, true, prev).groups.map((g) => g.count);\n"
+            "const prev = [2, 2, 8, 3, 2];   // the last batch was poured with one 600 L batch more\n"
+            "console.log(JSON.stringify({\n"
+            "  p600: c(600), p300: c(300), p1600: c(1600), p1400: c(1400), m600: c(-600), m300: c(-300),\n"
+            "  tie: c(450), held: c(420, prev), free: c(420), moved: c(100, prev),\n"
+            "}));"
+        )
+        self.assertEqual(got["p600"], [2, 2, 8, 3, 2], "+600 L: one 600 L batch, not one 800 L batch")
+        self.assertEqual(got["p300"], [2, 2, 8, 2, 3], "+300 L: the last group takes it")
+        self.assertEqual(got["p1600"], [2, 2, 10, 2, 2], "+1600 L: two 800 L batches")
+        self.assertEqual(got["p1400"], [2, 2, 9, 3, 2], "+1400 L: 800 + 600, the nearest size first")
+        self.assertEqual(got["m600"], [2, 2, 8, 1, 2], "−600 L: one 600 L batch less")
+        self.assertEqual(got["m300"], [2, 2, 8, 2, 1], "−300 L: the last group drops one")
+        self.assertEqual(got["tie"], [2, 2, 8, 3, 2], "300 and 600 equally near: the larger, fewer batches")
+        self.assertEqual(got["free"], [2, 2, 8, 2, 4], "no earlier counts: 420 L is nearest to 300 L")
+        self.assertEqual(got["held"], [2, 2, 8, 3, 2], "within the hold the group chosen before stays")
+        self.assertEqual(got["moved"], [2, 2, 8, 2, 3], "beyond the hold the choice changes")
+
+    @unittest.skipUnless(NODE, "node is not installed")
     def test_plan_state_closes_groups_and_holds_counts(self):
         got = _node(
             "const G = [{count: 2, size: 300}, {count: 2, size: 600}, {count: 8, size: 800},"
@@ -3123,10 +3147,10 @@ class TestSitePlan(unittest.TestCase):
             " nominal: 10000, plan: GROUPS});\n"
             "  const H = (v) => core.levelFor(Math.min(v, cap), P);\n"
             "  let V = 50, t = 0; s.start('50', H(V)); s.dip(H(V) + 2 * rnd());\n"
-            "  const seq = []; let low = false;\n"
+            "  const seq = [], seq3 = []; let low = false;\n"
             "  for (let k = 0; k < 40; k++) {\n"
             "    const st = s.planNow(); if (!st || !st.batch) break;\n"
-            "    seq.push(st.groups[2].count);\n"
+            "    seq.push(st.groups[2].count); seq3.push(st.groups[3].count);\n"
             "    if (st.groups.some((g) => g.count < g.done)) low = true;\n"
             "    for (const u of core.mixCans(st.batch.mix)) s.tap(++t * 30000, u);\n"
             "    V += st.batch.size; const end = V >= cap;\n"
@@ -3136,13 +3160,15 @@ class TestSitePlan(unittest.TestCase):
             "    if (s.current().state === 'pending') s.override('test');\n"
             "    if (end) break;\n"
             "  }\n"
-            "  runs.push({L, seed, seq, low, end: V >= cap, flips: seq.slice(1).filter((c, i) => c !== seq[i]).length});\n"
+            "  runs.push({L, seed, seq, low, end: V >= cap, flips: seq.slice(1).filter((c, i) => c !== seq[i]).length,"
+            " flips3: seq3.slice(1).filter((c, i) => c !== seq3[i]).length});\n"
             "}\n"
             "console.log(JSON.stringify(runs));"
         )
         self.assertGreater(len(got), 40)
         for r in got:
             self.assertLessEqual(r["flips"], 1, f"the middle count changes once at most: {r}")
+            self.assertLessEqual(r["flips3"], 1, f"the upper 600 L count changes once at most: {r}")
             self.assertFalse(r["low"], f"no group counts fewer batches than were poured: {r}")
             self.assertTrue(r["end"], f"the campaign reaches the brim: {r}")
 
@@ -3174,6 +3200,9 @@ class TestSitePlan(unittest.TestCase):
         self.assertEqual(top[0], 1, "the top 300 L group counts its own batches, not the bottom ones")
         self.assertEqual(top, list(range(1, len(top) + 1)))
         self.assertGreater(sum(1 for e in log), 16, "a larger tank takes more batches than the plan")
+        self.assertEqual({e["count"] for e in log if e["group"] == 2}, {8},
+                         "600 L more: the middle group keeps its count")
+        self.assertIn(3, [e["count"] for e in log if e["group"] == 3], "the 600 L group takes the extra batch")
         self.assertEqual(log[-1]["size"], 300, "the small batches stay at the top")
         self.assertGreaterEqual(got["poured"] + 50, got["cap"], "the campaign reaches the brim")
         self.assertEqual(got["reload"][:2], got["now"], "the plan and its tally survive a reload")
@@ -3189,7 +3218,9 @@ class TestSitePlan(unittest.TestCase):
         )
         log = got["log"]
         self.assertLess(got["cap"], 9500)
-        self.assertIn(7, [e["count"] for e in log if e["group"] == 2], "the middle group loses a batch")
+        self.assertEqual({e["count"] for e in log if e["group"] == 2}, {8},
+                         "600 L short: the middle group keeps its 800 L batches")
+        self.assertIn(1, [e["count"] for e in log if e["group"] == 3], "the 600 L group loses a batch")
         planned = sum(e["size"] for e in log)
         self.assertGreaterEqual(planned, got["cap"], "the batches reach the bottom")
         self.assertLess(planned, got["cap"] + 300, "the last batch is a part batch at most")
@@ -4354,7 +4385,6 @@ class TestSiteEarlyTimer(unittest.TestCase):
         self.assertTrue(got["early"])
         self.assertEqual(got["kept"], {"asked": 1, "running": True, "card": False}, "No keeps A decided and the timer on")
         self.assertEqual(got["redip"], {"asked": 2, "running": False, "card": True}, "Yes stops the timer and re-opens A")
-
 
 
 # The demo campaign of TestSiteCore, replayed with the re-dip of row 12.
