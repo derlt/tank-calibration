@@ -283,6 +283,10 @@
   #p-opts > summary::after { content: "▸"; font-size: 0.8rem; transition: transform 0.15s; }
   #p-opts[open] > summary::after { transform: rotate(90deg); }
   #p-opts .optbody { display: grid; gap: 0.45rem; padding-bottom: 0.2rem; }
+  /* No blank strip under the folded Options: the empty error line keeps
+     only the card's own padding below it. */
+  #p-err { margin: 0.4rem 0 0; }
+  #p-err:empty { display: none; }
   /* The batch plan: one row per group in the setup, the group in work on the pour card. */
   .plan-lab { display: block; font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; }
   .plan-row { display: flex; align-items: center; gap: 0.35rem; margin-top: 0.35rem; flex-wrap: wrap; }
@@ -394,6 +398,8 @@
     main { padding-top: 0.5rem; padding-left: max(0.5rem, env(safe-area-inset-left)); padding-right: max(0.5rem, env(safe-area-inset-right)); gap: 0.6rem; }
     .card { padding: 0.75rem; }
     #live > .card, #live > .verdict, #live > .row, #settings > .card { margin-top: 0.6rem !important; }
+    /* The pour card sits closer under the frozen stack, with a gap. */
+    #live > #pour-card { margin-top: 0.25rem !important; }
     /* The tabs: one line that scrolls sideways, not three wrapped lines. */
     .tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; scroll-snap-type: x proximity; margin: 0 -0.5rem; padding: 0.4rem 0.5rem 0.35rem; scroll-padding: 0 0.5rem; }
     .tabs::-webkit-scrollbar { display: none; }

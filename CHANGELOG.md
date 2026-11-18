@@ -184,6 +184,9 @@ All notable changes to this project are documented here. The format follows
   names stay `tank_raw.csv` and `tank_site.json`.
 - **On-site page: the tab labels have room.** The tab row keeps a gap under
   the header and above the tank tiles.
+- **On-site page: a tighter pour card.** The folded *Options* has no blank
+  strip under it, and on a phone the pour card keeps a smaller gap under the
+  frozen stack.
 
 - One word, **brim**: the drain start *At the neck entrance* is now *At the
   brim*, and "neck entrance" / "shell crown" are "brim" in the page, the
