@@ -183,6 +183,17 @@
   .kv { display: grid; grid-template-columns: max-content 1fr; gap: 0.2rem 0.8rem; font-size: 0.93rem; }
   .kv dt { color: var(--muted); }
   .kv dd { margin: 0; font-family: var(--mono); }
+  /* The F(H) calculator (Shell tab): two linked fields, then shell and dips side by side. */
+  .fh-two { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0.4rem; align-items: end; }
+  .fh-two .fh-arrow { padding-bottom: 0.75rem; color: var(--muted); }
+  .fh-hint { margin: 0.3rem 0 0; }
+  .fh-res { display: grid; grid-template-columns: max-content 1fr 1fr; gap: 0.2rem 0.8rem; margin-top: 0.7rem; font-size: 0.93rem; align-items: baseline; }
+  .fh-res:empty { display: none; }
+  .fh-res .h { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .fh-res .k { color: var(--muted); }
+  .fh-res .v { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .fh-res .big { font-weight: 700; font-size: 1.15rem; }
+  .fh-res .wide { grid-column: span 2; }
   .verdict { border-radius: var(--radius); padding: 0.9rem 1rem; border: 2px solid; }
   .verdict h3 { margin: 0 0 0.35rem; font-size: 1.25rem; }
   .verdict p { margin: 0.25rem 0; }
@@ -704,10 +715,24 @@
   </section>
 
   <!-- ===================================================== shell -->
-  <section id="shell" class="card hidden">
-    <h2>Running shell</h2>
-    <div class="kv" id="shell-kv"></div>
-    <p class="muted">The running shell is a tool for the live check. It is not the adopted shell. After the campaign, run <span class="mono">calib init</span> and <span class="mono">calib fit</span> on the exported raw file: the full fit (brim constraint, pair rule, block test, bootstrap) makes the deliverable.</p>
+  <section id="shell" class="hidden">
+    <div class="card" id="fh-card">
+      <h2>F(H) calculator</h2>
+      <div class="fh-two">
+        <label><span id="fh-H-lbl">Height, mm</span><input id="fh-H" type="number" inputmode="decimal" step="0.1"></label>
+        <span class="fh-arrow" aria-hidden="true">⇄</span>
+        <label><span id="fh-V-lbl">Litres (shell)</span><input id="fh-V" type="number" inputmode="decimal" step="1"></label>
+      </div>
+      <p class="muted fh-hint">Type in either field; the other follows.</p>
+      <div class="fh-res" id="fh-res"></div>
+      <p class="muted" id="fh-note"></p>
+      <p class="muted">Shell: the running shell, ± from its fit. Dips: the litres on the books at the accepted dips; between two dips the volume follows the shell's shape and meets both dips. Outside the dips it is the shell's step from the nearest dip (extrapolated). ± is 2σ.</p>
+    </div>
+    <div class="card" style="margin-top:0.8rem">
+      <h2>Running shell</h2>
+      <div class="kv" id="shell-kv"></div>
+      <p class="muted">The running shell is a tool for the live check. It is not the adopted shell. After the campaign, run <span class="mono">calib init</span> and <span class="mono">calib fit</span> on the exported raw file: the full fit (brim constraint, pair rule, block test, bootstrap) makes the deliverable.</p>
+    </div>
   </section>
 
   <!-- ===================================================== settings -->
@@ -4124,8 +4149,80 @@
     return s + (D.length ? "" : F.empty) + "</svg>";
   }
 
+  /*
+   * The F(H) calculator.  from: the field the user typed in ("H" or "V"),
+   * value: its number (null = blank).  Until the user types, the height
+   * field holds the last good level and follows each new dip.  A typed
+   * value stays while the Shell tab is open on the same tank; leaving the
+   * tab or choosing the other tank brings the current level back.  The
+   * page never rewrites the field the user types in.
+   */
+  const FH = { sess: null, key: null, typed: false, from: "H", value: null };
+  function fhKey() { return isTransfer() ? S.active : "one"; }
+  function fhReset() {
+    const gi = S.lastGood();
+    FH.sess = S; FH.key = fhKey(); FH.typed = false; FH.from = "H";
+    FH.value = gi >= 0 ? S.levels[gi].H : null;
+  }
+  function fhInput(from) {
+    return () => {
+      const v = num(from === "H" ? "fh-H" : "fh-V");
+      FH.typed = true; FH.from = from; FH.value = v != null && isFinite(v) ? v : null;
+      renderFh();
+    };
+  }
+  $("fh-H").addEventListener("input", fhInput("H"));
+  $("fh-V").addEventListener("input", fhInput("V"));
+
+  /** Litres: whole litres, a small ± with one decimal. */
+  const fL = (x) => f(x, Math.abs(x) < 10 ? 1 : 0);
+
+  function renderFh() {
+    if (!S || !S.fit) return;
+    if (FH.sess !== S || FH.key !== fhKey()) fhReset();
+    if (!FH.typed) { const gi = S.lastGood(); FH.from = "H"; FH.value = gi >= 0 ? S.levels[gi].H : null; }
+    const byH = FH.from === "H";
+    const src = byH ? "fh-H" : "fh-V", other = byH ? "fh-V" : "fh-H";
+    $("fh-H-lbl").textContent = byH ? "Height, mm" : "Height, mm (shell)";
+    $("fh-V-lbl").textContent = byH ? "Litres (shell)" : "Litres";
+    if (!FH.typed) $(src).value = FH.value == null ? "" : f(FH.value);
+    if (FH.value == null) {
+      $(other).value = ""; $("fh-res").innerHTML = "";
+      $("fh-note").textContent = "Type a height or litres.";
+      return;
+    }
+    const c = S.calc(byH ? { H: FH.value } : { V: FH.value });
+    const d = c.dips, unit = byH ? "L" : "mm";
+    const val = (x) => (x == null ? "—" : byH ? fL(x) : f(x));
+    $(other).value = byH ? f(c.shell.V, 0) : f(c.shell.H);
+    const cell = (x, cls) => `<span class="v${cls ? " " + cls : ""}">${x}</span>`;
+    let h = `<span></span><span class="h">shell</span><span class="h">dips</span>`
+      + `<span class="k">${byH ? "litres" : "height"}</span>`
+      + cell(byH ? fL(c.shell.V) : f(c.shell.H), "big") + cell(d ? val(byH ? d.V : d.H) : "—", "big")
+      + `<span class="k">± 2σ</span>`
+      + cell(`± ${val(2 * c.shell.sd)} ${unit}`) + cell(d ? `± ${val(2 * d.sd)} ${unit}` : "—");
+    if (d) {
+      const lim = byH ? `drift alarm beyond ±${f(c.driftLimit, 0)} L` : "";
+      h += `<span class="k">dips − shell</span>`
+        + `<span class="v wide">${sg(c.diff, byH ? 0 : 1)} ${unit}${d.extrapolated ? ' <span class="tag t-pending">extrapolated</span>' : ""}`
+        + `${d.step ? ' <span class="tag t-pending">shell step</span>' : ""}${lim ? ` <span class="muted">${lim}</span>` : ""}</span>`;
+      const pinsTxt = d.rows.length === 2 ? `rows ${d.rows[0]} → ${d.rows[1]}` : `row ${d.rows[0]}`;
+      h += `<span class="k">dips from</span><span class="v wide muted">${pinsTxt}</span>`;
+    }
+    $("fh-res").innerHTML = h;
+    const notes = [];
+    if (c.above) notes.push(byH ? `Above the brim (${f(c.brim)} mm): the shell is full at ${f(c.capacity, 0)} L; the rest is in the neck.`
+      : `More than the shell holds (${f(c.capacity, 0)} L): the level is at the brim, ${f(c.brim)} mm.`);
+    if (c.below) notes.push(byH ? "Below the bottom of the shell: no liquid." : "Litres below 0: no level.");
+    if (c.why === "pins") notes.push("The dips column needs two accepted dips.");
+    if (c.why === "range") notes.push("These litres are outside the dips' curve, from the bottom to the brim.");
+    if (d && d.step) notes.push("The books do not rise between these dips: the dips column takes the shell's step from the nearer dip.");
+    $("fh-note").textContent = notes.join(" ");
+  }
+
   function renderShell(st) {
-    if (tab !== "shell") return;
+    if (tab !== "shell") { FH.typed = false; return; }
+    renderFh();
     const p = st.fit.p, sd = st.fit.sd, pr = S.cfg.prior;
     const rows = isTransfer()
       ? [["tank", `${S.cfg.tank} · ${isDrain() ? "pump out" : "pour in"}`]] : [];

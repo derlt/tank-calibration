@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **On-site page: an F(H) calculator in the Shell tab.** Type a dip
+  reading to get litres, or litres to get a dip reading. The other field
+  shows the running shell's answer. Below the fields, the shell and the
+  dips stand side by side, each ± 2σ, with the difference and the drift
+  alarm for scale. The dips column uses calib's books (§9.3) at the
+  accepted dips; between two dips it follows the shell's shape and meets
+  both dips. Outside the dips it is the shell's step, marked
+  *extrapolated*. Until you type, the fields hold the last good level.
+
 - **On-site page: the trend button is a second start button.** *Use the
   trend* moved from the Now card into the timer card, next to the start
   button: *▶ Start (1:30)* starts with the setting, *▶ Trend 1:32* copies

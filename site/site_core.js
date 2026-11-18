@@ -2083,6 +2083,180 @@
     return out;
   };
 
+  // ---------------------------------------------------------------- F(H) calculator
+  /**
+   * The spread (1σ) of g(P) from the fit covariance, by central differences
+   * over (r, L, h0).  0 without a covariance.
+   */
+  function paramSd(fit, g) {
+    if (!fit || !fit.cov) return 0;
+    const p = fit.p, x = [p.r, p.L, p.h0], grad = [];
+    for (let j = 0; j < 3; j++) {
+      const h = 1e-3 * Math.max(1, Math.abs(x[j]));
+      const xp = x.slice(), xm = x.slice();
+      xp[j] += h; xm[j] -= h;
+      grad.push((g(toP(xp)) - g(toP(xm))) / (2 * h));
+    }
+    return Math.sqrt(Math.max(quad(grad, fit.cov), 0));
+  }
+
+  /**
+   * The books (§9.3): the litres on the books at each decided level, as calib
+   * counts them, and the pins of the F(H) calculator.
+   *
+   * Where the books start (calib `_books_anchor`).  A fill: the first level,
+   * at its recorded pour when known, else at F(H₀).  A drain: the first level
+   * in the shell (a neck reading is vent-column height; the start reading at
+   * the brim counts), at its recorded pour when it is the first level and
+   * known (a metered prefill), else at F(H).  The books then take every pour,
+   * trusted or not: trust is about the fit, not about what was poured.  An
+   * unknown or part pour takes the shell's change over its interval (its
+   * back-predicted total).  An overflow ends the books: that pour went into
+   * the neck.
+   *
+   * A pin is a level the dips trust: the start of the books, and every
+   * accepted or learning level after it (not suspect, not in the neck).
+   * Each pin has V (books, L), c (the variance of the pours to it, plus the
+   * shell's variance of F(H) when the books start at F(H), L²) and
+   * d (the variance its reading adds, (m·σr)²/n, L²).
+   *
+   * Returns { pins, start } (start = level index, −1 without books).
+   */
+  Session.prototype.books = function () {
+    const p = this.fit.p, cfg = this.cfg, dir = cfg.dir, top = brim(p), sr = cfg.sigmaRead;
+    const decided = (L) => L.H != null && L.state !== "pending" && L.state !== "overflow" && !L.overflow;
+    let k = -1;
+    if (dir > 0) k = this.levels.length && decided(this.levels[0]) ? 0 : -1;
+    else {
+      for (let i = 0; i < this.levels.length; i++) {
+        const L = this.levels[i];
+        if (!decided(L)) continue;
+        if (!L.neck && (L.H <= top || (L.start && L.entrance))) { k = i; break; }
+      }
+    }
+    if (k < 0) return { pins: [], start: -1 };
+    const pin = (L, V, c) => {
+      const m = slope(L.H, p);
+      return { row: L.row, H: L.H, V, c, d: m * m * sr * sr / (L.n || 1) };
+    };
+    const L0 = this.levels[k];
+    let V, c;
+    if (k === 0 && L0.step && L0.step.kind === "known") { V = L0.step.value; c = Math.pow(pourSigma(V, cfg), 2); }
+    else {
+      // The books start at the shell's own volume: its error moves every
+      // dip-side value by the same litres.
+      V = volume(L0.H, p);
+      const sv = paramSd(this.fit, (P) => volume(L0.H, P));
+      c = sv * sv;
+    }
+    const pins = [pin(L0, V, c)];
+    let prev = L0;
+    for (let i = k + 1; i < this.levels.length; i++) {
+      const L = this.levels[i];
+      if (L.state === "overflow" || L.overflow) break;
+      if (!decided(L)) continue;
+      if (L.step.kind === "known") {
+        V += dir * L.step.value;
+        c += Math.pow(pourSigma(L.step.value, cfg), 2);
+      } else {
+        V += volume(L.H, p) - volume(prev.H, p);
+        const m = slope(Math.max(L.H, prev.H), p);
+        c += 2 * m * m * sr * sr;
+      }
+      prev = L;
+      if (FIT.has(L.state) && !L.suspect && !L.neck) pins.push(pin(L, V, c));
+    }
+    return { pins, start: k };
+  };
+
+  /**
+   * The dip-side volume at H from the pins (sorted by H).  Between two pins
+   * the volume follows the shell's shape and hits both pins:
+   *   V = Va + (Vb − Va)·(F(H) − F(Ha)) / (F(Hb) − F(Ha)).
+   * Below the lowest or above the highest pin it takes the shell step from
+   * that pin (extrapolated, rule 1.4).  A span whose books do not rise takes
+   * the shell step from the nearer pin (step).  sd: 1σ, L.
+   */
+  function dipVolume(H, pins, fit) {
+    const p = fit.p, n = pins.length;
+    const fromPin = (e, flag) => {
+      const sdShell = paramSd(fit, (P) => volume(H, P) - volume(e.H, P));
+      return {
+        V: e.V + volume(H, p) - volume(e.H, p),
+        sd: Math.sqrt(e.c + e.d + sdShell * sdShell),
+        extrapolated: flag === "out", step: flag === "step", rows: [e.row],
+      };
+    };
+    if (H < pins[0].H) return fromPin(pins[0], "out");
+    if (H > pins[n - 1].H) return fromPin(pins[n - 1], "out");
+    let j = 0;
+    while (j < n - 2 && H > pins[j + 1].H) j++;
+    const a = pins[j], b = pins[j + 1];
+    const dF = volume(b.H, p) - volume(a.H, p), dV = b.V - a.V;
+    if (!(dF > 1e-9) || !(dV > 0)) return fromPin(H - a.H <= b.H - H ? a : b, "step");
+    const t = (volume(H, p) - volume(a.H, p)) / dF;
+    // The pours between the two pins enter by the share of the way from the
+    // earlier pin of the books (a drain books from the top down).
+    const e = a.c <= b.c ? a : b, q = e === a ? b : a, s = e === a ? t : 1 - t;
+    const v = e.c + s * s * (q.c - e.c) + (1 - t) * (1 - t) * a.d + t * t * b.d;
+    return { V: a.V + t * dV, sd: Math.sqrt(Math.max(v, 0)), extrapolated: false, step: false, rows: [a.row, b.row] };
+  }
+
+  /**
+   * The F(H) calculator of the Shell tab: a height to litres, or litres to a
+   * height, from the running shell and from the dips.
+   *   q: { H } or { V }
+   * Returns {
+   *   from: "H" | "V", H, V            (the typed value and the shell's answer)
+   *   shell: { H, V, sd }              sd: 1σ of the answer from the fit (mm or L)
+   *   dips:  { H, V, sd, extrapolated, step, rows } | null
+   *   why:   "pins" when the dips cannot answer yet (fewer than two pins);
+   *          "range" when the litres lie outside the dips' curve
+   *   diff:  dips − shell (L for a height, mm for litres) or null
+   *   driftLimit: the 3σ√n drift alarm of the campaign (L), for scale
+   *   above: the height or the litres pass the brim; below: under the bottom
+   *   capacity, brim
+   * }
+   * The typed value is exact: the ± is the error of the answer, not of the
+   * reading.  The shell's ± comes from its fit; the dips' ± from the pours to
+   * the pins and the readings at them.
+   */
+  Session.prototype.calc = function (q) {
+    const fit = this.fit, p = fit.p, cap = capacity(p), top = brim(p);
+    const pins = this.books().pins.slice().sort((a, b) => a.H - b.H);
+    const enough = pins.length >= 2;
+    const out = { capacity: cap, brim: top, driftLimit: this.status().driftLimit, dips: null, why: null, diff: null };
+    if (q.H != null) {
+      const H = Number(q.H);
+      const V = volume(H, p);
+      Object.assign(out, { from: "H", H, V, above: H > top, below: H < p.h0 });
+      out.shell = { H, V, sd: paramSd(fit, (P) => volume(H, P)) };
+      if (!enough) { out.why = "pins"; return out; }
+      const d = dipVolume(H, pins, fit);
+      out.dips = Object.assign({ H }, d);
+      out.diff = d.V - V;
+      return out;
+    }
+    const V = Number(q.V);
+    const H = levelFor(V, p);
+    Object.assign(out, { from: "V", H, V, above: V > cap, below: V < 0 });
+    out.shell = { H, V, sd: V > 0 && V < cap ? paramSd(fit, (P) => levelFor(V, P)) : 0 };
+    if (!enough) { out.why = "pins"; return out; }
+    // The dips' curve rises with H: bisect it between the bottom and the brim.
+    let lo = Math.min(p.h0, pins[0].H), hi = Math.max(top, pins[pins.length - 1].H);
+    const at = (h) => dipVolume(h, pins, fit).V;
+    if (V < at(lo) || V > at(hi)) { out.why = "range"; return out; }
+    for (let i = 0; i < 80; i++) {
+      const mid = 0.5 * (lo + hi);
+      if (at(mid) < V) lo = mid; else hi = mid;
+    }
+    const Hd = 0.5 * (lo + hi), d = dipVolume(Hd, pins, fit);
+    const m = (at(Hd + 0.5) - at(Hd - 0.5)) / 1.0;
+    out.dips = { H: Hd, V, sd: d.sd / Math.max(m, 1e-3), extrapolated: d.extrapolated, step: d.step, rows: d.rows };
+    out.diff = Hd - H;
+    return out;
+  };
+
   /**
    * Raw file for calib init / calib fit (§3.9).  One row per level, adopted
    * reading.  A drain keeps the same three columns and positive volumes; row
@@ -2443,7 +2617,7 @@
     fit: { get: function () { return this[this.active].fit; } },
     scale: { get: function () { return this[this.active].scale; } },
   });
-  for (const name of ["current", "lastGood", "advice", "preview", "status", "series",
+  for (const name of ["current", "lastGood", "advice", "preview", "status", "series", "books", "calc",
     "learning", "fillPlan", "fillSecondsFor", "drainSecondsFor",
     "toRawCsv"]) {
     TransferSession.prototype[name] = function (name) {

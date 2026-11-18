@@ -783,6 +783,57 @@ chart. A level with no mark in the chart now shown (the first level, a
 pending level, an unknown pour) says so in the line under the chart. The
 *time* column gives when the pour ended and when each reading was taken.
 
+## The F(H) calculator
+
+The **Shell** tab starts with the F(H) calculator. It changes a dip reading
+into litres, or litres into a dip reading, for the tank chosen in the tiles.
+
+There are two fields, *Height, mm* and *Litres*. Type in one field: the
+other field shows the running shell's answer, and its label says *(shell)*.
+Until you type, the height field holds the last good level and follows each
+new dip. A value you type stays while the Shell tab is open on that tank.
+When you leave the tab or choose the other tank, the fields go back to the
+current level. Simple mode shows the same card.
+
+The table below the fields gives two answers side by side, each ± 2σ:
+
+| Column | Where it comes from | Its ± |
+|---|---|---|
+| shell | The running shell: F(H), or the height where F(H) holds the litres | The fit covariance of r, L and h0 |
+| dips | The books (the litres poured or drained) at the accepted dips | The pour noise to the dips, and the reading noise at them |
+
+The dips column uses calib's books rule (§9.3), so the page and the final
+fit count the same litres:
+
+- **Start.** A fill starts at the first level: its pour when it is known,
+  else F(H) of the first level. A drain starts at the first level in the
+  shell: the start reading at the brim counts, a neck reading does not.
+- **Every pour counts**, also an anomaly or override interval: trust is
+  about the fit, not about what was poured. An unknown or part pour adds the
+  shell's change over its interval. An overflow ends the books.
+- **Pins.** The start of the books and every accepted or learning level after
+  it. A suspect level and a neck level are no pin.
+- **Between two pins** the volume follows the shell's shape and meets both
+  pins: `V = Va + (Vb − Va)·(F(H) − F(Ha)) / (F(Hb) − F(Ha))`. At a pin the
+  dips column gives the books exactly.
+- **Outside the pins** (below the first, above the last) the dips column
+  takes the shell's step from the nearest pin and shows *extrapolated*: do
+  not trust it (rule 1.4). A span whose books do not rise takes the shell's
+  step from the nearer pin and shows *shell step*.
+
+The *dips − shell* line gives the difference (litres for a height, mm for
+litres), with the drift alarm of the campaign for scale. It has no verdict:
+the shell is fitted on the same dips, so the two columns are not
+independent. *dips from* names the rows that the answer uses.
+
+When the books start at F(H) (a drain, or a fill with an unknown first pour),
+the shell's error at that level moves every dips value by the same litres.
+The dips ± includes it, so it stays wide until the shell knows the bottom.
+
+The dips column needs two pins. Before that, the shell column answers from
+the priors (D, L, the datum) with a wide ±. A height above the brim, litres
+above the capacity, or below the bottom get a note under the table.
+
 ## Drain campaign (reverse strapping)
 
 A drain campaign runs the calibration from the top down. The tank is full of

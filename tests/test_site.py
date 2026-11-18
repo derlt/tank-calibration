@@ -4356,5 +4356,169 @@ class TestSiteEarlyTimer(unittest.TestCase):
         self.assertEqual(got["redip"], {"asked": 2, "running": False, "card": True}, "Yes stops the timer and re-opens A")
 
 
+
+# The demo campaign of TestSiteCore, replayed with the re-dip of row 12.
+FH_DEMO_JS = (
+    f"const rows = core.readRawText(fs.readFileSync({json.dumps(DEMO)}, 'utf8'));\n"
+    "const cfg = {D: 1760, Dpm: 200, Lest: 2950, pourUnit: 50, sigmaRead: 1.0,"
+    " pourRel: 0.003, pourAbs: 1.0};\n"
+    "const r = core.replayRows(rows, cfg, {overflowRows: new Set([22]),"
+    " second: (i) => (i === 11 ? 629.0 : rows[i].H)});\n"
+    "const s = r.session;\n"
+)
+
+
+@unittest.skipUnless(NODE, "node is not installed")
+class TestFhCalculator(unittest.TestCase):
+    """The F(H) calculator of the Shell tab: the books, the pins, both directions."""
+
+    def test_books_follow_calib_on_the_demo(self):
+        got = _node(
+            FH_DEMO_JS
+            + "console.log(JSON.stringify({books: s.books(), p: s.fit.p,"
+            " levels: s.levels.map(L => ({row: L.row, H: L.H, state: L.state, suspect: !!L.suspect,"
+            " kind: L.step.kind, value: L.step.value}))}));"
+        )
+        p, levels, books = got["p"], got["levels"], got["books"]
+        shell = Shell(p["r"], p["L"], p["h0"])
+        self.assertEqual(books["start"], 0, "a fill books from the first level")
+        # calib's rule: the first pour when known, then every pour; an unknown
+        # pour takes the shell's change; the overflow ends the books.
+        want, V, prev = {}, None, None
+        for L in levels:
+            if L["state"] == "overflow":
+                break
+            if V is None:
+                V = L["value"] if L["kind"] == "known" else float(shell.volume(L["H"]))
+            elif L["kind"] == "known":
+                V += L["value"]
+            else:
+                V += float(shell.volume(L["H"]) - shell.volume(prev["H"]))
+            prev = L
+            if L is levels[0] or (L["state"] in ("accepted", "learning") and not L["suspect"]):
+                want[L["row"]] = V
+        pins = {q["row"]: q["V"] for q in books["pins"]}
+        self.assertEqual(sorted(pins), sorted(want), "pins: the start and the accepted levels")
+        for row, v in want.items():
+            self.assertAlmostEqual(pins[row], v, places=6, msg=f"row {row}")
+        self.assertAlmostEqual(pins[1], 50.0, msg="the first pour is known: the books start there")
+        self.assertNotIn(16, pins, "an unknown pour is no pin")
+        self.assertNotIn(22, pins, "an overflow reading is no pin")
+        self.assertIn(17, pins, "the books go on after an unknown pour")
+        for q in books["pins"]:
+            self.assertGreater(q["c"], 0)
+            self.assertGreater(q["d"], 0)
+
+    def test_calc_meets_the_pins_and_inverts(self):
+        got = _node(
+            FH_DEMO_JS
+            + "const pins = s.books().pins;\n"
+            "const atPins = pins.map(q => ({V: q.V, got: s.calc({H: q.H})}));\n"
+            "const a = pins[5], b = pins[6], mid = 0.5 * (a.H + b.H);\n"
+            "const byH = s.calc({H: mid});\n"
+            "const back = s.calc({V: byH.dips.V});\n"
+            "const shellBack = s.calc({V: byH.V});\n"
+            "const top = pins.reduce((m, q) => Math.max(m, q.H), 0);\n"
+            "const above = s.calc({H: top + 20}), over = s.calc({H: s.fit.p.h0 + 2 * s.fit.p.r + 30});\n"
+            "const tooMuch = s.calc({V: core.capacity(s.fit.p) + 500});\n"
+            "const one = new core.Session(cfg); one.start('50', 39.5); one.dip(39.5);\n"
+            "const early = one.calc({H: 100});\n"
+            "console.log(JSON.stringify({atPins, a, b, mid, byH, back, shellBack, above, over, tooMuch, early,"
+            " p: s.fit.p}));"
+        )
+        for x in got["atPins"]:
+            self.assertAlmostEqual(x["got"]["dips"]["V"], x["V"], places=6, msg="a pin gives its books")
+        byH, a, b = got["byH"], got["a"], got["b"]
+        self.assertEqual(byH["from"], "H")
+        self.assertEqual(byH["dips"]["rows"], [a["row"], b["row"]])
+        self.assertFalse(byH["dips"]["extrapolated"])
+        self.assertTrue(min(a["V"], b["V"]) < byH["dips"]["V"] < max(a["V"], b["V"]))
+        self.assertAlmostEqual(byH["diff"], byH["dips"]["V"] - byH["V"], places=9)
+        self.assertGreater(byH["shell"]["sd"], 0)
+        self.assertGreater(byH["dips"]["sd"], 0)
+        p = got["p"]
+        shell = Shell(p["r"], p["L"], p["h0"])
+        self.assertAlmostEqual(byH["V"], float(shell.volume(got["mid"])), places=6)
+        # Litres back to a height, both columns.
+        self.assertAlmostEqual(got["back"]["dips"]["H"], got["mid"], places=4)
+        self.assertAlmostEqual(got["shellBack"]["H"], got["mid"], places=4)
+        self.assertEqual(got["back"]["from"], "V")
+        self.assertGreater(got["back"]["dips"]["sd"], 0)
+        self.assertTrue(got["above"]["dips"]["extrapolated"], "past the last pin: the shell step")
+        self.assertTrue(got["over"]["above"], "past the brim")
+        self.assertTrue(got["tooMuch"]["above"])
+        self.assertEqual(got["tooMuch"]["why"], "range")
+        self.assertIsNone(got["tooMuch"]["dips"])
+        self.assertEqual(got["early"]["why"], "pins", "one level cannot pin the dips")
+        self.assertIsNone(got["early"]["dips"])
+        self.assertGreater(got["early"]["V"], 0, "the shell answers from the priors")
+
+    def test_drain_books_start_at_the_brim(self):
+        got = _node(
+            DRAIN_JS
+            + "const rows = drainRows();\n"
+            "const r = core.replayRows(rows, Object.assign({pourUnit: 100}, DRAIN_CFG), {neckEntrance: true});\n"
+            "const s = r.session, b = s.books();\n"
+            "const tests = [];\n"
+            "for (let i = 0; i + 1 < b.pins.length; i += 3) {\n"
+            "  const H = 0.5 * (b.pins[i].H + b.pins[i + 1].H), c = s.calc({H});\n"
+            "  tests.push({H, dips: c.dips.V, sd: c.dips.sd, truth: core.volume(H, P)}); }\n"
+            "console.log(JSON.stringify({b, fitCap: core.capacity(s.fit.p), CAP, SCHED,"
+            " first: core.volume(b.pins[0].H, s.fit.p), tests}));"
+        )
+        b = got["b"]
+        self.assertEqual(b["start"], 0, "the start reading at the brim starts the books")
+        self.assertAlmostEqual(b["pins"][0]["V"], got["first"], places=6, msg="the books start at F(H)")
+        hs = [q["H"] for q in b["pins"]]
+        self.assertEqual(hs, sorted(hs, reverse=True), "a drain's pins fall")
+        cs = [q["c"] for q in b["pins"]]
+        self.assertEqual(cs, sorted(cs), "the pour variance grows from the top down")
+        drained = got["first"] - b["pins"][-1]["V"]
+        self.assertAlmostEqual(drained, sum(got["SCHED"][: len(b["pins"]) - 1]), places=6,
+                               msg="each drain comes off the books")
+        for t in got["tests"]:
+            self.assertLess(abs(t["dips"] - t["truth"]), 3 * t["sd"] + 2.0, t)
+
+    def test_page_card_prefills_and_follows_the_typed_field(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            + FH_DEMO_JS
+            + "const store = new Map([['calib-site:active', JSON.stringify(s.toJSON())]]);\n"
+            "const p = stub.boot(page, corePath, store), el = p.el, out = {};\n"
+            "const go = (t) => el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: t } }) } });\n"
+            "const card = () => ({H: el('fh-H').value, V: el('fh-V').value, res: el('fh-res').innerHTML,"
+            " note: el('fh-note').textContent, hl: el('fh-H-lbl').textContent, vl: el('fh-V-lbl').textContent});\n"
+            "const gi = s.lastGood();\n"
+            "out.last = s.levels[gi].H; out.lastV = core.volume(s.levels[gi].H, s.fit.p);\n"
+            "go('shell'); out.pre = card();\n"
+            "el('fh-V').value = '3000'; el('fh-V')._listeners.input[0]();\n"
+            "out.byV = card(); out.shellH = core.levelFor(3000, s.fit.p);\n"
+            "go('log'); go('shell'); out.back = card();\n"
+            "el('fh-H').value = ''; el('fh-H')._listeners.input[0](); out.blank = card();\n"
+            "console.log(JSON.stringify(out));"
+        )
+        pre = got["pre"]
+        self.assertEqual(pre["H"], f"{got['last']:.1f}", "the height field starts at the last good level")
+        self.assertEqual(pre["V"], f"{got['lastV']:.0f}", "the litres field shows the shell's value")
+        self.assertEqual((pre["hl"], pre["vl"]), ("Height, mm", "Litres (shell)"))
+        self.assertIn(">shell<", pre["res"])
+        self.assertIn(">dips<", pre["res"])
+        self.assertIn("dips − shell", pre["res"])
+        by_v = got["byV"]
+        self.assertEqual(by_v["V"], "3000", "the typed field is never rewritten")
+        self.assertEqual(by_v["H"], f"{got['shellH']:.1f}")
+        self.assertEqual((by_v["hl"], by_v["vl"]), ("Height, mm (shell)", "Litres"))
+        self.assertIn(">height<", by_v["res"])
+        self.assertIn("rows ", by_v["res"])
+        self.assertEqual(got["back"]["H"], pre["H"], "leaving the tab brings the current level back")
+        self.assertEqual(got["back"]["hl"], "Height, mm")
+        self.assertEqual(got["blank"]["res"], "")
+        self.assertEqual(got["blank"]["V"], "")
+        self.assertEqual(got["blank"]["note"], "Type a height or litres.")
+
+
 if __name__ == "__main__":
     unittest.main()

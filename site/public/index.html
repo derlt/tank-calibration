@@ -183,6 +183,17 @@
   .kv { display: grid; grid-template-columns: max-content 1fr; gap: 0.2rem 0.8rem; font-size: 0.93rem; }
   .kv dt { color: var(--muted); }
   .kv dd { margin: 0; font-family: var(--mono); }
+  /* The F(H) calculator (Shell tab): two linked fields, then shell and dips side by side. */
+  .fh-two { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0.4rem; align-items: end; }
+  .fh-two .fh-arrow { padding-bottom: 0.75rem; color: var(--muted); }
+  .fh-hint { margin: 0.3rem 0 0; }
+  .fh-res { display: grid; grid-template-columns: max-content 1fr 1fr; gap: 0.2rem 0.8rem; margin-top: 0.7rem; font-size: 0.93rem; align-items: baseline; }
+  .fh-res:empty { display: none; }
+  .fh-res .h { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .fh-res .k { color: var(--muted); }
+  .fh-res .v { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .fh-res .big { font-weight: 700; font-size: 1.15rem; }
+  .fh-res .wide { grid-column: span 2; }
   .verdict { border-radius: var(--radius); padding: 0.9rem 1rem; border: 2px solid; }
   .verdict h3 { margin: 0 0 0.35rem; font-size: 1.25rem; }
   .verdict p { margin: 0.25rem 0; }
@@ -704,10 +715,24 @@
   </section>
 
   <!-- ===================================================== shell -->
-  <section id="shell" class="card hidden">
-    <h2>Running shell</h2>
-    <div class="kv" id="shell-kv"></div>
-    <p class="muted">The running shell is a tool for the live check. It is not the adopted shell. After the campaign, run <span class="mono">calib init</span> and <span class="mono">calib fit</span> on the exported raw file: the full fit (brim constraint, pair rule, block test, bootstrap) makes the deliverable.</p>
+  <section id="shell" class="hidden">
+    <div class="card" id="fh-card">
+      <h2>F(H) calculator</h2>
+      <div class="fh-two">
+        <label><span id="fh-H-lbl">Height, mm</span><input id="fh-H" type="number" inputmode="decimal" step="0.1"></label>
+        <span class="fh-arrow" aria-hidden="true">⇄</span>
+        <label><span id="fh-V-lbl">Litres (shell)</span><input id="fh-V" type="number" inputmode="decimal" step="1"></label>
+      </div>
+      <p class="muted fh-hint">Type in either field; the other follows.</p>
+      <div class="fh-res" id="fh-res"></div>
+      <p class="muted" id="fh-note"></p>
+      <p class="muted">Shell: the running shell, ± from its fit. Dips: the litres on the books at the accepted dips; between two dips the volume follows the shell's shape and meets both dips. Outside the dips it is the shell's step from the nearest dip (extrapolated). ± is 2σ.</p>
+    </div>
+    <div class="card" style="margin-top:0.8rem">
+      <h2>Running shell</h2>
+      <div class="kv" id="shell-kv"></div>
+      <p class="muted">The running shell is a tool for the live check. It is not the adopted shell. After the campaign, run <span class="mono">calib init</span> and <span class="mono">calib fit</span> on the exported raw file: the full fit (brim constraint, pair rule, block test, bootstrap) makes the deliverable.</p>
+    </div>
   </section>
 
   <!-- ===================================================== settings -->
@@ -1775,6 +1800,39 @@
     "Levels — {name}": "Các mức — {name}",
     "{name} — Reading minus prediction": "{name} — Số đo trừ dự đoán",
     "Running shell": "Mô hình bồn tạm",
+    // The F(H) calculator (Shell tab)
+    "F(H) calculator": "Máy tính F(H)",
+    "Height, mm": "Chiều cao, mm",
+    "Height, mm (shell)": "Chiều cao, mm (mô hình bồn)",
+    "Litres (shell)": "Lít (mô hình bồn)",
+    "Litres": "Lít",
+    "Type in either field; the other follows.": "Nhập vào một trong hai ô; ô kia tự tính theo.",
+    "Type a height or litres.": "Nhập chiều cao hoặc số lít.",
+    "shell": "mô hình bồn",
+    "dips": "số đo",
+    "litres": "lít",
+    "height": "chiều cao",
+    "± 2σ": "± 2σ",
+    "± {0} L": "± {0} L",
+    "± {0} mm": "± {0} mm",
+    "dips − shell": "số đo − mô hình bồn",
+    "extrapolated": "ngoại suy",
+    "shell step": "bước mô hình bồn",
+    "drift alarm beyond ±{0} L": "báo động độ trôi khi vượt ±{0} L",
+    "dips from": "số đo từ",
+    "rows {0} → {1}": "hàng {0} → {1}",
+    "row {0}": "hàng {0}",
+    "Above the brim ({0} mm): the shell is full at {1} L; the rest is in the neck.": "Trên đỉnh bồn ({0} mm): thân bồn đầy ở {1} L; phần còn lại nằm trong cổ bồn.",
+    "More than the shell holds ({0} L): the level is at the brim, {1} mm.": "Nhiều hơn sức chứa của thân bồn ({0} L): mức ở đỉnh bồn, {1} mm.",
+    "Below the bottom of the shell: no liquid.": "Dưới đáy thân bồn: không có chất lỏng.",
+    "Litres below 0: no level.": "Số lít dưới 0: không có mức.",
+    "The dips column needs two accepted dips.": "Cột số đo cần hai lần đo đã chấp nhận.",
+    "These litres are outside the dips' curve, from the bottom to the brim.": "Số lít này nằm ngoài đường cong của các số đo, từ đáy tới đỉnh bồn.",
+    "The books do not rise between these dips: the dips column takes the shell's step from the nearer dip.": "Sổ sách không tăng giữa hai lần đo này: cột số đo lấy bước của mô hình bồn từ lần đo gần hơn.",
+    "Shell: the running shell, ± from its fit.": "Mô hình bồn: mô hình bồn tạm, ± từ phép khớp của nó.",
+    "Dips: the litres on the books at the accepted dips; between two dips the volume follows the shell's shape and meets both dips.": "Số đo: số lít trên sổ sách tại các lần đo đã chấp nhận; giữa hai lần đo, thể tích theo hình dạng của mô hình bồn và khớp cả hai lần đo.",
+    "Outside the dips it is the shell's step from the nearest dip (extrapolated).": "Ngoài các lần đo, đó là bước của mô hình bồn từ lần đo gần nhất (ngoại suy).",
+    "± is 2σ.": "± là 2σ.",
     "tank": "bồn",
     "{name} (pump out)": "{name} (bơm ra)",
     "{name} (pour in)": "{name} (đổ vào)",
@@ -4478,6 +4536,180 @@
     return out;
   };
 
+  // ---------------------------------------------------------------- F(H) calculator
+  /**
+   * The spread (1σ) of g(P) from the fit covariance, by central differences
+   * over (r, L, h0).  0 without a covariance.
+   */
+  function paramSd(fit, g) {
+    if (!fit || !fit.cov) return 0;
+    const p = fit.p, x = [p.r, p.L, p.h0], grad = [];
+    for (let j = 0; j < 3; j++) {
+      const h = 1e-3 * Math.max(1, Math.abs(x[j]));
+      const xp = x.slice(), xm = x.slice();
+      xp[j] += h; xm[j] -= h;
+      grad.push((g(toP(xp)) - g(toP(xm))) / (2 * h));
+    }
+    return Math.sqrt(Math.max(quad(grad, fit.cov), 0));
+  }
+
+  /**
+   * The books (§9.3): the litres on the books at each decided level, as calib
+   * counts them, and the pins of the F(H) calculator.
+   *
+   * Where the books start (calib `_books_anchor`).  A fill: the first level,
+   * at its recorded pour when known, else at F(H₀).  A drain: the first level
+   * in the shell (a neck reading is vent-column height; the start reading at
+   * the brim counts), at its recorded pour when it is the first level and
+   * known (a metered prefill), else at F(H).  The books then take every pour,
+   * trusted or not: trust is about the fit, not about what was poured.  An
+   * unknown or part pour takes the shell's change over its interval (its
+   * back-predicted total).  An overflow ends the books: that pour went into
+   * the neck.
+   *
+   * A pin is a level the dips trust: the start of the books, and every
+   * accepted or learning level after it (not suspect, not in the neck).
+   * Each pin has V (books, L), c (the variance of the pours to it, plus the
+   * shell's variance of F(H) when the books start at F(H), L²) and
+   * d (the variance its reading adds, (m·σr)²/n, L²).
+   *
+   * Returns { pins, start } (start = level index, −1 without books).
+   */
+  Session.prototype.books = function () {
+    const p = this.fit.p, cfg = this.cfg, dir = cfg.dir, top = brim(p), sr = cfg.sigmaRead;
+    const decided = (L) => L.H != null && L.state !== "pending" && L.state !== "overflow" && !L.overflow;
+    let k = -1;
+    if (dir > 0) k = this.levels.length && decided(this.levels[0]) ? 0 : -1;
+    else {
+      for (let i = 0; i < this.levels.length; i++) {
+        const L = this.levels[i];
+        if (!decided(L)) continue;
+        if (!L.neck && (L.H <= top || (L.start && L.entrance))) { k = i; break; }
+      }
+    }
+    if (k < 0) return { pins: [], start: -1 };
+    const pin = (L, V, c) => {
+      const m = slope(L.H, p);
+      return { row: L.row, H: L.H, V, c, d: m * m * sr * sr / (L.n || 1) };
+    };
+    const L0 = this.levels[k];
+    let V, c;
+    if (k === 0 && L0.step && L0.step.kind === "known") { V = L0.step.value; c = Math.pow(pourSigma(V, cfg), 2); }
+    else {
+      // The books start at the shell's own volume: its error moves every
+      // dip-side value by the same litres.
+      V = volume(L0.H, p);
+      const sv = paramSd(this.fit, (P) => volume(L0.H, P));
+      c = sv * sv;
+    }
+    const pins = [pin(L0, V, c)];
+    let prev = L0;
+    for (let i = k + 1; i < this.levels.length; i++) {
+      const L = this.levels[i];
+      if (L.state === "overflow" || L.overflow) break;
+      if (!decided(L)) continue;
+      if (L.step.kind === "known") {
+        V += dir * L.step.value;
+        c += Math.pow(pourSigma(L.step.value, cfg), 2);
+      } else {
+        V += volume(L.H, p) - volume(prev.H, p);
+        const m = slope(Math.max(L.H, prev.H), p);
+        c += 2 * m * m * sr * sr;
+      }
+      prev = L;
+      if (FIT.has(L.state) && !L.suspect && !L.neck) pins.push(pin(L, V, c));
+    }
+    return { pins, start: k };
+  };
+
+  /**
+   * The dip-side volume at H from the pins (sorted by H).  Between two pins
+   * the volume follows the shell's shape and hits both pins:
+   *   V = Va + (Vb − Va)·(F(H) − F(Ha)) / (F(Hb) − F(Ha)).
+   * Below the lowest or above the highest pin it takes the shell step from
+   * that pin (extrapolated, rule 1.4).  A span whose books do not rise takes
+   * the shell step from the nearer pin (step).  sd: 1σ, L.
+   */
+  function dipVolume(H, pins, fit) {
+    const p = fit.p, n = pins.length;
+    const fromPin = (e, flag) => {
+      const sdShell = paramSd(fit, (P) => volume(H, P) - volume(e.H, P));
+      return {
+        V: e.V + volume(H, p) - volume(e.H, p),
+        sd: Math.sqrt(e.c + e.d + sdShell * sdShell),
+        extrapolated: flag === "out", step: flag === "step", rows: [e.row],
+      };
+    };
+    if (H < pins[0].H) return fromPin(pins[0], "out");
+    if (H > pins[n - 1].H) return fromPin(pins[n - 1], "out");
+    let j = 0;
+    while (j < n - 2 && H > pins[j + 1].H) j++;
+    const a = pins[j], b = pins[j + 1];
+    const dF = volume(b.H, p) - volume(a.H, p), dV = b.V - a.V;
+    if (!(dF > 1e-9) || !(dV > 0)) return fromPin(H - a.H <= b.H - H ? a : b, "step");
+    const t = (volume(H, p) - volume(a.H, p)) / dF;
+    // The pours between the two pins enter by the share of the way from the
+    // earlier pin of the books (a drain books from the top down).
+    const e = a.c <= b.c ? a : b, q = e === a ? b : a, s = e === a ? t : 1 - t;
+    const v = e.c + s * s * (q.c - e.c) + (1 - t) * (1 - t) * a.d + t * t * b.d;
+    return { V: a.V + t * dV, sd: Math.sqrt(Math.max(v, 0)), extrapolated: false, step: false, rows: [a.row, b.row] };
+  }
+
+  /**
+   * The F(H) calculator of the Shell tab: a height to litres, or litres to a
+   * height, from the running shell and from the dips.
+   *   q: { H } or { V }
+   * Returns {
+   *   from: "H" | "V", H, V            (the typed value and the shell's answer)
+   *   shell: { H, V, sd }              sd: 1σ of the answer from the fit (mm or L)
+   *   dips:  { H, V, sd, extrapolated, step, rows } | null
+   *   why:   "pins" when the dips cannot answer yet (fewer than two pins);
+   *          "range" when the litres lie outside the dips' curve
+   *   diff:  dips − shell (L for a height, mm for litres) or null
+   *   driftLimit: the 3σ√n drift alarm of the campaign (L), for scale
+   *   above: the height or the litres pass the brim; below: under the bottom
+   *   capacity, brim
+   * }
+   * The typed value is exact: the ± is the error of the answer, not of the
+   * reading.  The shell's ± comes from its fit; the dips' ± from the pours to
+   * the pins and the readings at them.
+   */
+  Session.prototype.calc = function (q) {
+    const fit = this.fit, p = fit.p, cap = capacity(p), top = brim(p);
+    const pins = this.books().pins.slice().sort((a, b) => a.H - b.H);
+    const enough = pins.length >= 2;
+    const out = { capacity: cap, brim: top, driftLimit: this.status().driftLimit, dips: null, why: null, diff: null };
+    if (q.H != null) {
+      const H = Number(q.H);
+      const V = volume(H, p);
+      Object.assign(out, { from: "H", H, V, above: H > top, below: H < p.h0 });
+      out.shell = { H, V, sd: paramSd(fit, (P) => volume(H, P)) };
+      if (!enough) { out.why = "pins"; return out; }
+      const d = dipVolume(H, pins, fit);
+      out.dips = Object.assign({ H }, d);
+      out.diff = d.V - V;
+      return out;
+    }
+    const V = Number(q.V);
+    const H = levelFor(V, p);
+    Object.assign(out, { from: "V", H, V, above: V > cap, below: V < 0 });
+    out.shell = { H, V, sd: V > 0 && V < cap ? paramSd(fit, (P) => levelFor(V, P)) : 0 };
+    if (!enough) { out.why = "pins"; return out; }
+    // The dips' curve rises with H: bisect it between the bottom and the brim.
+    let lo = Math.min(p.h0, pins[0].H), hi = Math.max(top, pins[pins.length - 1].H);
+    const at = (h) => dipVolume(h, pins, fit).V;
+    if (V < at(lo) || V > at(hi)) { out.why = "range"; return out; }
+    for (let i = 0; i < 80; i++) {
+      const mid = 0.5 * (lo + hi);
+      if (at(mid) < V) lo = mid; else hi = mid;
+    }
+    const Hd = 0.5 * (lo + hi), d = dipVolume(Hd, pins, fit);
+    const m = (at(Hd + 0.5) - at(Hd - 0.5)) / 1.0;
+    out.dips = { H: Hd, V, sd: d.sd / Math.max(m, 1e-3), extrapolated: d.extrapolated, step: d.step, rows: d.rows };
+    out.diff = Hd - H;
+    return out;
+  };
+
   /**
    * Raw file for calib init / calib fit (§3.9).  One row per level, adopted
    * reading.  A drain keeps the same three columns and positive volumes; row
@@ -4838,7 +5070,7 @@
     fit: { get: function () { return this[this.active].fit; } },
     scale: { get: function () { return this[this.active].scale; } },
   });
-  for (const name of ["current", "lastGood", "advice", "preview", "status", "series",
+  for (const name of ["current", "lastGood", "advice", "preview", "status", "series", "books", "calc",
     "learning", "fillPlan", "fillSecondsFor", "drainSecondsFor",
     "toRawCsv"]) {
     TransferSession.prototype[name] = function (name) {
@@ -8808,8 +9040,80 @@
     return s + (D.length ? "" : F.empty) + "</svg>";
   }
 
+  /*
+   * The F(H) calculator.  from: the field the user typed in ("H" or "V"),
+   * value: its number (null = blank).  Until the user types, the height
+   * field holds the last good level and follows each new dip.  A typed
+   * value stays while the Shell tab is open on the same tank; leaving the
+   * tab or choosing the other tank brings the current level back.  The
+   * page never rewrites the field the user types in.
+   */
+  const FH = { sess: null, key: null, typed: false, from: "H", value: null };
+  function fhKey() { return isTransfer() ? S.active : "one"; }
+  function fhReset() {
+    const gi = S.lastGood();
+    FH.sess = S; FH.key = fhKey(); FH.typed = false; FH.from = "H";
+    FH.value = gi >= 0 ? S.levels[gi].H : null;
+  }
+  function fhInput(from) {
+    return () => {
+      const v = num(from === "H" ? "fh-H" : "fh-V");
+      FH.typed = true; FH.from = from; FH.value = v != null && isFinite(v) ? v : null;
+      renderFh();
+    };
+  }
+  $("fh-H").addEventListener("input", fhInput("H"));
+  $("fh-V").addEventListener("input", fhInput("V"));
+
+  /** Litres: whole litres, a small ± with one decimal. */
+  const fL = (x) => f(x, Math.abs(x) < 10 ? 1 : 0);
+
+  function renderFh() {
+    if (!S || !S.fit) return;
+    if (FH.sess !== S || FH.key !== fhKey()) fhReset();
+    if (!FH.typed) { const gi = S.lastGood(); FH.from = "H"; FH.value = gi >= 0 ? S.levels[gi].H : null; }
+    const byH = FH.from === "H";
+    const src = byH ? "fh-H" : "fh-V", other = byH ? "fh-V" : "fh-H";
+    $("fh-H-lbl").textContent = byH ? "Height, mm" : "Height, mm (shell)";
+    $("fh-V-lbl").textContent = byH ? "Litres (shell)" : "Litres";
+    if (!FH.typed) $(src).value = FH.value == null ? "" : f(FH.value);
+    if (FH.value == null) {
+      $(other).value = ""; $("fh-res").innerHTML = "";
+      $("fh-note").textContent = "Type a height or litres.";
+      return;
+    }
+    const c = S.calc(byH ? { H: FH.value } : { V: FH.value });
+    const d = c.dips, unit = byH ? "L" : "mm";
+    const val = (x) => (x == null ? "—" : byH ? fL(x) : f(x));
+    $(other).value = byH ? f(c.shell.V, 0) : f(c.shell.H);
+    const cell = (x, cls) => `<span class="v${cls ? " " + cls : ""}">${x}</span>`;
+    let h = `<span></span><span class="h">shell</span><span class="h">dips</span>`
+      + `<span class="k">${byH ? "litres" : "height"}</span>`
+      + cell(byH ? fL(c.shell.V) : f(c.shell.H), "big") + cell(d ? val(byH ? d.V : d.H) : "—", "big")
+      + `<span class="k">± 2σ</span>`
+      + cell(`± ${val(2 * c.shell.sd)} ${unit}`) + cell(d ? `± ${val(2 * d.sd)} ${unit}` : "—");
+    if (d) {
+      const lim = byH ? `drift alarm beyond ±${f(c.driftLimit, 0)} L` : "";
+      h += `<span class="k">dips − shell</span>`
+        + `<span class="v wide">${sg(c.diff, byH ? 0 : 1)} ${unit}${d.extrapolated ? ' <span class="tag t-pending">extrapolated</span>' : ""}`
+        + `${d.step ? ' <span class="tag t-pending">shell step</span>' : ""}${lim ? ` <span class="muted">${lim}</span>` : ""}</span>`;
+      const pinsTxt = d.rows.length === 2 ? `rows ${d.rows[0]} → ${d.rows[1]}` : `row ${d.rows[0]}`;
+      h += `<span class="k">dips from</span><span class="v wide muted">${pinsTxt}</span>`;
+    }
+    $("fh-res").innerHTML = h;
+    const notes = [];
+    if (c.above) notes.push(byH ? `Above the brim (${f(c.brim)} mm): the shell is full at ${f(c.capacity, 0)} L; the rest is in the neck.`
+      : `More than the shell holds (${f(c.capacity, 0)} L): the level is at the brim, ${f(c.brim)} mm.`);
+    if (c.below) notes.push(byH ? "Below the bottom of the shell: no liquid." : "Litres below 0: no level.");
+    if (c.why === "pins") notes.push("The dips column needs two accepted dips.");
+    if (c.why === "range") notes.push("These litres are outside the dips' curve, from the bottom to the brim.");
+    if (d && d.step) notes.push("The books do not rise between these dips: the dips column takes the shell's step from the nearer dip.");
+    $("fh-note").textContent = notes.join(" ");
+  }
+
   function renderShell(st) {
-    if (tab !== "shell") return;
+    if (tab !== "shell") { FH.typed = false; return; }
+    renderFh();
     const p = st.fit.p, sd = st.fit.sd, pr = S.cfg.prior;
     const rows = isTransfer()
       ? [["tank", `${S.cfg.tank} · ${isDrain() ? "pump out" : "pour in"}`]] : [];
