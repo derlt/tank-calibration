@@ -280,6 +280,10 @@ All notable changes to this project are documented here. The format follows
 - iPhone timer: the page no longer shows its alarm banner (and makes no
   sound) for the fill timer while the iPhone timer runs; the two alarms
   rang together. A page timer alone keeps its alarm.
+- On-site page: the tank tile's arrow had the roles the wrong way round in
+  a fill and a transfer. It now follows the dip card: ↑ pump out (tank A in
+  a transfer) and ↓ pour in (tank B), and a standalone drain shows ↑, a fill
+  ↓. The bob and the flowing wave follow the same direction.
 
 ### Added
 

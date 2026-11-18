@@ -149,12 +149,12 @@
   @keyframes tile-bob-up { 50% { transform: translateY(-2px); } }
   @keyframes tile-bob-down { 50% { transform: translateY(2px); } }
   @keyframes tile-wave { to { transform: translateX(-50%); } }
-  .tiles[data-live-out="down"] .tile[data-tank="out"] .arw,
-  .tiles[data-live-one="down"] .tile[data-tank="one"] .arw { animation: tile-bob-down 1.1s ease-in-out infinite; }
-  .tiles[data-live-in="up"] .tile[data-tank="in"] .arw,
+  .tiles[data-live-out="up"] .tile[data-tank="out"] .arw,
   .tiles[data-live-one="up"] .tile[data-tank="one"] .arw { animation: tile-bob-up 1.1s ease-in-out infinite; }
-  .tiles[data-live-out="down"] .tile[data-tank="out"] .wv svg,
-  .tiles[data-live-in="up"] .tile[data-tank="in"] .wv svg,
+  .tiles[data-live-in="down"] .tile[data-tank="in"] .arw,
+  .tiles[data-live-one="down"] .tile[data-tank="one"] .arw { animation: tile-bob-down 1.1s ease-in-out infinite; }
+  .tiles[data-live-out="up"] .tile[data-tank="out"] .wv svg,
+  .tiles[data-live-in="down"] .tile[data-tank="in"] .wv svg,
   .tiles[data-live-one="down"] .tile[data-tank="one"] .wv svg,
   .tiles[data-live-one="up"] .tile[data-tank="one"] .wv svg { animation: tile-wave 1.4s linear infinite; }
   @media (prefers-reduced-motion: reduce) { .tiles .arw, .tiles .wv svg, .tiles .wt { animation: none !important; } }
@@ -2073,11 +2073,11 @@
     if (!ls) return;
     const pump = ls.state === "fill" || ls.state === "pre" || ls.state === "full";
     if (isTransfer()) {
-      if (pump) box.dataset.liveOut = "down";
-      else if (ls.state === "drain") box.dataset.liveIn = "up";
+      if (pump) box.dataset.liveOut = "up";
+      else if (ls.state === "drain") box.dataset.liveIn = "down";
     } else if (isDrain()) {
-      if (pump) box.dataset.liveOne = "down";
-    } else if (ls.state === "drain") box.dataset.liveOne = "up";
+      if (pump) box.dataset.liveOne = "up";
+    } else if (ls.state === "drain") box.dataset.liveOne = "down";
   }
 
   // ------------------------------------------------------------ simple mode

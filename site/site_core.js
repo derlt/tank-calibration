@@ -845,7 +845,7 @@
    * is no prediction.  The tank tile and the Now card draw the same view, so
    * they always agree.  The page draws it; the rules stay here.
    *   role: "in" (a fill) or "out" (a drain)
-   *   dir:  "up" or "down"
+   *   dir:  "up" (pump out) or "down" (pour in), as the dip card's badges
    *   wait: a reading at the open level is not decided yet (a first dip
    *         that waits for its pair, a pair that disagrees, a re-dip)
    *   edge: "brim" (the batch passes the brim: `to` is the brim), "dry"
@@ -985,7 +985,7 @@
     // past it, the end of the pour is the batch.
     const target = pb ? Math.max(pb.size, tapped) : tapped;
     const frac = pb && pb.size > 0 ? Math.min(1, tapped / pb.size) : null;
-    return tileOne(this, this.cfg.dir > 0 ? "in" : "out", this.cfg.dir > 0 ? "up" : "down", target, frac, input);
+    return tileOne(this, this.cfg.dir > 0 ? "in" : "out", this.cfg.dir > 0 ? "down" : "up", target, frac, input);
   };
 
   // ---- batch: several cans, then one dip (§3.10).  One tap per can, so the
@@ -2520,8 +2520,8 @@
     const tapped = this.out.batchVolume();
     const target = pb ? Math.max(pb.size, tapped) : tapped;
     const frac = pb && pb.size > 0 ? Math.min(1, tapped / pb.size) : null;
-    const a = tileOne(this.out, "out", "down", target, frac, tankInput(input, "out"));
-    const b = tileOne(this.in, "in", "up", target, frac, tankInput(input, "in"));
+    const a = tileOne(this.out, "out", "up", target, frac, tankInput(input, "out"));
+    const b = tileOne(this.in, "in", "down", target, frac, tankInput(input, "in"));
     // The batch is shared: both tanks see the same tally, so both label the
     // prediction the plan's batch, or neither does.
     const planned = !(input && input.s > 0) && target > tapped + 1e-9;

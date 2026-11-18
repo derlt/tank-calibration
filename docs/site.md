@@ -544,8 +544,8 @@ at the top when you scroll.
 
 Each tile has two short lines:
 
-- top: the role arrow over a small wave for the liquid surface (↑ pour in,
-  ↓ pump out), then the tank name;
+- top: the role arrow over a small wave for the liquid surface (↑ pump out,
+  ↓ pour in), then the tank name;
 - bottom: the last accepted dip in mm, a thin track that fills with the
   tapped litres over the batch, and the prediction at the end of the current
   batch in mm.
@@ -602,8 +602,8 @@ A batch that passes a limit keeps its number, in the warning colour:
 The tooltip names the limit. The dip card still shows no prediction for a
 batch past the brim or a dry shell.
 
-The arrow bobs while the live can state moves that tank's water: down while
-the pump fills the can in a drain (A in a transfer), up while the can empties
+The arrow bobs while the live can state moves that tank's water: up while
+the pump fills the can in a drain (A in a transfer), down while the can empties
 into the tank in a fill (B in a transfer). The wave under it flows sideways
 at the same time. *Reduce Motion* stops the bob, the wave and the ring.
 
