@@ -67,6 +67,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Batch plan: a recount past the mid-dip holds to the count the last batch
+  was poured with, unless the shell's figure is more than ¾ of a batch
+  away. Reading noise no longer flips a group's count (`8`, `9`, `8`). A
+  finished group keeps the batches poured into it: its count never drops
+  below them. Each level records the plan counts it was poured with
+  (`L.plan.counts`); an older session without them recounts as before. The
+  pour card text now says what the recount does; simple mode hides that
+  note, also when a count has changed (the head line shows `(plan 8)`).
 - On-site page: the header, the tab labels and the tank tiles are one frozen
   stack. The header tank switch and the Log & charts tank switch are gone:
   the tiles choose the tank. The chart and Levels titles carry no tank name.

@@ -2849,6 +2849,70 @@ class TestSitePlan(unittest.TestCase):
         self.assertEqual(got["first"]["next"], 0)
 
     @unittest.skipUnless(NODE, "node is not installed")
+    def test_plan_state_closes_groups_and_holds_counts(self):
+        got = _node(
+            "const G = [{count: 2, size: 300}, {count: 2, size: 600}, {count: 8, size: 800},"
+            " {count: 2, size: 600}, {count: 2, size: 300}];\n"
+            "const c = (s) => s.groups.map((g) => g.count);\n"
+            "// 9 middle batches poured, then one of group 4: the middle group is closed at 9.\n"
+            "const after = [0, 0, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3];\n"
+            "const closed = core.planState(G, after, 900, true);\n"
+            "// 6 middle batches poured; the last batch was poured with 9 for the middle group.\n"
+            "const hist = [0, 0, 1, 1, 2, 2, 2, 2, 2, 2];\n"
+            "const prev = [2, 2, 9, 2, 2];\n"
+            "console.log(JSON.stringify({\n"
+            "  closed: c(closed), next: closed.next,\n"
+            "  free: c(core.planState(G, hist, 1800 + 2.4 * 800, true)),\n"
+            "  held: c(core.planState(G, hist, 1800 + 2.4 * 800, true, prev)),\n"
+            "  moved: c(core.planState(G, hist, 1800 + 2.2 * 800, true, prev)),\n"
+            "  oldSave: c(core.planState(G, hist, 1800 + 2.4 * 800, true, [2, 2, 9])),\n"
+            "}));"
+        )
+        self.assertEqual(got["closed"][2], 9, "a closed group counts what was poured, never less")
+        self.assertTrue(all(n >= 0 for n in got["closed"]))
+        self.assertEqual(got["free"][2], 8, "no earlier count: 2.4 batches left round to 2")
+        self.assertEqual(got["held"][2], 9, "within the hold the earlier count stays")
+        self.assertEqual(got["moved"][2], 8, "beyond the hold the count changes")
+        self.assertEqual(got["oldSave"][2], 8, "counts of another plan shape are ignored")
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_planned_fill_with_noisy_dips_changes_a_count_once(self):
+        """Dip noise moves the shell's figure: the plan must not flip 8, 9, 8."""
+        got = _node(
+            "const GROUPS = [{count: 2, size: 300}, {count: 2, size: 600}, {count: 8, size: 800},"
+            " {count: 2, size: 600}, {count: 2, size: 300}];\n"
+            "const runs = [];\n"
+            "for (let L = 3300; L <= 3480; L += 12) for (const seed of [1, 7, 42]) {\n"
+            "  let x = seed; const rnd = () => { x = (x * 1103515245 + 12345) % 2147483648; return x / 2147483648 - 0.5; };\n"
+            "  const P = {r: 1000, L, h0: 0}, cap = core.capacity(P);\n"
+            "  const s = new core.Session({D: 2000, Dpm: 50, Lest: L, h0pm: 5, pourUnit: 100, canSizes: [200, 100],"
+            " nominal: 10000, plan: GROUPS});\n"
+            "  const H = (v) => core.levelFor(Math.min(v, cap), P);\n"
+            "  let V = 50, t = 0; s.start('50', H(V)); s.dip(H(V) + 2 * rnd());\n"
+            "  const seq = []; let low = false;\n"
+            "  for (let k = 0; k < 40; k++) {\n"
+            "    const st = s.planNow(); if (!st || !st.batch) break;\n"
+            "    seq.push(st.groups[2].count);\n"
+            "    if (st.groups.some((g) => g.count < g.done)) low = true;\n"
+            "    for (const u of core.mixCans(st.batch.mix)) s.tap(++t * 30000, u);\n"
+            "    V += st.batch.size; const end = V >= cap;\n"
+            "    s.closeBatch({overflow: end});\n"
+            "    let n = 0; const h = H(V);\n"
+            "    while (s.current().state === 'pending' && n < 4) { s.dip(h + 2 * rnd()); n++; }\n"
+            "    if (s.current().state === 'pending') s.override('test');\n"
+            "    if (end) break;\n"
+            "  }\n"
+            "  runs.push({L, seed, seq, low, end: V >= cap, flips: seq.slice(1).filter((c, i) => c !== seq[i]).length});\n"
+            "}\n"
+            "console.log(JSON.stringify(runs));"
+        )
+        self.assertGreater(len(got), 40)
+        for r in got:
+            self.assertLessEqual(r["flips"], 1, f"the middle count changes once at most: {r}")
+            self.assertFalse(r["low"], f"no group counts fewer batches than were poured: {r}")
+            self.assertTrue(r["end"], f"the campaign reaches the brim: {r}")
+
+    @unittest.skipUnless(NODE, "node is not installed")
     def test_planned_fill_on_a_larger_tank(self):
         got = _node(
             PLAN_JS

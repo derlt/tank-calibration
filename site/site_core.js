@@ -441,15 +441,25 @@
    * overflow pour, §3.7), a drain the bottom.  Without adapt the plan is as
    * declared; a campaign that runs past it goes on with the last size.
    *
+   * A group behind the group in work is closed: its count is the batches
+   * poured into it, never less.  prev: the counts the last batch was poured
+   * with (L.plan.counts), or null.  The shell's figure moves a little with
+   * each dip, so a group keeps its previous count while the recount stays
+   * within PLAN_HOLD batches of it: the count changes once, not back and
+   * forth.  The last group has no hold: it must reach the end.
+   *
    * -> { groups: [{size, planned, count, done}], next (group index or
    *    null when the plan is complete), adapted, total, poured }
    */
-  function planState(plan, hist, R, adapt) {
+  const PLAN_HOLD = 0.75;
+  function planState(plan, hist, R, adapt, prev) {
     const G = (plan || []).map((g) => ({ size: g.size, planned: g.count, count: g.count, done: 0 }));
     if (!G.length) return null;
     for (const gi of hist) if (G[gi]) G[gi].done++;
     const g = hist.length ? Math.min(hist[hist.length - 1], G.length - 1) : 0;
     const last = G.length - 1;
+    for (let i = 0; i < g; i++) G[i].count = G[i].done;   // closed: what was poured
+    const held = prev && prev.length === G.length ? prev : null;
     if (adapt && R != null && isFinite(R)) {
       let m = 0;
       for (let i = 1; i < G.length; i++) if (G[i].size > G[m].size) m = i;
@@ -459,7 +469,14 @@
       for (let f = f0; f <= last; f++) {
         let tail = 0;
         for (let i = f + 1; i <= last; i++) tail += G[i].count * G[i].size;
-        const want = f === last ? Math.ceil(avail / G[f].size - 1e-9) : Math.round((avail - tail) / G[f].size);
+        let want;
+        if (f === last) want = Math.ceil(avail / G[f].size - 1e-9);
+        else {
+          const raw = (avail - tail) / G[f].size;
+          want = Math.round(raw);
+          const keep = held && held[f] != null ? held[f] - G[f].done : null;
+          if (keep != null && keep >= 0 && Math.abs(raw - keep) <= PLAN_HOLD) want = keep;
+        }
         const n = Math.max(0, want);
         G[f].count = G[f].done + n;
         avail -= n * G[f].size;
@@ -679,7 +696,8 @@
   function planPick(st) {
     if (!st) return null;
     const gi = st.next != null ? st.next : st.groups.length - 1;
-    return { group: gi, size: st.groups[gi].size };
+    // The counts the batch is poured with: the next recount holds to them.
+    return { group: gi, size: st.groups[gi].size, counts: st.groups.map((x) => x.count) };
   }
 
   /** The plan group of each batch poured so far, in order. */
@@ -687,6 +705,15 @@
     const out = [];
     for (const L of this.levels) if (!L.start && L.plan && L.plan.group != null) out.push(L.plan.group);
     return out;
+  };
+
+  /** The plan counts the last batch was poured with, or null (none, or an older session). */
+  Session.prototype._planPrev = function () {
+    for (let i = this.levels.length - 1; i >= 0; i--) {
+      const P = this.levels[i].plan;
+      if (P && P.group != null) return Array.isArray(P.counts) ? P.counts : null;
+    }
+    return null;
   };
 
   /**
@@ -731,7 +758,7 @@
     if (!this.cfg.plan) return null;
     const room = this._planRoom();
     if (!room) return null;
-    return this._planView(planState(this.cfg.plan, this._planHist(), room.R, room.past), room);
+    return this._planView(planState(this.cfg.plan, this._planHist(), room.R, room.past, this._planPrev()), room);
   };
 
   Session.prototype._planView = function (st, room) {
@@ -771,7 +798,7 @@
     if (!this.cfg.plan) return null;
     const room = this._planRoom();
     if (!room) return null;
-    return this._planList(planState(this.cfg.plan, this._planHist(), room.R, true));
+    return this._planList(planState(this.cfg.plan, this._planHist(), room.R, true, this._planPrev()));
   };
 
   /** The cans one plan group takes: its size in the plan's can sizes. */
@@ -2075,13 +2102,13 @@
     if (!this.out.cfg.plan) return null;
     const room = this._planRoom();
     if (!room) return null;
-    return this.out._planView(planState(this.out.cfg.plan, this.out._planHist(), room.R, room.past), room);
+    return this.out._planView(planState(this.out.cfg.plan, this.out._planHist(), room.R, room.past, this.out._planPrev()), room);
   };
   TransferSession.prototype.planProjection = function () {
     if (!this.out.cfg.plan) return null;
     const room = this._planRoom();
     if (!room) return null;
-    return this.out._planList(planState(this.out.cfg.plan, this.out._planHist(), room.R, true));
+    return this.out._planList(planState(this.out.cfg.plan, this.out._planHist(), room.R, true, this.out._planPrev()));
   };
 
   // The shared can tally lives on the drain session (the pump fills the cans).

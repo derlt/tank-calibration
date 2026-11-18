@@ -813,7 +813,7 @@
     <p><b>Drain campaign (reverse strapping).</b> The tank starts full. A pump draws the water out into calibrated cans; each batch is one step, and the level falls. Start at the neck entrance: pump the neck down until the level just reaches the shell crown and dip. That reading is the brim, and the running shell knows the top from the first level. Keep the hose in the same state at every dip. Fill each can to its mark. When the pump loses suction, tick <i>pump lost suction: last can part</i>.</p>
     <p><b>Signs in a drain.</b> resid &lt; 0: the fall came too large (an object exposed, a leak, a spill at the can, or more left than the count). resid &gt; 0: the fall came too small (RETURN?: the hose drained back, wall film, or less left than the count).</p>
     <p><b>Two tanks at once (transfer).</b> A pump draws water out of a full tank A into calibrated cans, and the same cans are emptied into tank B. One batch is one step for both tanks: A is a drain, B is a fill. Each tank keeps its own check, its own running shell and its own raw file; switch tanks in the header or in Log &amp; charts. Dip A, then dip B, after each batch — the dip card has one field and one button per tank, so each tank is checked as soon as its reading is in. When both dips are in, the page compares the two residuals of the same batch: the same litres in both tanks means the cans (a count or fill error) — one recount fixes both files; litres that only B misses means a spill on the way; a miss that only one tank shows means that tank or its hose. The pour noise is shared, so the comparison is as sharp as the dips alone.</p>
-    <p><b>Batch plan.</b> Before the first pour, declare the can sizes, the nominal capacity and the batches: for example 2 × 300 L, 2 × 600 L, 8 × 800 L, 2 × 600 L, 2 × 300 L. A batch is not a can: a 300 L batch is one 200 L can and one 100 L can. The page gives each batch the fewest cans, and of those the largest, so the pump and the carry take the least time. The pour card shows the group in work and its batches only: the small batches at the bottom and at the top are two groups. The real tank can hold more or less than the nominal. Past the mid-dip, the running shell counts the end of the plan again: the middle group takes more or fewer batches, and the small batches stay at the end.</p>
+    <p><b>Batch plan.</b> Before the first pour, declare the can sizes, the nominal capacity and the batches: for example 2 × 300 L, 2 × 600 L, 8 × 800 L, 2 × 600 L, 2 × 300 L. A batch is not a can: a 300 L batch is one 200 L can and one 100 L can. The page gives each batch the fewest cans, and of those the largest, so the pump and the carry take the least time. The pour card shows the group in work and its batches only: the small batches at the bottom and at the top are two groups. The real tank can hold more or less than the nominal. After the halfway level, the page recounts the batches still to come from the litres the running shell says are left: the middle group takes more or fewer batches, and the small batches stay at the end. A count changes once, when the shell's figure is clearly away from it, not back and forth with each dip.</p>
     <p class="muted">Method: CALIBRATION_METHODOLOGY.md §10a. Residual convention §2: resid = pour − predicted pour. resid &lt; 0: the rise came too cheap (object, or more liquid than recorded). resid &gt; 0: the rise came too small (loss, or less liquid than recorded).</p>
   </section>
 </main>
@@ -2016,7 +2016,7 @@
     "The running shell puts the level at the brim: the last pour overflows on purpose (§3.7).": "Mô hình bồn tạm cho mức đã tới đỉnh: lần đổ cuối cố ý cho tràn (§3.7).",
     "The running shell puts the level at the bottom: drain on until the pump loses suction.": "Mô hình bồn tạm cho mức đã tới đáy: bơm tiếp đến khi bơm mất hút.",
     "The running shells have no room for another batch: tank A is at the bottom or tank B at the brim.": "Các mô hình bồn tạm không còn chỗ cho mẻ nữa: bồn A đã tới đáy hoặc bồn B đã tới đỉnh.",
-    "Past the mid-dip, the running shell counts the end of the plan again.": "Qua mức giữa, mô hình bồn tạm tính lại phần cuối của kế hoạch.",
+    "After the halfway level, the page recounts the batches still to come from the litres the running shell says are left.": "Sau mức giữa, trang đếm lại các mẻ còn lại theo số lít mà mô hình bồn tạm cho là còn lại.",
     "The running shell puts the tank at ≈ {0} L (nominal {1} L): the end of the plan changes.": "Mô hình bồn tạm cho bồn ≈ {0} L (danh định {1} L): phần cuối của kế hoạch thay đổi.",
     "The running shell puts the tank at ≈ {0} L: the end of the plan changes.": "Mô hình bồn tạm cho bồn ≈ {0} L: phần cuối của kế hoạch thay đổi.",
     "Group {0}: {1} × {2} L (plan {3}).": "Nhóm {0}: {1} × {2} L (kế hoạch {3}).",
@@ -2044,8 +2044,8 @@
     "From the running shell and the batch plan.": "Theo mô hình bồn tạm và kế hoạch mẻ.",
     "From the running shells and the batch plan.": "Theo các mô hình bồn tạm và kế hoạch mẻ.",
     "Batch plan.": "Kế hoạch mẻ.",
-    "Before the first pour, declare the can sizes, the nominal capacity and the batches: for example 2 × 300 L, 2 × 600 L, 8 × 800 L, 2 × 600 L, 2 × 300 L. A batch is not a can: a 300 L batch is one 200 L can and one 100 L can. The page gives each batch the fewest cans, and of those the largest, so the pump and the carry take the least time. The pour card shows the group in work and its batches only: the small batches at the bottom and at the top are two groups. The real tank can hold more or less than the nominal. Past the mid-dip, the running shell counts the end of the plan again: the middle group takes more or fewer batches, and the small batches stay at the end.":
-      "Trước lần đổ đầu tiên, khai báo các cỡ bình, dung tích danh định và các mẻ: ví dụ 2 × 300 L, 2 × 600 L, 8 × 800 L, 2 × 600 L, 2 × 300 L. Một mẻ không phải là một bình: một mẻ 300 L là một bình 200 L và một bình 100 L. Trang chọn cho mỗi mẻ ít bình nhất, và trong số đó là các bình lớn nhất, để việc bơm và mang bình mất ít thời gian nhất. Thẻ đổ chỉ hiện nhóm đang làm và các mẻ của nhóm đó: các mẻ nhỏ ở đáy và ở đỉnh là hai nhóm. Bồn thật có thể chứa nhiều hơn hoặc ít hơn dung tích danh định. Qua mức giữa, mô hình bồn tạm tính lại phần cuối của kế hoạch: nhóm giữa thêm hoặc bớt một mẻ, và các mẻ nhỏ vẫn ở cuối.",
+    "Before the first pour, declare the can sizes, the nominal capacity and the batches: for example 2 × 300 L, 2 × 600 L, 8 × 800 L, 2 × 600 L, 2 × 300 L. A batch is not a can: a 300 L batch is one 200 L can and one 100 L can. The page gives each batch the fewest cans, and of those the largest, so the pump and the carry take the least time. The pour card shows the group in work and its batches only: the small batches at the bottom and at the top are two groups. The real tank can hold more or less than the nominal. After the halfway level, the page recounts the batches still to come from the litres the running shell says are left: the middle group takes more or fewer batches, and the small batches stay at the end. A count changes once, when the shell's figure is clearly away from it, not back and forth with each dip.":
+      "Trước lần đổ đầu tiên, khai báo các cỡ bình, dung tích danh định và các mẻ: ví dụ 2 × 300 L, 2 × 600 L, 8 × 800 L, 2 × 600 L, 2 × 300 L. Một mẻ không phải là một bình: một mẻ 300 L là một bình 200 L và một bình 100 L. Trang chọn cho mỗi mẻ ít bình nhất, và trong số đó là các bình lớn nhất, để việc bơm và mang bình mất ít thời gian nhất. Thẻ đổ chỉ hiện nhóm đang làm và các mẻ của nhóm đó: các mẻ nhỏ ở đáy và ở đỉnh là hai nhóm. Bồn thật có thể chứa nhiều hơn hoặc ít hơn dung tích danh định. Sau mức giữa, trang đếm lại các mẻ còn lại theo số lít mà mô hình bồn tạm cho là còn lại: nhóm giữa thêm hoặc bớt mẻ, và các mẻ nhỏ vẫn ở cuối. Một số đếm chỉ đổi một lần, khi con số của mô hình bồn lệch rõ, không đổi qua đổi lại sau mỗi lần đo.",
 
     // Time trend, timer suggestions, suction floor, and the time estimate's counts
     "suction floor": "mức hút",
@@ -2633,15 +2633,25 @@
    * overflow pour, §3.7), a drain the bottom.  Without adapt the plan is as
    * declared; a campaign that runs past it goes on with the last size.
    *
+   * A group behind the group in work is closed: its count is the batches
+   * poured into it, never less.  prev: the counts the last batch was poured
+   * with (L.plan.counts), or null.  The shell's figure moves a little with
+   * each dip, so a group keeps its previous count while the recount stays
+   * within PLAN_HOLD batches of it: the count changes once, not back and
+   * forth.  The last group has no hold: it must reach the end.
+   *
    * -> { groups: [{size, planned, count, done}], next (group index or
    *    null when the plan is complete), adapted, total, poured }
    */
-  function planState(plan, hist, R, adapt) {
+  const PLAN_HOLD = 0.75;
+  function planState(plan, hist, R, adapt, prev) {
     const G = (plan || []).map((g) => ({ size: g.size, planned: g.count, count: g.count, done: 0 }));
     if (!G.length) return null;
     for (const gi of hist) if (G[gi]) G[gi].done++;
     const g = hist.length ? Math.min(hist[hist.length - 1], G.length - 1) : 0;
     const last = G.length - 1;
+    for (let i = 0; i < g; i++) G[i].count = G[i].done;   // closed: what was poured
+    const held = prev && prev.length === G.length ? prev : null;
     if (adapt && R != null && isFinite(R)) {
       let m = 0;
       for (let i = 1; i < G.length; i++) if (G[i].size > G[m].size) m = i;
@@ -2651,7 +2661,14 @@
       for (let f = f0; f <= last; f++) {
         let tail = 0;
         for (let i = f + 1; i <= last; i++) tail += G[i].count * G[i].size;
-        const want = f === last ? Math.ceil(avail / G[f].size - 1e-9) : Math.round((avail - tail) / G[f].size);
+        let want;
+        if (f === last) want = Math.ceil(avail / G[f].size - 1e-9);
+        else {
+          const raw = (avail - tail) / G[f].size;
+          want = Math.round(raw);
+          const keep = held && held[f] != null ? held[f] - G[f].done : null;
+          if (keep != null && keep >= 0 && Math.abs(raw - keep) <= PLAN_HOLD) want = keep;
+        }
         const n = Math.max(0, want);
         G[f].count = G[f].done + n;
         avail -= n * G[f].size;
@@ -2871,7 +2888,8 @@
   function planPick(st) {
     if (!st) return null;
     const gi = st.next != null ? st.next : st.groups.length - 1;
-    return { group: gi, size: st.groups[gi].size };
+    // The counts the batch is poured with: the next recount holds to them.
+    return { group: gi, size: st.groups[gi].size, counts: st.groups.map((x) => x.count) };
   }
 
   /** The plan group of each batch poured so far, in order. */
@@ -2879,6 +2897,15 @@
     const out = [];
     for (const L of this.levels) if (!L.start && L.plan && L.plan.group != null) out.push(L.plan.group);
     return out;
+  };
+
+  /** The plan counts the last batch was poured with, or null (none, or an older session). */
+  Session.prototype._planPrev = function () {
+    for (let i = this.levels.length - 1; i >= 0; i--) {
+      const P = this.levels[i].plan;
+      if (P && P.group != null) return Array.isArray(P.counts) ? P.counts : null;
+    }
+    return null;
   };
 
   /**
@@ -2923,7 +2950,7 @@
     if (!this.cfg.plan) return null;
     const room = this._planRoom();
     if (!room) return null;
-    return this._planView(planState(this.cfg.plan, this._planHist(), room.R, room.past), room);
+    return this._planView(planState(this.cfg.plan, this._planHist(), room.R, room.past, this._planPrev()), room);
   };
 
   Session.prototype._planView = function (st, room) {
@@ -2963,7 +2990,7 @@
     if (!this.cfg.plan) return null;
     const room = this._planRoom();
     if (!room) return null;
-    return this._planList(planState(this.cfg.plan, this._planHist(), room.R, true));
+    return this._planList(planState(this.cfg.plan, this._planHist(), room.R, true, this._planPrev()));
   };
 
   /** The cans one plan group takes: its size in the plan's can sizes. */
@@ -4267,13 +4294,13 @@
     if (!this.out.cfg.plan) return null;
     const room = this._planRoom();
     if (!room) return null;
-    return this.out._planView(planState(this.out.cfg.plan, this.out._planHist(), room.R, room.past), room);
+    return this.out._planView(planState(this.out.cfg.plan, this.out._planHist(), room.R, room.past, this.out._planPrev()), room);
   };
   TransferSession.prototype.planProjection = function () {
     if (!this.out.cfg.plan) return null;
     const room = this._planRoom();
     if (!room) return null;
-    return this.out._planList(planState(this.out.cfg.plan, this.out._planHist(), room.R, true));
+    return this.out._planList(planState(this.out.cfg.plan, this.out._planHist(), room.R, true, this.out._planPrev()));
   };
 
   // The shared can tally lives on the drain session (the pump fills the cans).
@@ -6781,9 +6808,10 @@
     } else if (st.adapted) {
       note = `The plan's batches are done, but the running shell has room for more: batches of ${f(b.size, 0)} L follow.`;
     } else if (!st.past) {
-      note = "Past the mid-dip, the running shell counts the end of the plan again.";
+      note = "After the halfway level, the page recounts the batches still to come from the litres the running shell says are left.";
     }
-    $("t-plan-note").textContent = sm && !(st.adapted && st.past) ? "" : note;
+    // Simple mode: the head line already shows a changed count (`batch 5 of 9 (plan 8)`).
+    $("t-plan-note").textContent = sm ? "" : note;
   }
 
   /** With a plan, each tap moves the size field to the next planned can of the batch. */

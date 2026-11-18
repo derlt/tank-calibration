@@ -160,7 +160,9 @@ explanation. **Simple** shows only what to do and the numbers to read:
 - each verdict as its title and its action, without the numbers behind it.
 
 Simple mode hides the help paragraphs, the shell figures (liquid, brim,
-slope), the time-to-brim block and the drift line until it alarms. The check
+slope), the time-to-brim block, the batch plan's note under the pour card's
+tally (a changed count still shows in its head line, `batch 5 of 9 (plan
+8)`) and the drift line until it alarms. The check
 is the same in both modes: only the text changes.
 
 1. **Pour.** Tap *+1 can poured* each time a can is empty, then press
@@ -305,9 +307,10 @@ tally. The Now card adds `batch plan: 8 of 16 batches poured · nominal
 10000 L`.
 
 **The end of the campaign.** The nominal capacity is not the real
-capacity. Up to the mid-dip level, the plan stands as declared. Past the
-mid-dip, the running shell counts the litres that are left and counts the
-end of the plan again:
+capacity. Up to the mid-dip level (half the shell's volume in, or for a
+drain half of it out), the plan stands as declared. After that level, the
+page recounts the batches still to come from the litres the running shell
+says are left:
 
 - while the middle (largest) group is still in work, it takes a batch more
   for a larger tank, or a batch less for a smaller one; the groups after it
@@ -322,6 +325,13 @@ The pour card then shows the new count with the planned one, for example
 ≈ 10600 L (nominal 10000 L): the end of the plan changes. Group 3: 9 × 800 L
 (plan 8).* At the end of a campaign, the counts are not symmetric any more;
 this is correct.
+
+The shell's figure moves a little with each dip. So a count changes only
+when the recount is clearly away from it: more than ¾ of a batch from the
+count the last batch was poured with. A count changes once, not back and
+forth (`8`, `9`, `8`). A small surplus can stay with the last group: it
+takes as many batches as the gap needs. A group that is finished keeps the
+batches poured into it; its count never drops below them.
 
 **The 30 mm rule stays as a check.** The plan sets the batch size, but the
 page still compares each batch with §3.4: a batch that gives less than 15 mm
