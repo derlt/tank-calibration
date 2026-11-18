@@ -250,6 +250,7 @@
     "{0} can · {1} L": "{0} bình · {1} L",
     "{0} cans · {1} L": "{0} bình · {1} L",
     "{0} / {1} cans": "{0} / {1} bình",
+    "last {0}": "bình cuối {0}",
     "{0} / {1} can": "{0} / {1} bình",
     "{0} of {1} cans counted": "{0} trên {1} bình đã đếm",
     "Finish times": "Giờ xong",

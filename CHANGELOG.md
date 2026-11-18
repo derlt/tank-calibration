@@ -67,6 +67,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- On-site page layout, checked in Chromium at 360 px and 760 px, light and
+  dark: on a phone the header keeps the status on two lines and shortens a
+  long title (a transfer's `A → B`) with "…", so the frozen stack stays
+  143 px high, not 237 px; the frozen stack's shadow spans the full width; a
+  field that takes the focus, or a card scrolled into view, stops below the
+  frozen stack; a batch tally too crowded for a time under each can shows
+  one pill with the last time, and each cell keeps its size and time in its
+  tooltip. A turn of the phone redraws the page.
 - Batch plan: a recount past the mid-dip holds to the count the last batch
   was poured with, unless the shell's figure is more than ¾ of a batch
   away. Reading noise no longer flips a group's count (`8`, `9`, `8`). A

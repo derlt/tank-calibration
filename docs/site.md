@@ -225,6 +225,12 @@ the next batch.
 - **Tap when each can is empty.** The page shows the count, the litres and the
   time of each can. The count is saved after each tap, so a closed page or a
   locked phone does not lose it.
+- **One cell per can.** The tally is a row of cells, one per can of the
+  batch, each as wide as its can size, with the size inside. The time of
+  each can is under its cell. When the cans are many and the cells are
+  narrow (about 9 cans or more on a phone), the row shows one time, the
+  last can's (`last 08:04`); hold a finger on a cell (or hover it) for its
+  size and time.
 - **One size per can.** *Can size for the next can* sets the size of the next
   tap, so one batch can mix sizes: 2 × 200 L then 4 × 100 L. The buttons below
   the field give the sizes already used and the default from the setup. The

@@ -3260,6 +3260,31 @@ class TestSiteTiles(unittest.TestCase):
         self.assertEqual((got["neck"]["from"], got["neck"]["to"], got["neck"]["why"]),
                          (2500, None, "neck"), "the neck reading is the level, with no prediction")
 
+    def test_page_tally_crowded_cells_keep_one_time(self):
+        """Cells too narrow for a time show one pill with the last time."""
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {};\n"
+            "const run = (unit, n) => { const p = stub.boot(page, corePath, new Map()), el = p.el;\n"
+            "  el('s-tank').value = 't'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "  el('s-dip').value = '400'; el('s-unit').value = String(unit);\n"
+            "  el('s-go').click(); el('d-val').value = '400'; el('d-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "  for (let k = 0; k < n; k++) el('t-plus').click();\n"
+            "  return {times: el('t-times').innerHTML, cells: el('t-bar').innerHTML, count: el('t-count').textContent}; };\n"
+            "out.few = run(200, 2); out.many = run(20, 9);\n"
+            "console.log(JSON.stringify(out));"
+        )
+        few, many = got["few"], got["many"]
+        self.assertEqual(few["times"].count('class="pill"'), 2, "room for a time under each can")
+        self.assertNotIn("last", few["times"])
+        self.assertEqual(many["times"].count('class="pill"'), 1, "crowded: one pill")
+        self.assertIn("last ", many["times"])
+        self.assertNotIn("last", many["count"], "the big count line stays one line")
+        self.assertIn('title="20 L · ', many["cells"], "each cell keeps its size and time in the tooltip")
+
     def test_page_tile_arrow_follows_the_live_can(self):
         stub = (HERE / "tests" / "page_stub.js").as_posix()
         got = _node(

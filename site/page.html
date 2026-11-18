@@ -105,9 +105,9 @@
      line under it in its role colour (amber A, blue B).  The arrow has a
      wave for the liquid surface; it bobs while the live can state moves
      that tank's water. */
-  .chrome { position: sticky; top: 0; z-index: 5; background: var(--bg); }
+  .chrome { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); box-shadow: 0 3px 8px var(--shadow); }
   .chrome-in { max-width: 760px; margin: 0 auto; padding: 0 0.8rem; }
-  .tiles { display: flex; gap: 0.35rem; padding: 0.3rem 0 0.45rem; border-bottom: 1px solid var(--line); box-shadow: 0 3px 8px var(--shadow); }
+  .tiles { display: flex; gap: 0.35rem; padding: 0.3rem 0 0.45rem; }
   .tiles.hidden { display: none; }
   .tile { flex: 1 1 0; min-width: 0; background: var(--card); border: 1px solid var(--line); border-bottom: 3px solid transparent; border-radius: 8px; padding: 0.2rem 0.4rem 0.15rem; color: var(--ink); text-align: left; font: inherit; font-weight: 400; min-height: 0; }
   button.tile { cursor: pointer; }
@@ -325,7 +325,10 @@
   @media (max-width: 560px) {
     header { flex-wrap: nowrap; gap: 0.5rem; }
     header .seg { flex: 0 0 auto; }
-    header .hdr-status { flex: 1 1 0; min-width: 0; white-space: normal; text-align: right; line-height: 1.2; font-size: 0.72rem; }
+    /* A long title (a transfer: A → B) shortens with an ellipsis; the status
+       keeps 9rem, so it wraps to two lines, not one word per line. */
+    header h1 { flex: 0 1 auto; }
+    header .hdr-status { flex: 1 1 0; min-width: 9rem; white-space: normal; text-align: right; line-height: 1.2; font-size: 0.72rem; }
     .chrome-in { padding-left: max(0.5rem, env(safe-area-inset-left)); padding-right: max(0.5rem, env(safe-area-inset-right)); }
     main { padding-top: 0.5rem; padding-left: max(0.5rem, env(safe-area-inset-left)); padding-right: max(0.5rem, env(safe-area-inset-right)); gap: 0.6rem; }
     .card { padding: 0.75rem; }
@@ -349,7 +352,7 @@
 </style>
 </head>
 <body>
-<div class="chrome">
+<div class="chrome" id="chrome">
 <header>
   <span class="live hidden" id="hdr-live" role="img"><svg viewBox="0 0 16 20" aria-hidden="true"><rect class="can-liq" id="hdr-can-liq" x="3" y="17" width="10" height="0" rx="1"/><rect class="can-frame" x="1.5" y="2.5" width="13" height="16" rx="2"/><path class="can-tick hidden" id="hdr-can-tick" d="M4.6 10.6l2.4 2.4 4.5-5"/></svg></span>
   <h1 id="hdr-title" translate="no">calib site</h1>
@@ -1748,6 +1751,7 @@
       $("hdr-phase").textContent = ""; $("hdr-count").textContent = "";
       $("hdr-title").textContent = "calib site";
       $("tiles").classList.add("hidden"); $("tiles").innerHTML = "";
+      chromePad();
       return;
     }
     const st = S.status();
@@ -1820,6 +1824,17 @@
       box.innerHTML = tileHtml(S.tileView(), "one", true, true);
     }
     tileLive(liveState(Date.now()));
+    chromePad();
+  }
+
+  /**
+   * The frozen stack covers the top of the page: a field that takes the
+   * focus, or a card scrolled into view, must stop below it.
+   */
+  function chromePad() {
+    const el = $("chrome"), root = document.documentElement;
+    const h = el && el.offsetHeight;
+    if (h && root && root.style && root.style.setProperty) root.style.setProperty("scroll-padding-top", `${h + 8}px`);
   }
 
   /** The arrow bobs only while the live can state moves that tank's water. */
@@ -2374,21 +2389,34 @@
     seg.setAttribute("aria-valuenow", String(n));
     seg.setAttribute("aria-label", `${n} of ${total} cans counted`);
     seg.dataset.done = total > 0 && n >= total ? "1" : "0";
-    let cells = "", times = "";
+    // The room for the cells: the card's width less its padding.  A cell
+    // narrower than a time (about 46 px) drops its time pill, and one
+    // narrower than its size drops the size; the cell's tooltip keeps both,
+    // and the time line shows the last time alone.
+    const sizeOf = (i) => { const r = i < n ? list[i].u : planned && planned[i] ? planned[i] : act; return r > 0 ? r : 1; };
+    let sum = 0;
+    for (let i = 0; i < total; i++) sum += sizeOf(i);
+    const room = Math.min(window.innerWidth || 360, 760) - 56 - 3 * Math.max(total - 1, 0);
+    let cells = "", times = "", hidden = false, lastT = null;
     for (let i = 0; i < total; i++) {
       const over = cans > 0 && i >= cans;
       const state = i < n ? (over ? "over" : "done") : i === n ? "now" : "todo";
       const raw = i < n ? list[i].u : planned && planned[i] ? planned[i] : act;
-      const size = raw > 0 ? raw : 1;
+      const size = sizeOf(i), w = sum ? room * size / sum : room;
       const t = i < n && list[i].t ? hhmm(list[i].t) : null;
-      cells += `<i class="${state === "todo" ? "" : state}" data-state="${state}" style="flex:${size} 1 0">`
-        + `<span aria-hidden="true">${raw > 0 ? f(raw, 0) : "—"}</span>${state === "now" ? "<b></b>" : ""}</i>`;
+      if (t) lastT = t;
+      const fitT = w >= 46, fitS = w >= 22;
+      if (t && !fitT) hidden = true;
+      const tip = `${raw > 0 ? f(raw, 0) + " L" : "—"}${t ? " · " + t : ""}`;
+      cells += `<i class="${state === "todo" ? "" : state}" data-state="${state}" style="flex:${size} 1 0" title="${esc(tip)}">`
+        + (fitS ? `<span aria-hidden="true">${raw > 0 ? f(raw, 0) : "—"}</span>` : "") + `${state === "now" ? "<b></b>" : ""}</i>`;
       times += `<div style="flex:${size} 1 0">`
-        + (t ? `<span class="pill">${t}</span>` : state === "now" ? `<span class="pill none" aria-hidden="true">—</span>` : "")
+        + (t && fitT ? `<span class="pill">${t}</span>` : state === "now" && fitT ? `<span class="pill none" aria-hidden="true">—</span>` : "")
         + `</div>`;
     }
     seg.innerHTML = cells;
-    lab.innerHTML = times;
+    // Too crowded for a time under each can: one pill with the last time.
+    lab.innerHTML = hidden && lastT ? `<div style="flex:1 1 auto;text-align:left"><span class="pill">last ${lastT}</span></div>` : times;
     let note = "", warn = false;
     // The recommended batch: the plan's next batch in its cans, or the
     // 30 mm advice.  The warnings are the same for both.
@@ -3448,7 +3476,8 @@
       pickChart(ORDER[(i + (dx < 0 ? 1 : n - 1)) % n]);
     }, { passive: true });
   })();
-  window.addEventListener("resize", () => { if (S && tab === "log") renderChart(); });
+  // A turn of the phone changes the stack's height and the room for the tally cells.
+  window.addEventListener("resize", () => { if (S) render(); else chromePad(); });
 
   function renderChart() {
     for (const b of $("chart-pick").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.chart === which));
