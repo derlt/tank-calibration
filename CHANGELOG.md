@@ -9,14 +9,17 @@ All notable changes to this project are documented here. The format follows
 ### Added
 
 - On-site page: the **tank tiles**, a third frozen row under the header and
-  the tab labels, on every tab. One thin tile per tank: the role arrow with a
-  wave for the liquid surface, the tank name, the can tally (`3/8`), the last
-  accepted dip, a track that fills with the tapped litres, and the predicted
-  dip at the end of the current batch. The chosen tile keeps the thick line
-  in its role colour and chooses the tank for the other tabs. Without a batch
-  plan the prediction follows the tapped cans; after *Batch done* it is the
-  expected dip. The arrow bobs while the live can state moves that tank's
-  water.
+  the tab labels, on every tab. One thin tile per tank, two short lines: the
+  role arrow over a wave for the liquid surface and the tank name; then the
+  last accepted dip, a track that fills with the tapped litres, and the
+  predicted dip at the end of the current batch. No can tally: the batch
+  card has it. The chosen tile keeps the thick line in its role colour and
+  chooses the tank for the other tabs. Without a batch plan the prediction
+  follows the tapped cans; after *Batch done* it is the expected dip. A red
+  ring after the dip shows a reading that is not decided yet. A batch past
+  the brim, below the suction floor or to a dry shell keeps its number as a
+  limit (`≥ 1800.0`, `≤ 52.3`) in the warning colour. While the live can
+  state moves that tank's water, the arrow bobs and the wave flows.
 - On-site page: the time trend of the cans. With the fill timer running,
   *Start fill timer* to *+1 can* measures a can's fill time and *+1 can* to
   the next start its drain time; the trend is a weighted mean in which the

@@ -117,26 +117,40 @@
   .tile .top { display: flex; align-items: center; gap: 0.25rem; min-height: 1.1rem; }
   .tile .nm { font-size: 0.7rem; font-weight: 600; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tile.sel .nm { color: var(--ink); font-weight: 800; }
-  .tile .prog { margin-left: auto; font: 600 0.66rem var(--mono); color: var(--muted); white-space: nowrap; }
   .tile .line { display: flex; align-items: center; gap: 0.3rem; margin-top: 0.05rem; }
   .tile .num { font: 0.78rem var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .tile .cur { font-weight: 700; }
   .tile .pred { color: var(--muted); }
   .tile .pred.words { font-family: inherit; font-size: 0.68rem; }
+  /* A prediction at a limit (the brim, a dry shell, the suction floor): the
+     number is the limit, after ≥ or ≤, in the warning colour. */
+  .tile .pred.edge { color: var(--warn); font-weight: 700; }
+  /* A reading at the open level is not decided yet: a small red ring. */
+  .tile .wt { display: inline-block; width: 0.38rem; height: 0.38rem; border: 1.5px solid var(--bad); border-radius: 50%; margin-left: 0.12rem; vertical-align: 0.35rem; animation: tile-wait 1.6s ease-in-out infinite; }
+  @keyframes tile-wait { 50% { opacity: 0.45; } }
   .tile .trk { flex: 1 1 0.8rem; min-width: 0.6rem; height: 2px; background: var(--line); border-radius: 2px; overflow: hidden; }
   .tile .trk i { display: block; height: 100%; background: var(--role); border-radius: 2px; }
   .tile .trk.plain { background: none; border-top: 1px dashed var(--line); height: 0; }
-  .tile .arw-wrap { display: inline-flex; flex: 0 0 auto; line-height: 0; }
-  .tile .arw { width: 0.85rem; height: 1.05rem; overflow: visible; }
+  /* The arrow and its wave: the shaft bobs, the wave (a longer path in a
+     clipped box) drifts sideways by one period, so it seems to flow. */
+  .tile .arw-wrap { position: relative; display: inline-block; flex: 0 0 auto; width: 0.85rem; height: 1.05rem; line-height: 0; }
+  .tile .arw { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; }
   .tile .arw .shaft { fill: none; stroke: var(--role); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-  .tile .arw .wave { fill: none; stroke: var(--role); stroke-width: 1.5; stroke-linecap: round; }
+  .tile .wv { position: absolute; left: 0; bottom: 0; width: 100%; height: 30%; overflow: hidden; }
+  .tile .wv svg { display: block; width: 200%; height: 100%; }
+  .tile .wv .wave { fill: none; stroke: var(--role); stroke-width: 1.5px; stroke-linecap: round; vector-effect: non-scaling-stroke; }
   @keyframes tile-bob-up { 50% { transform: translateY(-2px); } }
   @keyframes tile-bob-down { 50% { transform: translateY(2px); } }
-  .tiles[data-live-out="down"] .tile[data-tank="out"] .arw-wrap,
-  .tiles[data-live-one="down"] .tile[data-tank="one"] .arw-wrap { animation: tile-bob-down 1.1s ease-in-out infinite; }
-  .tiles[data-live-in="up"] .tile[data-tank="in"] .arw-wrap,
-  .tiles[data-live-one="up"] .tile[data-tank="one"] .arw-wrap { animation: tile-bob-up 1.1s ease-in-out infinite; }
-  @media (prefers-reduced-motion: reduce) { .tiles .arw-wrap { animation: none !important; } }
+  @keyframes tile-wave { to { transform: translateX(-50%); } }
+  .tiles[data-live-out="down"] .tile[data-tank="out"] .arw,
+  .tiles[data-live-one="down"] .tile[data-tank="one"] .arw { animation: tile-bob-down 1.1s ease-in-out infinite; }
+  .tiles[data-live-in="up"] .tile[data-tank="in"] .arw,
+  .tiles[data-live-one="up"] .tile[data-tank="one"] .arw { animation: tile-bob-up 1.1s ease-in-out infinite; }
+  .tiles[data-live-out="down"] .tile[data-tank="out"] .wv svg,
+  .tiles[data-live-in="up"] .tile[data-tank="in"] .wv svg,
+  .tiles[data-live-one="down"] .tile[data-tank="one"] .wv svg,
+  .tiles[data-live-one="up"] .tile[data-tank="one"] .wv svg { animation: tile-wave 1.4s linear infinite; }
+  @media (prefers-reduced-motion: reduce) { .tiles .arw, .tiles .wv svg, .tiles .wt { animation: none !important; } }
   .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
   main { max-width: 760px; margin: 0 auto; padding: 0.8rem; display: grid; gap: 0.8rem; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.9rem; }
@@ -1767,11 +1781,15 @@
   }
 
   // ------------------------------------------------------------ tank tiles
-  // The third frozen row: one tile per tank.  The left number is the last
-  // accepted dip; the right the prediction at the end of the current batch.
-  // The track fills with the tapped litres over the plan's batch; without a
-  // plan it is a plain connector and the right number follows the tapped
-  // cans.  The chosen tank keeps the thick line in its role colour.
+  // The third frozen row: one tile per tank, two short lines.  The top line
+  // is the role arrow over its wave (the liquid surface) and the tank name;
+  // the bottom line is the last accepted dip, a track, and the prediction at
+  // the end of the current batch.  The track fills with the tapped litres
+  // over the plan's batch; without a plan it is a plain connector and the
+  // right number follows the tapped cans.  A red ring after the dip says a
+  // reading waits.  A prediction at the brim, a dry shell or the suction
+  // floor is the limit, after ≥ or ≤, in the warning colour.  The chosen
+  // tank keeps the thick line in its role colour.
   const TILE_WHY = {
     first: "the first level",
     neck: "in the neck",
@@ -1779,35 +1797,44 @@
     unknown: "an unknown pour",
     "no-anchor": "no anchor level",
     "plan-complete": "the plan is complete",
-    dry: "the drain runs the tank dry",
-    brim: "the pour reaches the neck",
   };
+  const TILE_EDGE = {
+    brim: "the batch reaches the brim",
+    dry: "the batch runs the tank dry",
+    floor: "the batch goes below the suction floor",
+  };
+
+  // The wave: four half-waves of 5 units over 40, so a shift of half the
+  // width (two whole waves) loops without a jump.
+  const TILE_WAVE = "M0 3 q2.5 -2.6 5 0 t5 0 t5 0 t5 0 t5 0 t5 0 t5 0 t5 0";
 
   function tileHtml(v, tank, selected, readOnly) {
     const tag = isTransfer() && !readOnly ? "button" : "div";
     const attrs = tag === "button"
       ? ` type="button" data-tank="${tank}" aria-pressed="${selected}"`
       : ` data-tank="${tank}"`;
-    const prog = v.cans && v.cans.total != null ? `${v.cans.done}/${v.cans.total}`
-      : v.cans && v.cans.done ? String(v.cans.done) : "";
     const cur = v.from == null ? "—" : f(v.from);
     const why = v.why ? TILE_WHY[v.why] || "" : "";
-    let pred = "—", predCls = "num pred";
-    if (v.why === "no-cans") { pred = "pour to predict"; predCls = "num pred words"; }
-    else if (v.to != null) pred = f(v.to);
+    let pred = `<span class="num pred">—</span>`;
+    if (v.why === "no-cans") pred = `<span class="num pred words">${esc("pour to predict")}</span>`;
+    else if (v.to != null && v.edge) {
+      pred = `<span class="num pred edge" data-edge="${v.edge}"><span aria-hidden="true">${v.edge === "brim" ? "≥" : "≤"}</span>${f(v.to)}</span>`;
+    } else if (v.to != null) pred = `<span class="num pred">${f(v.to)}</span>`;
     const now = v.from == null ? "no level" : `${f(v.from)} mm now`;
-    const after = v.to != null ? `${f(v.to)} mm after the batch`
+    const after = v.to != null ? `${f(v.to)} mm after the batch${v.edge ? ` · ${TILE_EDGE[v.edge]}` : ""}`
       : v.why === "no-cans" ? "pour to predict" : `no prediction (${why})`;
-    const cansText = v.cans && v.cans.total != null ? `${v.cans.done} of ${v.cans.total} cans` : "";
-    const label = `${v.name} · ${now} · ${after}${cansText ? ` · ${cansText}` : ""}`;
+    const label = `${v.name} · ${now}${v.wait ? " · a newer reading waits" : ""} · ${after}`;
     const dir = v.dir;
-    const d = dir === "up" ? "M10 16 V5 M5.5 9.5 L10 5 L14.5 9.5" : "M10 4 V15 M5.5 10.5 L10 15 L14.5 10.5";
-    const arrow = `<span class="arw-wrap"><svg class="arw ${dir}" viewBox="0 0 20 24" aria-hidden="true"><g class="bob"><path class="shaft" d="${d}"/></g><path class="wave" d="M1 20 q3 -2.4 6 0 t6 0 t6 0"/></svg></span>`;
+    const d = dir === "up" ? "M10 15 V4 M5.5 8.5 L10 4 L14.5 8.5" : "M10 3 V14 M5.5 9.5 L10 14 L14.5 9.5";
+    const arrow = `<span class="arw-wrap" aria-hidden="true">`
+      + `<svg class="arw ${dir}" viewBox="0 0 20 24"><path class="shaft" d="${d}"/></svg>`
+      + `<span class="wv"><svg viewBox="0 0 40 6" preserveAspectRatio="none"><path class="wave" d="${TILE_WAVE}"/></svg></span></span>`;
     const track = v.frac == null ? `<span class="trk plain"></span>`
       : `<span class="trk"><i style="width:${(100 * v.frac).toFixed(1)}%"></i></span>`;
+    const ring = v.wait ? `<i class="wt" aria-hidden="true"></i>` : "";
     return `<${tag} class="tile ${v.role}${selected ? " sel" : ""}"${attrs} data-dir="${dir}" aria-label="${esc(label)}" title="${esc(label)}">`
-      + `<span class="top">${arrow}<span class="nm">${esc(v.name)}</span><span class="prog">${prog}</span></span>`
-      + `<span class="line"><span class="num cur">${cur}</span>${track}<span class="${predCls}">${esc(pred)}</span></span>`
+      + `<span class="top">${arrow}<span class="nm">${esc(v.name)}</span></span>`
+      + `<span class="line"><span class="num cur">${cur}${ring}</span>${track}${pred}</span>`
       + `</${tag}>`;
   }
 

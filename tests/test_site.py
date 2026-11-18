@@ -1709,6 +1709,8 @@ console.log(JSON.stringify(out));
         self.assertIn("arw down", got["hdr"]["tiles"])
         self.assertIn("arw up", got["hdr"]["tiles"])
         self.assertIn('class="wave"', got["hdr"]["tiles"], "the arrow has its wave")
+        self.assertIn('<span class="wv"><svg viewBox="0 0 40 6"', got["hdr"]["tiles"],
+                      "the wave sits in its own clipped box, twice as wide, so it can flow")
         self.assertIn("alpha", got["hdr"]["tiles"])
         self.assertIn("beta", got["hdr"]["tiles"])
         self.assertIn("no prediction (the first level)", got["hdr"]["tiles"])
@@ -3084,10 +3086,13 @@ class TestSiteTiles(unittest.TestCase):
             m = re.search(r'class="' + cls + r'">([^<]*)<', html)
             return m.group(1) if m else None
         w = re.search(r"width:([0-9.]+)%", html)
+        e = re.search(r'data-edge="(\w+)"><span aria-hidden="true">([≥≤])</span>([^<]*)<', html)
         return {
             "cur": one("num cur"),
-            "pred": one("num pred") or one("num pred words"),
-            "prog": one("prog"),
+            "pred": one("num pred") or one("num pred words") or (e.group(3) if e else None),
+            "edge": (e.group(1), e.group(2)) if e else None,
+            "wait": 'class="wt"' in html,
+            "tally": 'class="prog"' in html,
             "width": w.group(1) if w else None,
             "plain": 'class="trk plain"' in html,
         }
@@ -3134,20 +3139,25 @@ class TestSiteTiles(unittest.TestCase):
         self.assertIn("no level", got["before"])
         self.assertIn("no prediction (the first level)", got["before"])
         t0 = self._tile(got["t0"])
-        self.assertEqual((t0["cur"], t0["pred"], t0["prog"], t0["width"]),
-                         ("10.0", "368.9", "0/2", "0.0"), "the plan batch is 2 cans of 200 L")
+        self.assertEqual((t0["cur"], t0["pred"], t0["width"]),
+                         ("10.0", "368.9", "0.0"), "the plan batch is 2 cans of 200 L")
         self.assertFalse(t0["plain"], "a plan draws the progress track")
+        self.assertFalse(t0["tally"], "the tile has no can tally: the batch card has it")
+        self.assertNotIn(" cans", got["t0"], "no can count in the tooltip either")
+        self.assertFalse(t0["wait"], "no reading waits")
+        self.assertIsNone(t0["edge"])
         t1 = self._tile(got["t1"])
-        self.assertEqual((t1["prog"], t1["width"], t1["pred"]), ("1/2", "50.0", "368.9"),
+        self.assertEqual((t1["width"], t1["pred"]), ("50.0", "368.9"),
                          "the prediction stays at the batch end while the track fills")
         t2 = self._tile(got["t2"])
-        self.assertEqual((t2["prog"], t2["width"], t2["pred"]), ("2/2", "100.0", "368.9"))
+        self.assertEqual((t2["width"], t2["pred"]), ("100.0", "368.9"))
         t3 = self._tile(got["t3"])
-        self.assertEqual((t3["prog"], t3["width"], t3["pred"]), ("2/2", "100.0", "368.9"),
+        self.assertEqual((t3["width"], t3["pred"]), ("100.0", "368.9"),
                          "after Batch done the prediction is the expected dip")
+        self.assertFalse(t3["wait"], "the dip waits, but no reading is typed yet")
         self.assertIn("368.9", got["expect"], "the tile agrees with the dip card")
         t4 = self._tile(got["t4"])
-        self.assertEqual((t4["cur"], t4["prog"], t4["width"]), ("368.9", "0/2", "0.0"),
+        self.assertEqual((t4["cur"], t4["width"]), ("368.9", "0.0"),
                          "the accepted dip becomes the current level; the next batch starts empty")
         self.assertNotEqual(t4["pred"], "368.9", "the next batch predicts from the new level")
         n0 = self._tile(got["n0"])
@@ -3159,12 +3169,12 @@ class TestSiteTiles(unittest.TestCase):
         self.assertNotEqual(n1["pred"], "pour to predict", "the tapped cans give the prediction")
         self.assertTrue(n1["plain"], "no plan: still a plain connector")
 
-    def test_page_tiles_pending_batch_keeps_its_own_group(self):
-        """The tally of a batch waiting for its dip counts that batch's cans.
+    def test_page_tiles_pending_batch_and_the_waiting_ring(self):
+        """A batch waiting for its dip: a full track and the expected dip.
 
-        A plan of 400/1000/400 L with 200 L cans is 2/5/2 cans.  The plan
-        has already moved on to the next batch while the dip waits, so the
-        tile must not take the next batch's count for the batch just poured.
+        A reading that the page has not decided yet (here a far miss, so
+        the page asks for a re-dip) keeps the accepted dip on the tile and
+        adds the red ring after it.
         """
         stub = (HERE / "tests" / "page_stub.js").as_posix()
         got = _node(
@@ -3186,24 +3196,31 @@ class TestSiteTiles(unittest.TestCase):
             "el('t-plus').click(); el('t-plus').click(); out.tapped = el('tiles').innerHTML;\n"
             "el('p-go').click(); out.pending = el('tiles').innerHTML;\n"
             "const pred = /class=\"num pred\">([^<]*)</.exec(out.pending)[1];\n"
+            "el('d-val').value = String(Number(pred) + 40); el('d-go').click();\n"
+            "out.miss = el('tiles').innerHTML; out.missCard = !el('dip-card')._classes.has('hidden');\n"
             "el('d-val').value = pred; el('d-go').click();\n"
             "if (!el('dip-card')._classes.has('hidden')) { el('d-val').value = pred; el('d-go').click(); }\n"
             "out.next = el('tiles').innerHTML;\n"
             "console.log(JSON.stringify(out));"
         )
         self.assertEqual(got["plan"], "3 batches · 1800 L = nominal ✓ · symmetric ✓")
-        self.assertEqual(self._tile(got["open0"])["prog"], "0/2", "group 1 takes 2 cans of 200 L")
-        self.assertEqual(self._tile(got["tapped"])["prog"], "2/2")
+        self.assertEqual(self._tile(got["open0"])["width"], "0.0")
+        self.assertEqual(self._tile(got["tapped"])["width"], "100.0")
         pending = self._tile(got["pending"])
-        self.assertEqual(pending["prog"], "2/2",
-                         "the batch just poured is 2 cans, not the next batch's 5")
         self.assertEqual(pending["width"], "100.0", "the track is full while the dip waits")
+        self.assertFalse(pending["wait"], "no reading is typed yet")
+        self.assertTrue(got["missCard"], "a far miss asks for another dip")
+        miss = self._tile(got["miss"])
+        self.assertTrue(miss["wait"], "the typed reading waits: the ring shows")
+        self.assertEqual(miss["cur"], "10.0", "the tile keeps the accepted dip")
+        self.assertIn("a newer reading waits", got["miss"], "the tooltip says why")
         self.assertEqual(got["next"].count('class="num cur"'), 1)
         nxt = self._tile(got["next"])
-        self.assertEqual(nxt["prog"], "0/5", "the next group holds 5 cans")
+        self.assertFalse(nxt["wait"], "the level is decided: no ring")
+        self.assertEqual(nxt["cur"], pending["pred"], "the accepted dip is the new current level")
 
     def test_page_tiles_transfer_own_levels(self):
-        """Each transfer tile keeps its own level and prediction, one tally."""
+        """Each transfer tile keeps its own level and prediction."""
         stub = (HERE / "tests" / "page_stub.js").as_posix()
         got = _node(
             f"const stub = require({json.dumps(stub)});\n"
@@ -3226,7 +3243,7 @@ class TestSiteTiles(unittest.TestCase):
         start = [self._tile(h) for h in got["start"]]
         self.assertEqual([t["cur"] for t in start], ["1800.0", "400.0"], "each tile shows its own first dip")
         tiles = [self._tile(h) for h in got["tiles"]]
-        self.assertEqual([t["prog"] for t in tiles], ["2/2", "2/2"], "one shared tally")
+        self.assertEqual([t["tally"] for t in tiles], [False, False], "no tally on the tiles")
         self.assertIn('data-tank="out"', got["tiles"][0])
         self.assertIn('data-tank="in"', got["tiles"][1])
         a, b = tiles
@@ -3256,9 +3273,53 @@ class TestSiteTiles(unittest.TestCase):
         self.assertEqual(got["before"]["why"], "no-cans", "the shell level stands while no can is tapped")
         self.assertEqual((got["over"]["from"], got["over"]["to"], got["over"]["why"]),
                          (500, None, "overflow"), "the overflow reading is the level, with no prediction")
-        self.assertIsNone(got["over"]["cans"]["total"], "no tally at the brim row")
+        self.assertNotIn("cans", got["over"], "the tile view has no tally")
         self.assertEqual((got["neck"]["from"], got["neck"]["to"], got["neck"]["why"]),
                          (2500, None, "neck"), "the neck reading is the level, with no prediction")
+
+    def test_tile_view_edges(self):
+        """A prediction at a limit keeps its number and names the limit.
+
+        Past the brim the level is held at the shell crown; a drain below the
+        suction floor (65 mm by default) is "floor"; one that empties the
+        shell is "dry", held at the floor of the shell.
+        """
+        got = _node(
+            "const f = new core.Session({D: 1800, Lest: 3000, direction: 'fill', pourUnit: 200});\n"
+            "f.start('?', 1650); f.dip(1650); f.dip(1650);\n"
+            "const fill = [];\n"
+            "for (let k = 0; k < 2; k++) { f.tap(1000 + k, 200); fill.push(f.tileView()); }\n"
+
+            "const d = new core.Session({D: 1800, Lest: 3000, direction: 'drain', pourUnit: 50});\n"
+            "d.start('?', 200); d.dip(200); d.dip(200);\n"
+            "const drain = [];\n"
+            "for (let k = 0; k < 10; k++) { d.tap(1000 + k, 50); drain.push(d.tileView()); }\n"
+            "console.log(JSON.stringify({fill, drain}));"
+        )
+        f1, f2 = got["fill"]
+        self.assertIsNone(f1["edge"])
+        self.assertLess(f1["to"], 1800)
+        self.assertEqual((f2["edge"], f2["why"]), ("brim", None), "past the brim: the number stays, marked")
+        self.assertAlmostEqual(f2["to"], 1800, places=6, msg="held at the shell crown (2r + h0)")
+        edges = [t["edge"] for t in got["drain"]]
+        self.assertEqual(edges[:7], [None] * 7)
+        self.assertEqual(edges[7:9], ["floor", "floor"], "below the 65 mm suction floor")
+        self.assertEqual(edges[9], "dry", "the drain empties the shell")
+        self.assertLess(got["drain"][7]["to"], 65)
+        self.assertGreater(got["drain"][6]["to"], 65)
+        self.assertTrue(all(t["why"] is None and t["to"] is not None for t in got["drain"]))
+
+    def test_tile_view_edge_while_the_dip_waits(self):
+        """Batch done past the brim: the dip card has no number, the tile has the limit."""
+        got = _node(
+            "const f = new core.Session({D: 1800, Lest: 3000, direction: 'fill', pourUnit: 200});\n"
+            "f.start('?', 1650); f.dip(1650); f.dip(1650);\n"
+            "f.pour('800');\n"
+            "console.log(JSON.stringify({t: f.tileView(), e: f.expectPending()}));"
+        )
+        self.assertEqual(got["e"]["why"], "the pour reaches the neck")
+        self.assertEqual((got["t"]["edge"], got["t"]["why"], got["t"]["frac"]), ("brim", None, 1))
+        self.assertAlmostEqual(got["t"]["to"], 1800, places=6)
 
     def test_page_tally_crowded_cells_keep_one_time(self):
         """Cells too narrow for a time show one pill with the last time."""
@@ -3339,6 +3400,13 @@ class TestSiteTiles(unittest.TestCase):
         self.assertEqual(got["tfill"], ["", "down", ""], "A loses water while the pump fills the can")
         self.assertEqual(got["tdrain"], ["", "", "up"], "B gains water while the can empties")
         self.assertEqual(got["tafter"], ["", "", ""])
+        css = (SITE / "page.html").read_text(encoding="utf-8")
+        self.assertIn('.tiles[data-live-out="down"] .tile[data-tank="out"] .wv svg', css,
+                      "the wave flows under the same live state as the bob")
+        self.assertIn("@keyframes tile-wave { to { transform: translateX(-50%); } }", css,
+                      "half the double-width wave: two whole waves, no jump")
+        self.assertIn(".tiles .arw, .tiles .wv svg, .tiles .wt { animation: none !important; }", css,
+                      "Reduce Motion stops the bob, the wave and the ring")
 
 
 if __name__ == "__main__":

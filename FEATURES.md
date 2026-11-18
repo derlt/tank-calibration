@@ -121,7 +121,7 @@ adopted shell, so the tool cannot drift from the fit.
 | Offline page | `site/page.html` + core + `site/i18n.js` → `calib site-page` → `site/calib_site.html` |
 | Page language | `site/i18n.js`: English and Vietnamese, chosen in Settings; the exported files stay English; `tests/test_i18n.py` checks a key for every text |
 | Header live indicator | `site/page.html` `liveState` / `tickLive`: fill, close-valve, full (fill timer) and drain (drain time after the last tap); `tests/test_site.py` |
-| Tank tiles | `site/page.html` `renderTiles` / `tileHtml` / `tileLive`, `site_core.js` `Session.tileView` / `TransferSession.tiles`: the third frozen row, the last dip and the batch-end prediction, the plan/tapped rule, the wave arrow and its live animation; `tests/test_site.py::TestSiteTiles` |
+| Tank tiles | `site/page.html` `renderTiles` / `tileHtml` / `tileLive`, `site_core.js` `Session.tileView` / `TransferSession.tiles`: the third frozen row, the last dip and the batch-end prediction, the plan/tapped rule, the waiting-reading ring, the brim / floor / dry limit marks (`tileEdge`), the wave arrow with its bob and flowing wave; `tests/test_site.py::TestSiteTiles` |
 | iPhone timer (Shortcuts) | `site/page.html` `isIOS` / `iosTimerUrl` / `iosTimer`, started by *Start fill timer*; device prefs `iosTimer`, `iosShortcut`; `tests/test_site.py` |
 | Swipe between tabs | `site/page.html` touch handlers on `main`, `goTab`; `tests/test_site.py` |
 | Settings tab | `site/page.html`; `Session.setCampaign` refits the running shell after a change of the tank record, the priors or the noise |

@@ -408,16 +408,20 @@ timer ends it. Hold a finger on the can (or hover it) for the state in words.
 every tab: one tile per tank. The header, the tab labels and the tiles stay
 at the top when you scroll.
 
-Each tile is a compact block:
+Each tile has two short lines:
 
-- the role arrow, with a small wave under it for the liquid surface: ↑ pour
-  in, ↓ pump out;
-- the tank name;
-- the can tally, for example `3/8`: the cans tapped over the cans of the
-  batch;
-- the last accepted dip, in mm;
-- a thin track that fills with the tapped litres over the batch;
-- the prediction at the end of the current batch, in mm.
+- top: the role arrow over a small wave for the liquid surface (↑ pour in,
+  ↓ pump out), then the tank name;
+- bottom: the last accepted dip in mm, a thin track that fills with the
+  tapped litres over the batch, and the prediction at the end of the current
+  batch in mm.
+
+The tile has no can tally: the batch card on the Live tab has it.
+
+A small red ring after the dip means a reading at the open level is not
+decided yet: a first reading that waits for its pair, a pair that disagrees,
+or a miss that asks for another dip. The number stays the last accepted dip
+until the page decides.
 
 The chosen tank keeps the thick line under it in its role colour (amber for
 A, blue for B). Tap a tile to choose the tank: the Log & charts, Shell,
@@ -433,9 +437,21 @@ The tile shows no ±: the dip card has it.
 A level in the neck, or an overflow reading, has no shell prediction: the
 tile shows that reading as the level and *no prediction* beside it.
 
+A batch that passes a limit keeps its number, in the warning colour:
+
+| mark | when | the number |
+|---|---|---|
+| `≥ 1800.0` | a fill passes the brim | the shell crown (2r + h0): the water goes into the neck |
+| `≤ 52.3` | a drain goes below the suction floor (*Settings*, 65 mm by default) | the predicted level: the pump cannot draw it |
+| `≤ 0.0` | a drain empties the shell | the floor of the shell |
+
+The tooltip names the limit. The dip card still shows no prediction for a
+batch past the brim or a dry shell.
+
 The arrow bobs while the live can state moves that tank's water: down while
 the pump fills the can in a drain (A in a transfer), up while the can empties
-into the tank in a fill (B in a transfer). *Reduce Motion* stops it.
+into the tank in a fill (B in a transfer). The wave under it flows sideways
+at the same time. *Reduce Motion* stops the bob, the wave and the ring.
 
 The prediction is visible before the dip, as the Now card's line is. An
 operator who wants a blind repeat must not read the tile before dipping

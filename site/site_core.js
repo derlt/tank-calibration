@@ -801,60 +801,66 @@
     return this._planList(planState(this.cfg.plan, this._planHist(), room.R, true, this._planPrev()));
   };
 
-  /** The cans one plan group takes: its size in the plan's can sizes. */
-  function planGroupCans(cfg, size) {
-    const mix = size > 0 ? canMix(size, planSizes(cfg)) : null;
-    return mix ? mix.reduce((a, c) => a + c.count, 0) : null;
-  }
-
   /**
    * One tank tile: the last accepted level, the predicted level at the end of
-   * the current batch, the track fraction, the can tally and a reason when
-   * there is no prediction.  The page draws it; the rules stay here.
+   * the current batch, the track fraction and a reason when there is no
+   * prediction.  The page draws it; the rules stay here.
    *   role: "in" (a fill) or "out" (a drain)
    *   dir:  "up" or "down"
-   *   why:  "first", "neck", "overflow", "plan-complete", "no-cans",
-   *         "dry", "brim" — null when a prediction exists
+   *   wait: a reading at the open level is not decided yet (a first dip
+   *         that waits for its pair, a pair that disagrees, a re-dip)
+   *   edge: "brim" (the batch passes the brim: `to` is the brim), "dry"
+   *         (the drain empties the shell: `to` is its floor) or "floor"
+   *         (the prediction is below the suction floor); null otherwise.
+   *         The number is a limit, not a level.
+   *   why:  "first", "neck", "overflow", "unknown", "no-anchor",
+   *         "plan-complete", "no-cans" — null when a prediction exists
    */
-  function tileOne(sess, role, dir, target, frac, total, done) {
+  function tileOne(sess, role, dir, target, frac) {
     const gi = sess.lastGood();
     const G = gi >= 0 ? sess.levels[gi] : null;
     const cur = sess.current();
     const pend = cur && cur.state === "pending" && !cur.start ? cur : null;
     const base = {
       name: sess.cfg.tank, role, dir, from: null, to: null, frac: null,
-      cans: { done: done == null ? sess.cans() : done, total: total == null ? null : total },
-      why: null,
+      wait: !!(cur && cur.state === "pending" && cur.dips && cur.dips.length > 0),
+      edge: null, why: null,
     };
     if (!G || G.H == null) return Object.assign(base, { why: "first" });
     // The last decided reading can be the overflow row: vent-column height,
     // not a shell level, so lastGood() skips it.  It is still the level the
     // operator dipped, and the tile shows it with no prediction.
     if (cur && cur.state === "overflow" && cur.H != null) {
-      // No batch is in progress at the brim row: no tally either.
-      return Object.assign(base, { from: cur.H, why: "overflow", cans: { done: base.cans.done, total: null } });
+      return Object.assign(base, { from: cur.H, why: "overflow" });
     }
     base.from = G.H;
     // The batch is done and the dip waits: the prediction is the expected
-    // dip, and the track is full.  The tally is the cans tapped over the
-    // cans of that batch: the pending level's own plan group, not the next
-    // batch the plan proposes now.
+    // dip, and the track is full.
     if (pend) {
-      const tapped = pend.cans ? pend.cans.tapped : 0;
-      const own = pend.plan && pend.plan.group != null ? planGroupCans(sess.cfg, pend.plan.size) : null;
-      base.cans = { done: tapped, total: own != null ? own : tapped };
       base.frac = 1;
       const e = sess.expectPending();
       if (!e) return Object.assign(base, { why: "no-anchor" });
+      if (e.why === "the pour reaches the neck" || e.why === "the drain runs the tank dry") {
+        // The dip card has no number past the brim or the floor; the tile
+        // shows the limit, marked.
+        const pr = sess._predict(pend, 1);
+        if (!pr) return Object.assign(base, { why: "no-anchor" });
+        return Object.assign(base, { to: pr.H, edge: tileEdge(sess, pr) });
+      }
       if (e.why) return Object.assign(base, { why: whyCode(e.why) });
-      return Object.assign(base, { to: e.pr.H });
+      return Object.assign(base, { to: e.pr.H, edge: tileEdge(sess, e.pr) });
     }
     if (G.neck) return Object.assign(base, { why: "neck" });
     if (!(target > 0)) return Object.assign(base, { why: sess.cfg.plan ? "plan-complete" : "no-cans" });
     const pr = sess.preview(base.from, target, G.n);
-    if (sess.cfg.dir > 0 && pr.overflow) return Object.assign(base, { why: "brim" });
-    if (sess.cfg.dir < 0 && pr.empty) return Object.assign(base, { why: "dry" });
-    return Object.assign(base, { to: pr.H, frac });
+    return Object.assign(base, { to: pr.H, frac, edge: tileEdge(sess, pr) });
+  }
+
+  /** The tile's mark for a prediction at a limit: brim, dry or the suction floor. */
+  function tileEdge(sess, pr) {
+    if (sess.cfg.dir > 0) return pr.overflow ? "brim" : null;
+    if (pr.empty) return "dry";
+    return pr.H < sess.cfg.suctionFloor ? "floor" : null;
   }
 
   /** The reason code for a pending level's "no prediction" text. */
@@ -865,8 +871,6 @@
       "an overflow reading": "overflow",
       "a level in the neck": "neck",
       "no anchor level": "no-anchor",
-      "the pour reaches the neck": "brim",
-      "the drain runs the tank dry": "dry",
     }[why] || "no-anchor";
   }
 
@@ -879,15 +883,7 @@
     // past it, the end of the pour is the batch.
     const target = pb ? Math.max(pb.size, tapped) : tapped;
     const frac = pb && pb.size > 0 ? Math.min(1, tapped / pb.size) : null;
-    const gi = this.lastGood();
-    const G = gi >= 0 ? this.levels[gi] : null;
-    let total = pb ? pb.cans : null;
-    if (total == null && !(this.cfg.plan && !pb) && G && G.H != null && !G.neck) {
-      const a = this.advice(G.H);
-      total = a && a.units ? a.units : null;
-    }
-    return tileOne(this, this.cfg.dir > 0 ? "in" : "out", this.cfg.dir > 0 ? "up" : "down",
-      target, frac, total, this.cans());
+    return tileOne(this, this.cfg.dir > 0 ? "in" : "out", this.cfg.dir > 0 ? "up" : "down", target, frac);
   };
 
   // ---- batch: several cans, then one dip (§3.10).  One tap per can, so the
@@ -2302,16 +2298,10 @@
     const tapped = this.out.batchVolume();
     const target = pb ? Math.max(pb.size, tapped) : tapped;
     const frac = pb && pb.size > 0 ? Math.min(1, tapped / pb.size) : null;
-    const done = this.out.cans();
-    let total = pb ? pb.cans : null;
-    if (total == null && !(this.out.cfg.plan && !pb)) {
-      const adv = this.adviceBatch();
-      total = adv && adv.units ? adv.units : null;
-    }
     return {
-      out: tileOne(this.out, "out", "down", target, frac, total, done),
-      in: tileOne(this.in, "in", "up", target, frac, total, done),
-      frac, cans: { done, total },
+      out: tileOne(this.out, "out", "down", target, frac),
+      in: tileOne(this.in, "in", "up", target, frac),
+      frac,
     };
   };
 
