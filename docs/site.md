@@ -578,7 +578,8 @@ the full reading card into view. In a transfer, each tile has its own mark;
 the pair view of the two tanks stays in the card.
 
 The chosen tank keeps the thick line under it in its role colour (amber for
-A, blue for B). Tap a tile to choose the tank: the Log & charts, Shell,
+A, blue for B); another tile keeps the same empty strip, so the row never
+shifts. Tap a tile to choose the tank: the Log & charts, Shell,
 Settings and Files tabs follow it. On Replay and How it works the tiles are
 read-only. The row hides before a campaign is open.
 

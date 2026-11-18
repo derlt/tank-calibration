@@ -284,6 +284,10 @@ All notable changes to this project are documented here. The format follows
   a fill and a transfer. It now follows the dip card: ↑ pump out (tank A in
   a transfer) and ↓ pour in (tank B), and a standalone drain shows ↑, a fill
   ↓. The bob and the flowing wave follow the same direction.
+- On-site page: the tank tile's prediction sat lower than the last dip: a
+  page paragraph style gave it a top margin. The two numbers now share a
+  baseline. A tile that is not chosen keeps its card border and an empty
+  strip where the role line would be, so the row does not shift.
 
 ### Added
 

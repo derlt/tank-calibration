@@ -109,18 +109,20 @@
   .chrome-in { max-width: 760px; margin: 0 auto; padding: 0 0.8rem; }
   .tiles { display: flex; gap: 0.35rem; padding: 0 0 0.45rem; }
   .tiles.hidden { display: none; }
-  .tile { flex: 1 1 0; min-width: 0; background: var(--card); border: 1px solid var(--line); border-bottom: 3px solid transparent; border-radius: 8px; padding: 0.2rem 0.4rem 0.15rem; color: var(--ink); text-align: left; font: inherit; font-weight: 400; min-height: 0; }
+  .tile { flex: 1 1 0; min-width: 0; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 0.2rem 0.4rem calc(0.15rem + 2px); color: var(--ink); text-align: left; font: inherit; font-weight: 400; min-height: 0; }
   button.tile { cursor: pointer; }
   .tile.out { --role: var(--warn); }
   .tile.in { --role: var(--info); }
-  .tile.sel { border-bottom-color: var(--role); }
+  /* The chosen tank keeps a thick line in its role colour inside the card;
+     another tile keeps the same empty strip, so the row never shifts. */
+  .tile.sel { box-shadow: inset 0 -3px 0 var(--role); }
   .tile .top { display: flex; align-items: center; gap: 0.25rem; min-height: 1.1rem; }
   .tile .nm { font-size: 0.7rem; font-weight: 600; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tile.sel .nm { color: var(--ink); font-weight: 800; }
-  .tile .line { display: flex; align-items: center; gap: 0.3rem; margin-top: 0.05rem; }
+  .tile .line { display: flex; align-items: baseline; gap: 0.3rem; margin-top: 0.05rem; }
   .tile .num { font: 0.78rem var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .tile .cur { font-weight: 700; }
-  .tile .pred { color: var(--muted); }
+  .tile .pred { color: var(--muted); margin: 0; }
   .tile .pred.words { font-family: inherit; font-size: 0.68rem; }
   /* A prediction at a limit (the brim, a dry shell, the suction floor): the
      number is the limit, after ≥ or ≤, in the warning colour. */
@@ -135,7 +137,7 @@
   .tile .mk.warn { color: var(--warn); background: var(--warn-bg); border-color: var(--warn); }
   .tile .mk.bad { color: var(--bad); background: var(--bad-bg); border-color: var(--bad); }
   .tile .mk.info { color: var(--info); background: var(--info-bg); border-color: var(--info); }
-  .tile .trk { flex: 1 1 0.8rem; min-width: 0.6rem; height: 2px; background: var(--line); border-radius: 2px; overflow: hidden; }
+  .tile .trk { flex: 1 1 0.8rem; min-width: 0.6rem; align-self: center; height: 2px; background: var(--line); border-radius: 2px; overflow: hidden; }
   .tile .trk i { display: block; height: 100%; background: var(--role); border-radius: 2px; }
   .tile .trk.plain { background: none; border-top: 1px dashed var(--line); height: 0; }
   /* The arrow and its wave: the shaft bobs, the wave (a longer path in a
