@@ -388,6 +388,43 @@ The draining state needs a drain time for the can size (*Timers, alarm and
 device*): without one the page cannot know when the can is empty. A new fill
 timer ends it. Hold a finger on the can (or hover it) for the state in words.
 
+**The tank tiles.** A third row sits under the header and the tab labels, on
+every tab: one tile per tank. The header, the tab labels and the tiles stay
+at the top when you scroll.
+
+Each tile is a compact block:
+
+- the role arrow, with a small wave under it for the liquid surface: ↑ pour
+  in, ↓ pump out;
+- the tank name;
+- the can tally, for example `3/8`: the cans tapped over the cans of the
+  batch;
+- the last accepted dip, in mm;
+- a thin track that fills with the tapped litres over the batch;
+- the prediction at the end of the current batch, in mm.
+
+The chosen tank keeps the thick line under it in its role colour (amber for
+A, blue for B). Tap a tile to choose the tank: the Log & charts, Shell,
+Settings and Files tabs follow it. On Replay and How it works the tiles are
+read-only. The row hides before a campaign is open.
+
+The prediction is the level after the plan's current batch. Without a batch
+plan it is the level after the cans already tapped, and the track is a plain
+connector; before the first can the tile says *pour to predict*. After *Batch
+done* the prediction is the expected dip, the same number as the dip card.
+The tile shows no ±: the dip card has it.
+
+A level in the neck, or an overflow reading, has no shell prediction: the
+tile shows that reading as the level and *no prediction* beside it.
+
+The arrow bobs while the live can state moves that tank's water: down while
+the pump fills the can in a drain (A in a transfer), up while the can empties
+into the tank in a fill (B in a transfer). *Reduce Motion* stops it.
+
+The prediction is visible before the dip, as the Now card's line is. An
+operator who wants a blind repeat must not read the tile before dipping
+(§10a.6).
+
 **iPhone timer on the lock screen.** iOS stops a page's scripts and its
 sound when the phone locks, and a page cannot show a countdown on the lock
 screen. The iPhone's own Clock timer can do both. On an iPhone or iPad,
@@ -430,11 +467,12 @@ one before. Once the drag is clearly sideways, the tab follows the finger
 and the page does not scroll. Let go after a quarter of the screen width, or
 with a fast flick, and the next tab slides in from that side; let go sooner
 and the tab springs back. Past the first or the last tab the drag gives way
-and springs back. A swipe does nothing when it starts on the tab bar, a
-field, the chart, a box that scrolls sideways (the level table), or within
-24 px of the screen edge, where the phone has its own back gesture. A drag
-that starts up or down stays a page scroll. With *Reduce Motion* on in the
-phone's settings, the tab does not move: the new tab fades in.
+and springs back. A swipe does nothing when it starts on the frozen stack
+(the header, the tab labels, the tank tiles), a field, the chart, a box that
+scrolls sideways (the level table), or within 24 px of the screen edge, where
+the phone has its own back gesture. A drag that starts up or down stays a
+page scroll. With *Reduce Motion* on in the phone's settings, the tab does
+not move: the new tab fades in.
 
 **Settle timer.** *Batch done* starts the settle timer from the last can.
 The dip card counts down and rings once when the level is ready to dip.
@@ -521,7 +559,9 @@ keep a charger or a power bank near the tank.
 ## Charts during the campaign
 
 The **Log & charts** tab shows four charts. Tap a button above the chart, or
-swipe the chart left or right, to change the chart.
+swipe the chart left or right, to change the chart. The chosen tank is the
+tile with the thick line in the frozen row; the chart and Levels titles carry
+no tank name.
 
 | Chart | What it shows | What to look for |
 |---|---|---|
@@ -671,16 +711,13 @@ with the input edge in the same colour. The arrow follows the water: out of
 the underground tank is up, into it is down.
 
 Each tank keeps its own check, its own running shell and its own raw file.
-The header's tank switch takes the place of the title: its two buttons name
-the tanks, with the role as the arrow of the dip card (`↑ alpha` pumps out,
-`↓ beta` pours in). The chosen tank is bold white with a thick line under it
-in its role colour (amber for A, blue for B, as on the dip card); the other
-tank is dim. A long press or hover shows the full role, and a screen
-reader reads "Current tank: alpha, pump out". It selects the tank that the Log & charts,
-Shell and campaign cards show, and the tank that *Take another reading* and
-*Accept anyway* apply to; the Live tab marks the current tank. The switch
-hides on Replay and Help, where it changes nothing. The Log & charts tab
-carries the same switch, and its table and chart are always the named tank's
+The tank tiles name the tanks: A's tile falls (pump out), B's rises (pour
+in), and the chosen tile keeps the thick line in its role colour (amber for
+A, blue for B). The tiles choose the tank that the Log & charts, Shell and
+campaign cards show, and the tank that *Take another reading* and *Accept
+anyway* apply to; the Live tab marks the current tank. The tiles are
+read-only on Replay and Help, where they change nothing. The Log & charts tab
+has no switch of its own: its table and chart are always the chosen tank's
 own (A's table reads *drained L*, B's *pour L*). The Live tab always shows
 both tanks. *Files* exports one raw CSV per tank.
 

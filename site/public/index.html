@@ -34,8 +34,6 @@
     --radius: 12px; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     /* The header live indicator: the header is dark in both themes, so one set. */
     --live-fill: #72b4ec; --live-pre: #ffb54d; --live-full: #5ec98a; --live-drain: #7fe0d6;
-    /* The header's tank switch: the role colours on the dark header (A pumps out, B pours in). */
-    --hdr-out: #ffb54d; --hdr-in: #72b4ec;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -63,7 +61,7 @@
   html { -webkit-text-size-adjust: 100%; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   /* One slim line: the tank (or the tank switch), then the status in small text. */
-  header { background: var(--hdr); color: #fff; padding: 0.35rem 0.8rem; position: sticky; top: 0; z-index: 5; display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; min-height: 2.6rem; }
+  header { background: var(--hdr); color: #fff; padding: 0.35rem 0.8rem; position: relative; display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; min-height: 2.6rem; }
   header h1 { font-size: 1rem; margin: 0; font-weight: 650; flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   header .hdr-status { margin-left: auto; font-size: 0.78rem; color: rgba(255, 255, 255, 0.8); white-space: nowrap; font-variant-numeric: tabular-nums; }
   header .hdr-status span + span:not(:empty)::before { content: " · "; }
@@ -102,6 +100,43 @@
     header .live.l-pre { animation: none; }
     header .live-bar { transition: none; }
   }
+  /* The frozen stack: the header, the tab labels and the tank tiles.  The
+     tiles are the third row, on every tab.  The chosen tank keeps the thick
+     line under it in its role colour (amber A, blue B).  The arrow has a
+     wave for the liquid surface; it bobs while the live can state moves
+     that tank's water. */
+  .chrome { position: sticky; top: 0; z-index: 5; background: var(--bg); }
+  .chrome-in { max-width: 760px; margin: 0 auto; padding: 0 0.8rem; }
+  .tiles { display: flex; gap: 0.35rem; padding: 0.3rem 0 0.45rem; border-bottom: 1px solid var(--line); box-shadow: 0 3px 8px var(--shadow); }
+  .tiles.hidden { display: none; }
+  .tile { flex: 1 1 0; min-width: 0; background: var(--card); border: 1px solid var(--line); border-bottom: 3px solid transparent; border-radius: 8px; padding: 0.2rem 0.4rem 0.15rem; color: var(--ink); text-align: left; font: inherit; font-weight: 400; min-height: 0; }
+  button.tile { cursor: pointer; }
+  .tile.out { --role: var(--warn); }
+  .tile.in { --role: var(--info); }
+  .tile.sel { border-bottom-color: var(--role); }
+  .tile .top { display: flex; align-items: center; gap: 0.25rem; min-height: 1.1rem; }
+  .tile .nm { font-size: 0.7rem; font-weight: 600; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile.sel .nm { color: var(--ink); font-weight: 800; }
+  .tile .prog { margin-left: auto; font: 600 0.66rem var(--mono); color: var(--muted); white-space: nowrap; }
+  .tile .line { display: flex; align-items: center; gap: 0.3rem; margin-top: 0.05rem; }
+  .tile .num { font: 0.78rem var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tile .cur { font-weight: 700; }
+  .tile .pred { color: var(--muted); }
+  .tile .pred.words { font-family: inherit; font-size: 0.68rem; }
+  .tile .trk { flex: 1 1 0.8rem; min-width: 0.6rem; height: 2px; background: var(--line); border-radius: 2px; overflow: hidden; }
+  .tile .trk i { display: block; height: 100%; background: var(--role); border-radius: 2px; }
+  .tile .trk.plain { background: none; border-top: 1px dashed var(--line); height: 0; }
+  .tile .arw-wrap { display: inline-flex; flex: 0 0 auto; line-height: 0; }
+  .tile .arw { width: 0.85rem; height: 1.05rem; overflow: visible; }
+  .tile .arw .shaft { fill: none; stroke: var(--role); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .tile .arw .wave { fill: none; stroke: var(--role); stroke-width: 1.5; stroke-linecap: round; }
+  @keyframes tile-bob-up { 50% { transform: translateY(-2px); } }
+  @keyframes tile-bob-down { 50% { transform: translateY(2px); } }
+  .tiles[data-live-out="down"] .tile[data-tank="out"] .arw-wrap,
+  .tiles[data-live-one="down"] .tile[data-tank="one"] .arw-wrap { animation: tile-bob-down 1.1s ease-in-out infinite; }
+  .tiles[data-live-in="up"] .tile[data-tank="in"] .arw-wrap,
+  .tiles[data-live-one="up"] .tile[data-tank="one"] .arw-wrap { animation: tile-bob-up 1.1s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce) { .tiles .arw-wrap { animation: none !important; } }
   .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
   main { max-width: 760px; margin: 0 auto; padding: 0.8rem; display: grid; gap: 0.8rem; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.9rem; }
@@ -265,17 +300,6 @@
   .big-num { font-family: var(--mono); font-size: 1.5rem; font-weight: 650; }
   .kv dt.hd { grid-column: 1 / -1; color: var(--ink); font-weight: 700; padding-top: 0.35rem; }
   .tag.t-current { background: var(--todo-bg); color: var(--muted); }
-  header .seg { margin: 0; border-color: rgba(255, 255, 255, 0.6); }
-  header .seg button { min-height: 2rem; padding: 0.1rem 0.7rem; font-size: 0.88rem; font-weight: 600; }
-  header .seg button + button { border-left-color: rgba(255, 255, 255, 0.6); }
-  /* The tank switch: no boxes.  The chosen tank is bold white with a thick
-     line under it in its role colour (amber A, blue B, as on the dip card);
-     the other is dim.  A filled button took the header colour and looked off. */
-  #hdr-tank { display: flex; gap: 0.2rem; border: 0; border-radius: 0; overflow: visible; }
-  #hdr-tank button { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: transparent; color: rgba(255, 255, 255, 0.5); padding: 0.1rem 0.45rem; }
-  #hdr-tank button[aria-pressed=true] { color: #fff; font-weight: 800; }
-  #hdr-tank #hdr-tank-a[aria-pressed=true] { border-bottom-color: var(--hdr-out); }
-  #hdr-tank #hdr-tank-b[aria-pressed=true] { border-bottom-color: var(--hdr-in); }
   details summary { cursor: pointer; color: var(--muted); }
   .tankicon .frame { stroke: var(--mark); }
   .tankicon .w-out { fill: var(--warn); }
@@ -302,6 +326,7 @@
     header { flex-wrap: nowrap; gap: 0.5rem; }
     header .seg { flex: 0 0 auto; }
     header .hdr-status { flex: 1 1 0; min-width: 0; white-space: normal; text-align: right; line-height: 1.2; font-size: 0.72rem; }
+    .chrome-in { padding-left: max(0.5rem, env(safe-area-inset-left)); padding-right: max(0.5rem, env(safe-area-inset-right)); }
     main { padding-top: 0.5rem; padding-left: max(0.5rem, env(safe-area-inset-left)); padding-right: max(0.5rem, env(safe-area-inset-right)); gap: 0.6rem; }
     .card { padding: 0.75rem; }
     #live > .card, #live > .verdict, #live > .row, #settings > .card { margin-top: 0.6rem !important; }
@@ -324,19 +349,15 @@
 </style>
 </head>
 <body>
+<div class="chrome">
 <header>
   <span class="live hidden" id="hdr-live" role="img"><svg viewBox="0 0 16 20" aria-hidden="true"><rect class="can-liq" id="hdr-can-liq" x="3" y="17" width="10" height="0" rx="1"/><rect class="can-frame" x="1.5" y="2.5" width="13" height="16" rx="2"/><path class="can-tick hidden" id="hdr-can-tick" d="M4.6 10.6l2.4 2.4 4.5-5"/></svg></span>
   <h1 id="hdr-title" translate="no">calib site</h1>
-  <span class="sr-only" id="hdr-tank-label">Current tank</span>
-  <nav class="seg hidden" id="hdr-tank" aria-labelledby="hdr-tank-label">
-    <button id="hdr-tank-a" data-tank="out" aria-pressed="true">tank A</button>
-    <button id="hdr-tank-b" data-tank="in" aria-pressed="false">tank B</button>
-  </nav>
   <span class="hdr-status"><span id="hdr-phase"></span><span id="hdr-count"></span><span id="hdr-cloud"></span></span>
   <button class="hdr-mode hidden" id="hdr-mode" aria-pressed="false" aria-label="Simple mode" title="Verbose: all the text. Tap for simple.">Aa</button>
   <i class="live-bar" id="hdr-bar" aria-hidden="true"></i>
 </header>
-<main id="main">
+<div class="chrome-in">
   <nav class="tabs" id="tabs">
     <button data-tab="live" aria-pressed="true">Live</button>
     <button data-tab="log" aria-pressed="false">Log &amp; charts</button>
@@ -346,6 +367,10 @@
     <button data-tab="replay" aria-pressed="false">Replay</button>
     <button data-tab="help" aria-pressed="false">How it works</button>
   </nav>
+  <div class="tiles hidden" id="tiles" role="group" aria-label="Tanks"></div>
+</div>
+</div>
+<main id="main">
 
   <!-- ===================================================== setup -->
   <section id="setup" class="card hidden">
@@ -570,10 +595,6 @@
 
   <!-- ===================================================== log -->
   <section id="log" class="card hidden">
-    <nav class="seg hidden" id="log-tank" aria-label="Tank for the log and charts">
-      <button id="log-tank-a" data-tank="out" aria-pressed="true">tank A</button>
-      <button id="log-tank-b" data-tank="in" aria-pressed="false">tank B</button>
-    </nav>
     <nav class="seg" id="chart-pick" aria-label="Chart">
       <button data-chart="miss" aria-pressed="true">Miss</button>
       <button data-chart="slope" aria-pressed="false">Slope</button>
@@ -933,6 +954,20 @@
     "Simple mode": "Chế độ gọn",
     "Verbose: all the text. Tap for simple.": "Chi tiết: mọi dòng chữ. Chạm để chuyển sang Gọn.",
     "Simple: the actions and the numbers only. Tap for verbose.": "Gọn: chỉ các thao tác và con số. Chạm để chuyển sang Chi tiết.",
+    // The tank tiles (the third frozen row)
+    "Tanks": "Các bồn",
+    "pour to predict": "đổ để dự đoán",
+    "no prediction ({why})": "không có dự đoán ({why})",
+    "no level": "chưa có mức",
+    "the plan is complete": "kế hoạch mẻ đã xong",
+    "the drain runs the tank dry": "lần bơm ra làm cạn bồn",
+    "the pour reaches the neck": "lần đổ chạm cổ bồn",
+    "{0} mm now": "{0} mm hiện tại",
+    "{0} mm after the batch": "{0} mm sau mẻ",
+    "{0} of {1} cans": "{0} trên {1} bình",
+    "{name} · {0} mm now · {1} mm after the batch": "{name} · {0} mm hiện tại · {1} mm sau mẻ",
+    "{name} · {0} mm now · pour to predict": "{name} · {0} mm hiện tại · đổ để dự đoán",
+    "{name} · no prediction ({why})": "{name} · không có dự đoán ({why})",
     // A done time past midnight (the time to half and to the brim)
     "tomorrow {0}": "ngày mai {0}",
     "{0} (+{1} days)": "{0} (+{1} ngày)",
@@ -2931,6 +2966,95 @@
     return this._planList(planState(this.cfg.plan, this._planHist(), room.R, true));
   };
 
+  /** The cans one plan group takes: its size in the plan's can sizes. */
+  function planGroupCans(cfg, size) {
+    const mix = size > 0 ? canMix(size, planSizes(cfg)) : null;
+    return mix ? mix.reduce((a, c) => a + c.count, 0) : null;
+  }
+
+  /**
+   * One tank tile: the last accepted level, the predicted level at the end of
+   * the current batch, the track fraction, the can tally and a reason when
+   * there is no prediction.  The page draws it; the rules stay here.
+   *   role: "in" (a fill) or "out" (a drain)
+   *   dir:  "up" or "down"
+   *   why:  "first", "neck", "overflow", "plan-complete", "no-cans",
+   *         "dry", "brim" — null when a prediction exists
+   */
+  function tileOne(sess, role, dir, target, frac, total, done) {
+    const gi = sess.lastGood();
+    const G = gi >= 0 ? sess.levels[gi] : null;
+    const cur = sess.current();
+    const pend = cur && cur.state === "pending" && !cur.start ? cur : null;
+    const base = {
+      name: sess.cfg.tank, role, dir, from: null, to: null, frac: null,
+      cans: { done: done == null ? sess.cans() : done, total: total == null ? null : total },
+      why: null,
+    };
+    if (!G || G.H == null) return Object.assign(base, { why: "first" });
+    // The last decided reading can be the overflow row: vent-column height,
+    // not a shell level, so lastGood() skips it.  It is still the level the
+    // operator dipped, and the tile shows it with no prediction.
+    if (cur && cur.state === "overflow" && cur.H != null) {
+      // No batch is in progress at the brim row: no tally either.
+      return Object.assign(base, { from: cur.H, why: "overflow", cans: { done: base.cans.done, total: null } });
+    }
+    base.from = G.H;
+    // The batch is done and the dip waits: the prediction is the expected
+    // dip, and the track is full.  The tally is the cans tapped over the
+    // cans of that batch: the pending level's own plan group, not the next
+    // batch the plan proposes now.
+    if (pend) {
+      const tapped = pend.cans ? pend.cans.tapped : 0;
+      const own = pend.plan && pend.plan.group != null ? planGroupCans(sess.cfg, pend.plan.size) : null;
+      base.cans = { done: tapped, total: own != null ? own : tapped };
+      base.frac = 1;
+      const e = sess.expectPending();
+      if (!e) return Object.assign(base, { why: "no-anchor" });
+      if (e.why) return Object.assign(base, { why: whyCode(e.why) });
+      return Object.assign(base, { to: e.pr.H });
+    }
+    if (G.neck) return Object.assign(base, { why: "neck" });
+    if (!(target > 0)) return Object.assign(base, { why: sess.cfg.plan ? "plan-complete" : "no-cans" });
+    const pr = sess.preview(base.from, target, G.n);
+    if (sess.cfg.dir > 0 && pr.overflow) return Object.assign(base, { why: "brim" });
+    if (sess.cfg.dir < 0 && pr.empty) return Object.assign(base, { why: "dry" });
+    return Object.assign(base, { to: pr.H, frac });
+  }
+
+  /** The reason code for a pending level's "no prediction" text. */
+  function whyCode(why) {
+    return {
+      "the first level": "first",
+      "an unknown pour": "unknown",
+      "an overflow reading": "overflow",
+      "a level in the neck": "neck",
+      "no anchor level": "no-anchor",
+      "the pour reaches the neck": "brim",
+      "the drain runs the tank dry": "dry",
+    }[why] || "no-anchor";
+  }
+
+  /** The tile of a single tank. */
+  Session.prototype.tileView = function () {
+    const plan = this.planNow();
+    const pb = plan && plan.batch ? plan.batch : null;
+    const tapped = this.batchVolume();
+    // The prediction is the end of the plan's batch; if the pour is already
+    // past it, the end of the pour is the batch.
+    const target = pb ? Math.max(pb.size, tapped) : tapped;
+    const frac = pb && pb.size > 0 ? Math.min(1, tapped / pb.size) : null;
+    const gi = this.lastGood();
+    const G = gi >= 0 ? this.levels[gi] : null;
+    let total = pb ? pb.cans : null;
+    if (total == null && !(this.cfg.plan && !pb) && G && G.H != null && !G.neck) {
+      const a = this.advice(G.H);
+      total = a && a.units ? a.units : null;
+    }
+    return tileOne(this, this.cfg.dir > 0 ? "in" : "out", this.cfg.dir > 0 ? "up" : "down",
+      target, frac, total, this.cans());
+  };
+
   // ---- batch: several cans, then one dip (§3.10).  One tap per can, so the
   // count is a record made can by can, not a number remembered at the dip.
   Session.prototype.cans = function () { return this.batch ? this.batch.cans.length : 0; };
@@ -4336,6 +4460,26 @@
     };
   };
 
+  /** The two tiles of a transfer: one shared batch, one level per tank. */
+  TransferSession.prototype.tiles = function () {
+    const plan = this.planNow();
+    const pb = plan && plan.batch ? plan.batch : null;
+    const tapped = this.out.batchVolume();
+    const target = pb ? Math.max(pb.size, tapped) : tapped;
+    const frac = pb && pb.size > 0 ? Math.min(1, tapped / pb.size) : null;
+    const done = this.out.cans();
+    let total = pb ? pb.cans : null;
+    if (total == null && !(this.out.cfg.plan && !pb)) {
+      const adv = this.adviceBatch();
+      total = adv && adv.units ? adv.units : null;
+    }
+    return {
+      out: tileOne(this.out, "out", "down", target, frac, total, done),
+      in: tileOne(this.in, "in", "up", target, frac, total, done),
+      frac, cans: { done, total },
+    };
+  };
+
   /** One transfer tag per level; a recompute replaces it. */
   function setTransferTag(L, text) {
     if (!L.tags) L.tags = [];
@@ -5281,7 +5425,7 @@
   let swipe = null;
   function swipeBlocked(t) {
     for (let e = t; e && e !== document.body; e = e.parentElement) {
-      if (e.id === "tabs" || e.id === "chart" || e.id === "hdr-tank" || e.id === "log-tank") return true;
+      if (e.id === "tabs" || e.id === "chart") return true;
       const n = e.tagName;
       if (n === "INPUT" || n === "TEXTAREA" || n === "SELECT") return true;
       if (e.scrollWidth > e.clientWidth + 1 && window.getComputedStyle) {
@@ -5373,16 +5517,10 @@
     settle(sec, ms);
   }, { passive: true });
   $("main").addEventListener("touchcancel", () => { springBack(swipe); swipe = null; }, { passive: true });
-  $("hdr-tank").addEventListener("click", (ev) => {
+  $("tiles").addEventListener("click", (ev) => {
     const b = ev.target.closest("button[data-tank]");
     if (!b || !isTransfer()) return;
-    S.active = b.dataset.tank; editRow = null; keepLocal(); render();   // a view: not a cloud change
-  });
-  // The same switch inside Log & charts: the table and the chart are that
-  // tank's own, so the operator never has to leave the tab to change them.
-  $("log-tank").addEventListener("click", (ev) => {
-    const b = ev.target.closest("button[data-tank]");
-    if (!b || !isTransfer()) return;
+    if (tab === "replay" || tab === "help") return;
     S.active = b.dataset.tank; editRow = null; keepLocal(); render();   // a view: not a cloud change
   });
 
@@ -5900,7 +6038,6 @@
     const has = !!S;
     $("p-neck-wrap").classList.toggle("hidden", !isTransfer());
     $("f-csv-b").classList.toggle("hidden", !isTransfer());
-    $("log-tank").classList.toggle("hidden", !isTransfer());
     $("f-csv").textContent = isTransfer() ? `Download ${S.out.cfg.tank}_raw.csv (tank A)` : "Download raw CSV";
     $("f-show").textContent = isTransfer() ? `Show ${S.cfg.tank} CSV` : "Show CSV";
     $("setup").classList.toggle("hidden", has || tab !== "live");
@@ -5916,39 +6053,96 @@
     renderSettings();
     $("hdr-mode").classList.toggle("hidden", !has);
     renderMode();   // the header switch shows on every tab
-    if (!has) { $("hdr-phase").textContent = ""; $("hdr-count").textContent = ""; $("hdr-title").textContent = "calib site"; $("hdr-title").classList.remove("hidden"); $("hdr-tank").classList.add("hidden"); return; }
+    if (!has) {
+      $("hdr-phase").textContent = ""; $("hdr-count").textContent = "";
+      $("hdr-title").textContent = "calib site";
+      $("tiles").classList.add("hidden"); $("tiles").innerHTML = "";
+      return;
+    }
     const st = S.status();
-    // One slim line.  A transfer shows the tank switch in place of the
-    // title: its two buttons already name both tanks.  The status is short:
-    // the phase, the direction of a drain, the levels, and extra dips only
-    // when there are some.
-    const showTank = isTransfer() && tab !== "replay" && tab !== "help";
+    // One slim line: the tank (or both tanks), then the short status.  The
+    // tank tiles below carry the roles and the levels.
     $("hdr-title").textContent = isTransfer() ? `${S.out.cfg.tank} → ${S.in.cfg.tank}` : S.cfg.tank;
-    $("hdr-title").classList.toggle("hidden", showTank);
     $("hdr-phase").textContent = (st.learning ? `learning ${st.intervals}/${S.cfg.learnN}` : "checking")
       + (isDrain() && !isTransfer() ? " · drain" : "");
     $("hdr-count").textContent = `${S.levels.length} level${S.levels.length === 1 ? "" : "s"}`
       + (st.redips ? ` · ${st.redips} extra dip${st.redips === 1 ? "" : "s"}` : "");
-    // The switch names the tanks; the arrow gives the role, as on the dip
-    // card (↑ pump out, ↓ pour in), and the full role is in the tooltip and
-    // the accessible name.  It hides on the tabs it cannot change.
-    $("hdr-tank-label").textContent = "Current tank";
-    $("hdr-tank").classList.toggle("hidden", !showTank);
-    if (isTransfer()) {
-      $("hdr-tank-a").textContent = `↑ ${S.out.cfg.tank}`;
-      $("hdr-tank-b").textContent = `↓ ${S.in.cfg.tank}`;
-      $("hdr-tank-a").setAttribute("title", `${S.out.cfg.tank} · pump out`);
-      $("hdr-tank-b").setAttribute("title", `${S.in.cfg.tank} · pour in`);
-      $("hdr-tank-a").setAttribute("aria-label", `${S.out.cfg.tank}, pump out`);
-      $("hdr-tank-b").setAttribute("aria-label", `${S.in.cfg.tank}, pour in`);
-      $("hdr-tank-a").setAttribute("aria-pressed", String(S.active === "out"));
-      $("hdr-tank-b").setAttribute("aria-pressed", String(S.active === "in"));
-      $("log-tank-a").textContent = `${S.out.cfg.tank} · pump out`;
-      $("log-tank-b").textContent = `${S.in.cfg.tank} · pour in`;
-      $("log-tank-a").setAttribute("aria-pressed", String(S.active === "out"));
-      $("log-tank-b").setAttribute("aria-pressed", String(S.active === "in"));
-    }
     renderLive(st); renderLog(); renderShell(st);
+    renderTiles();
+  }
+
+  // ------------------------------------------------------------ tank tiles
+  // The third frozen row: one tile per tank.  The left number is the last
+  // accepted dip; the right the prediction at the end of the current batch.
+  // The track fills with the tapped litres over the plan's batch; without a
+  // plan it is a plain connector and the right number follows the tapped
+  // cans.  The chosen tank keeps the thick line in its role colour.
+  const TILE_WHY = {
+    first: "the first level",
+    neck: "in the neck",
+    overflow: "an overflow reading",
+    unknown: "an unknown pour",
+    "no-anchor": "no anchor level",
+    "plan-complete": "the plan is complete",
+    dry: "the drain runs the tank dry",
+    brim: "the pour reaches the neck",
+  };
+
+  function tileHtml(v, tank, selected, readOnly) {
+    const tag = isTransfer() && !readOnly ? "button" : "div";
+    const attrs = tag === "button"
+      ? ` type="button" data-tank="${tank}" aria-pressed="${selected}"`
+      : ` data-tank="${tank}"`;
+    const prog = v.cans && v.cans.total != null ? `${v.cans.done}/${v.cans.total}`
+      : v.cans && v.cans.done ? String(v.cans.done) : "";
+    const cur = v.from == null ? "—" : f(v.from);
+    const why = v.why ? TILE_WHY[v.why] || "" : "";
+    let pred = "—", predCls = "num pred";
+    if (v.why === "no-cans") { pred = "pour to predict"; predCls = "num pred words"; }
+    else if (v.to != null) pred = f(v.to);
+    const now = v.from == null ? "no level" : `${f(v.from)} mm now`;
+    const after = v.to != null ? `${f(v.to)} mm after the batch`
+      : v.why === "no-cans" ? "pour to predict" : `no prediction (${why})`;
+    const cansText = v.cans && v.cans.total != null ? `${v.cans.done} of ${v.cans.total} cans` : "";
+    const label = `${v.name} · ${now} · ${after}${cansText ? ` · ${cansText}` : ""}`;
+    const dir = v.dir;
+    const d = dir === "up" ? "M10 16 V5 M5.5 9.5 L10 5 L14.5 9.5" : "M10 4 V15 M5.5 10.5 L10 15 L14.5 10.5";
+    const arrow = `<span class="arw-wrap"><svg class="arw ${dir}" viewBox="0 0 20 24" aria-hidden="true"><g class="bob"><path class="shaft" d="${d}"/></g><path class="wave" d="M1 20 q3 -2.4 6 0 t6 0 t6 0"/></svg></span>`;
+    const track = v.frac == null ? `<span class="trk plain"></span>`
+      : `<span class="trk"><i style="width:${(100 * v.frac).toFixed(1)}%"></i></span>`;
+    return `<${tag} class="tile ${v.role}${selected ? " sel" : ""}"${attrs} data-dir="${dir}" aria-label="${esc(label)}" title="${esc(label)}">`
+      + `<span class="top">${arrow}<span class="nm">${esc(v.name)}</span><span class="prog">${prog}</span></span>`
+      + `<span class="line"><span class="num cur">${cur}</span>${track}<span class="${predCls}">${esc(pred)}</span></span>`
+      + `</${tag}>`;
+  }
+
+  function renderTiles() {
+    const box = $("tiles");
+    if (!S) { box.classList.add("hidden"); box.innerHTML = ""; return; }
+    box.classList.remove("hidden");
+    const readOnly = tab === "replay" || tab === "help";
+    if (isTransfer()) {
+      const t = S.tiles();
+      box.innerHTML = tileHtml(t.out, "out", S.active === "out", readOnly)
+        + tileHtml(t.in, "in", S.active === "in", readOnly);
+    } else {
+      box.innerHTML = tileHtml(S.tileView(), "one", true, true);
+    }
+    tileLive(liveState(Date.now()));
+  }
+
+  /** The arrow bobs only while the live can state moves that tank's water. */
+  function tileLive(ls) {
+    const box = $("tiles");
+    box.dataset.liveOut = ""; box.dataset.liveIn = ""; box.dataset.liveOne = "";
+    if (!ls) return;
+    const pump = ls.state === "fill" || ls.state === "pre" || ls.state === "full";
+    if (isTransfer()) {
+      if (pump) box.dataset.liveOut = "down";
+      else if (ls.state === "drain") box.dataset.liveIn = "up";
+    } else if (isDrain()) {
+      if (pump) box.dataset.liveOne = "down";
+    } else if (ls.state === "drain") box.dataset.liveOne = "up";
   }
 
   // ------------------------------------------------------------ simple mode
@@ -6668,7 +6862,7 @@
       $("set-floor").value = n.suctionFloor == null ? "" : String(n.suctionFloor);
     }
     if (has) {
-      $("set-campaign-title").textContent = isTransfer() ? `This tank — ${S.cfg.tank} (switch in the header)` : "This campaign";
+      $("set-campaign-title").textContent = isTransfer() ? `This tank — ${S.cfg.tank}` : "This campaign";
       if (isTransfer()) {
         const L0 = S.out.levels[0];
         $("set-dir").textContent = `Direction: transfer — tank A pumps out, tank B pours in. Fixed at the start.`
@@ -7078,6 +7272,7 @@
       const label = ls ? LIVE_TEXT[ls.state].replace("{0}", f(ls.size, 0)) : "";
       dot.setAttribute("aria-label", label);
       dot.setAttribute("title", label);
+      tileLive(ls);
     }
     bar.style.width = ls ? `${100 * ls.frac}%` : "0";
     // The can: the liquid stands 14 units tall when full, on the can's floor.
@@ -7361,7 +7556,7 @@
 
   function renderLog() {
     if (tab !== "log") return;
-    $("log-title").textContent = isTransfer() ? `Levels — ${S.cfg.tank}` : "Levels";
+    $("log-title").textContent = "Levels";
     let h = `<tr><th>row</th><th>${isDrain() ? "drained L" : "pour L"}</th><th>readings</th><th class=l>time</th>`
       + "<th>adopted</th><th>pred</th><th>±2σ</th><th>e mm</th><th>resid L</th><th>z</th><th class=l>state</th><th class=l>note</th></tr>";
     for (const L of S.levels) {
@@ -7567,7 +7762,7 @@
     for (const b of $("chart-pick").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.chart === which));
     paintColors();
     const c = CHARTS[which];
-    $("chart-title").textContent = isTransfer() ? `${S.cfg.tank} — ${c.title}` : c.title;
+    $("chart-title").textContent = c.title;
     $("chart-note").textContent = (isDrain() && c.noteDrain) || c.note;
     const svg = c.draw();
     $("chart").innerHTML = svg;
@@ -7672,7 +7867,7 @@
     if (tab !== "shell") return;
     const p = st.fit.p, sd = st.fit.sd, pr = S.cfg.prior;
     const rows = isTransfer()
-      ? [["tank", `${S.cfg.tank} (${isDrain() ? "pump out" : "pour in"}) — switch in the header`]] : [];
+      ? [["tank", `${S.cfg.tank} · ${isDrain() ? "pump out" : "pour in"}`]] : [];
     $("shell-kv").innerHTML = rows.concat([
       ["r", `${f(p.r)} ± ${f(2 * sd.r)} mm (prior ${f(pr.r, 0)} ± ${f(2 * pr.sr, 0)})`],
       ["L", `${f(p.L)} ± ${f(2 * sd.L)} mm (prior ${f(pr.L, 0)} ± ${f(2 * pr.sL, 0)})`],

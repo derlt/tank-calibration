@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- On-site page: the **tank tiles**, a third frozen row under the header and
+  the tab labels, on every tab. One thin tile per tank: the role arrow with a
+  wave for the liquid surface, the tank name, the can tally (`3/8`), the last
+  accepted dip, a track that fills with the tapped litres, and the predicted
+  dip at the end of the current batch. The chosen tile keeps the thick line
+  in its role colour and chooses the tank for the other tabs. Without a batch
+  plan the prediction follows the tapped cans; after *Batch done* it is the
+  expected dip. The arrow bobs while the live can state moves that tank's
+  water.
 - On-site page: the time trend of the cans. With the fill timer running,
   *Start fill timer* to *+1 can* measures a can's fill time and *+1 can* to
   the next start its drain time; the trend is a weighted mean in which the
@@ -58,6 +67,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- On-site page: the header, the tab labels and the tank tiles are one frozen
+  stack. The header tank switch and the Log & charts tank switch are gone:
+  the tiles choose the tank. The chart and Levels titles carry no tank name.
 - Pour card: the batch tally is quantized. One cell per can of the batch
   replaces the continuous fill bar, so the count reads as cans done over
   cans planned (`3 / 5 cans · 600 L`). The cell width is the can size, so a

@@ -606,7 +606,7 @@ class TestPage(unittest.TestCase):
             "a('d-val').value = '1800'; a('d-val-b').value = '400'; a('d-go-a').click(); a('d-go-b').click();\n"
             "a('c-sync').click(); await settled(s1);\n"
             "const rev = link(s1).rev;\n"
-            "a('hdr-tank')._listeners.click[0]({ target: { closest: () => ({ dataset: { tank: 'in' } }) } });\n"
+            "a('tiles')._listeners.click[0]({ target: { closest: () => ({ dataset: { tank: 'in' } }) } });\n"
             "out.active = JSON.parse(s1.get('calib-site:active')).active;\n"
             "out.same = link(s1).rev === rev;\n"
         )

@@ -121,13 +121,14 @@ adopted shell, so the tool cannot drift from the fit.
 | Offline page | `site/page.html` + core + `site/i18n.js` → `calib site-page` → `site/calib_site.html` |
 | Page language | `site/i18n.js`: English and Vietnamese, chosen in Settings; the exported files stay English; `tests/test_i18n.py` checks a key for every text |
 | Header live indicator | `site/page.html` `liveState` / `tickLive`: fill, close-valve, full (fill timer) and drain (drain time after the last tap); `tests/test_site.py` |
+| Tank tiles | `site/page.html` `renderTiles` / `tileHtml` / `tileLive`, `site_core.js` `Session.tileView` / `TransferSession.tiles`: the third frozen row, the last dip and the batch-end prediction, the plan/tapped rule, the wave arrow and its live animation; `tests/test_site.py::TestSiteTiles` |
 | iPhone timer (Shortcuts) | `site/page.html` `isIOS` / `iosTimerUrl` / `iosTimer`, started by *Start fill timer*; device prefs `iosTimer`, `iosShortcut`; `tests/test_site.py` |
 | Swipe between tabs | `site/page.html` touch handlers on `main`, `goTab`; `tests/test_site.py` |
 | Settings tab | `site/page.html`; `Session.setCampaign` refits the running shell after a change of the tank record, the priors or the noise |
 | Batch plan (§3.4, §3.10) | `checkPlan`, `canMix` (fewest, then largest cans), `planState` (the end of the plan counted again past the mid-dip) in `site_core.js`; `Session.planNow`, the plan group on each level (`L.plan`), the plan's batch as the advice target, `fillPlan` over the plan's batches; the page's setup rows and the pour card's group tally. Tests: `tests/test_site.py::TestSitePlan` |
 | Time trend of the cans | `Session.timeTrend` / `timerSuggestion` in `site_core.js`: fill from the fill-timer starts, drain from *+1 can* to the next start, recency-weighted (a can 3 back weighs half; each held to ⅓–3× the median); the time estimate follows the trend, the typed times count where no can was timed; *Use the trend* adopts it for the timers; the fill alarm keeps the typed time. Tests: `tests/test_site.py::TestSiteTimeTrend` |
 | Suction floor (drain) | `cfg.suctionFloor` (a tape reading, 65 mm default, Settings → Noise and limits): `floorVolume`; the drain's room, plan room, advice watch and time-to-the-suction-floor all end there. Tests: `tests/test_site.py::TestSiteTimeTrend` |
-| Transfer, two tanks (§3.12) | `TransferSession` in `site_core.js` + the page's transfer mode: shared tally, one dip field and button per tank (`dipBoth`), tinted field cards with tank pictograms and a same-batch header, per-tank verdicts, the pair view after both dips, per-tank raw files, a Current tank switch in the header (`↑ alpha`, `↓ beta`) and in Log & charts |
+| Transfer, two tanks (§3.12) | `TransferSession` in `site_core.js` + the page's transfer mode: shared tally, one dip field and button per tank (`dipBoth`), tinted field cards with tank pictograms and a same-batch header, per-tank verdicts, the pair view after both dips, per-tank raw files, the frozen tank tiles as the tank switch (`↑ alpha`, `↓ beta`) |
 
 ## §11 Deliverables
 

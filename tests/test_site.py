@@ -1617,10 +1617,9 @@ console.log(JSON.stringify(out));
             "el('s-dip').value = '1800'; el('sB-dip').value = '400'; el('s-unit').value = '200';\n"
             "el('s-go').click();\n"
             "out.hdr = {title: el('hdr-title').textContent, phase: el('hdr-phase').textContent,"
-            " seg: !el('hdr-tank')._classes.has('hidden'), a: el('hdr-tank-a').textContent,"
-            " b: el('hdr-tank-b').textContent, label: el('hdr-tank-label').textContent,"
-            " titleHidden: el('hdr-title')._classes.has('hidden'), tipA: el('hdr-tank-a').title,"
-            " nameA: el('hdr-tank-a')['aria-label'], count: el('hdr-count').textContent, now: el('now-kv').innerHTML};\n"
+            " tiles: el('tiles').innerHTML, tilesHidden: el('tiles')._classes.has('hidden'),"
+            " titleHidden: el('hdr-title')._classes.has('hidden'),"
+            " count: el('hdr-count').textContent, now: el('now-kv').innerHTML};\n"
             "out.dipA = {a: el('dip-label').textContent, b: el('dip-label-b').textContent,"
             " row: !el('dip-row-b')._classes.has('hidden'),"
             " two: el('dip-card')._classes.has('two'), one: !el('d-go')._classes.has('hidden'),"
@@ -1665,8 +1664,8 @@ console.log(JSON.stringify(out));
             "// Files: one raw file per tank.\n"
             "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'files' } }) } });\n"
             "out.files = {a: el('f-csv').textContent, b: !el('f-csv-b')._classes.has('hidden')};\n"
-            "// The header switch turns the log, the shell and the settings to tank B.\n"
-            "el('hdr-tank')._listeners.click[0]({ target: { closest: () => ({ dataset: { tank: 'in' } }) } });\n"
+            "// The tank tiles turn the log, the shell and the settings to tank B.\n"
+            "el('tiles')._listeners.click[0]({ target: { closest: () => ({ dataset: { tank: 'in' } }) } });\n"
             "// The A button still exports tank A's file with B active.\n"
             "el('f-csv').click(); el('f-csv-b').click();\n"
             "out.export = {a: p.downloads[p.downloads.length - 2].download,"
@@ -1674,21 +1673,22 @@ console.log(JSON.stringify(out));
             " label: el('f-csv').textContent, show: el('f-show').textContent};\n"
             "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'log' } }) } });\n"
             "out.log = {title: el('log-title').textContent, chart: el('chart-title').textContent,"
-            " seg: !el('log-tank')._classes.has('hidden'), a: el('log-tank-a').textContent,"
-            " b: el('log-tank-b').textContent, table: el('log-table').innerHTML,"
+            " tiles: el('tiles').innerHTML, table: el('log-table').innerHTML,"
             " now: el('now-kv').innerHTML};\n"
-            "// The switch in the tab turns its table and chart to tank A, and the header follows.\n"
-            "el('log-tank')._listeners.click[0]({ target: { closest: () => ({ dataset: { tank: 'out' } }) } });\n"
+            "// A tap on the tiles turns its table and chart to tank A.\n"
+            "el('tiles')._listeners.click[0]({ target: { closest: () => ({ dataset: { tank: 'out' } }) } });\n"
             "out.logA = {title: el('log-title').textContent, chart: el('chart-title').textContent,"
-            " table: el('log-table').innerHTML, hdr: el('hdr-tank-a')['aria-pressed'],"
-            " tab: el('log-tank-a')['aria-pressed']};\n"
+            " table: el('log-table').innerHTML, tiles: el('tiles').innerHTML};\n"
             "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'shell' } }) } });\n"
             "out.shell = el('shell-kv').innerHTML;\n"
             "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'settings' } }) } });\n"
             "out.settings = {title: el('set-campaign-title').textContent, dir: el('set-dir').textContent};\n"
-            "// The switch hides on a tab it cannot change.\n"
+            "// The tiles stay on Replay, read-only: a tap changes nothing.\n"
             "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'replay' } }) } });\n"
-            "out.hdrReplay = [el('hdr-tank')._classes.has('hidden'), el('hdr-title')._classes.has('hidden'), el('hdr-title').textContent];\n"
+            "const beforeReplay = el('tiles').innerHTML;\n"
+            "el('tiles')._listeners.click[0]({ target: { closest: () => ({ dataset: { tank: 'in' } }) } });\n"
+            "out.hdrReplay = [!el('tiles')._classes.has('hidden'), el('hdr-title')._classes.has('hidden'),"
+            " el('hdr-title').textContent, beforeReplay === el('tiles').innerHTML];\n"
             "console.log(JSON.stringify(out));"
         )
         self.assertTrue(got["setup"]["b"], "tank B's fields show")
@@ -1698,14 +1698,20 @@ console.log(JSON.stringify(out));
         self.assertEqual(got["setup"]["dip"], "Tank A first reading, mm")
         self.assertIn("Prime the pump", got["setup"]["first"])
         self.assertEqual(got["hdr"]["title"], "alpha → beta")
-        self.assertTrue(got["hdr"]["titleHidden"], "the switch takes the title's place: its buttons name both tanks")
+        self.assertFalse(got["hdr"]["titleHidden"], "the title stays: the tiles name both tanks")
         self.assertNotIn("transfer", got["hdr"]["phase"], "the header stays one slim line")
-        self.assertTrue(got["hdr"]["seg"])
-        self.assertEqual(got["hdr"]["a"], "↑ alpha", "the switch names the tank, the arrow gives its role")
-        self.assertEqual(got["hdr"]["b"], "↓ beta")
-        self.assertEqual(got["hdr"]["tipA"], "alpha · pump out", "the full role is in the tooltip")
-        self.assertEqual(got["hdr"]["nameA"], "alpha, pump out", "and in the accessible name")
-        self.assertEqual(got["hdr"]["label"], "Current tank", "the switch keeps its accessible label")
+        self.assertFalse(got["hdr"]["tilesHidden"], "the tiles show")
+        self.assertIn('data-tank="out"', got["hdr"]["tiles"])
+        self.assertIn('data-tank="in"', got["hdr"]["tiles"])
+        self.assertIn('aria-pressed="true"', got["hdr"]["tiles"], "tank A is the current tank")
+        self.assertIn('data-dir="down"', got["hdr"]["tiles"], "A pumps out")
+        self.assertIn('data-dir="up"', got["hdr"]["tiles"], "B pours in")
+        self.assertIn("arw down", got["hdr"]["tiles"])
+        self.assertIn("arw up", got["hdr"]["tiles"])
+        self.assertIn('class="wave"', got["hdr"]["tiles"], "the arrow has its wave")
+        self.assertIn("alpha", got["hdr"]["tiles"])
+        self.assertIn("beta", got["hdr"]["tiles"])
+        self.assertIn("no prediction (the first level)", got["hdr"]["tiles"])
         self.assertNotIn("extra dip", got["hdr"]["count"], "no extra dips yet: none shown")
         self.assertLess(got["hdr"]["now"].index("current"), got["hdr"]["now"].index("beta"),
                         "the current marker sits on tank A")
@@ -1760,20 +1766,20 @@ console.log(JSON.stringify(out));
                                          "label": "Download alpha_raw.csv (tank A)",
                                          "show": "Show beta CSV"},
                          "with tank B active, the A button still exports tank A")
-        self.assertEqual(got["log"]["title"], "Levels — beta")
-        self.assertIn("beta —", got["log"]["chart"], "the chart is tank B's own")
+        self.assertEqual(got["log"]["title"], "Levels")
+        self.assertEqual(got["log"]["chart"], "Reading minus prediction", "the chart title has no tank prefix")
         self.assertIn("pour L", got["log"]["table"], "tank B's log reads as a fill")
-        self.assertTrue(got["log"]["seg"], "the log tab has its own tank switch")
-        self.assertEqual((got["log"]["a"], got["log"]["b"]), ("alpha · pump out", "beta · pour in"))
-        self.assertEqual(got["logA"]["title"], "Levels — alpha")
-        self.assertIn("alpha —", got["logA"]["chart"])
+        self.assertIn('data-tank="in" aria-pressed="true"', got["log"]["tiles"],
+                      "the B tile is the current tank")
+        self.assertEqual(got["logA"]["title"], "Levels")
+        self.assertEqual(got["logA"]["chart"], "Reading minus prediction")
         self.assertIn("drained L", got["logA"]["table"], "tank A's table is its own drain")
-        self.assertEqual(got["logA"]["hdr"], "true", "the header switch follows the tab switch")
-        self.assertEqual(got["logA"]["tab"], "true")
+        self.assertIn('data-tank="out" aria-pressed="true"', got["logA"]["tiles"],
+                      "the A tile is the current tank")
         self.assertGreater(got["log"]["now"].index("current"), got["log"]["now"].index("beta"),
-                           "the current marker follows the switch to tank B")
-        self.assertEqual(got["hdrReplay"], [True, False, "alpha → beta"],
-                         "the switch hides on a tab it cannot change, and the title comes back")
+                           "the current marker follows the tile to tank B")
+        self.assertEqual(got["hdrReplay"], [True, False, "alpha → beta", True],
+                         "the tiles stay on Replay, read-only; the title stays")
         self.assertIn("alpha", got["shell"], "the log switch carries to the shell tab")
         self.assertIn("alpha", got["settings"]["title"])
         self.assertIn("transfer", got["settings"]["dir"])
@@ -3004,6 +3010,246 @@ class TestSitePlan(unittest.TestCase):
         self.assertEqual((cfg["canSizes"], cfg["nominal"], len(cfg["plan"])), ([200, 100], 10000, 5))
         self.assertTrue(got["plain"][0], "no plan: no plan block")
         self.assertTrue(got["plain"][1].startswith("Advice ≈"), "no plan: the 30 mm advice")
+
+
+@unittest.skipUnless(NODE, "node is not installed")
+class TestSiteTiles(unittest.TestCase):
+    @staticmethod
+    def _tile(html):
+        def one(cls):
+            m = re.search(r'class="' + cls + r'">([^<]*)<', html)
+            return m.group(1) if m else None
+        w = re.search(r"width:([0-9.]+)%", html)
+        return {
+            "cur": one("num cur"),
+            "pred": one("num pred") or one("num pred words"),
+            "prog": one("prog"),
+            "width": w.group(1) if w else None,
+            "plain": 'class="trk plain"' in html,
+        }
+
+    def test_page_tiles_plan_and_no_plan(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "const click = (act, i) => el('s-plan')._listeners.click[0]({ target: { closest: () => ({ dataset: { act, i: String(i) }, disabled: false }) } });\n"
+            "const size = (i, v) => el('s-plan')._listeners.input[0]({ target: { dataset: { i: String(i) }, value: String(v) } });\n"
+            "out.empty = [el('tiles')._classes.has('hidden'), el('hdr-title').textContent];\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1000'; el('s-L').value = '1528';\n"
+            "el('s-step').value = '?'; el('s-dip').value = '10'; el('s-unit').value = '200';\n"
+            "el('s-unit')._listeners.input[0]({});\n"
+            "el('s-nom').value = '1200'; el('s-nom')._listeners.input[0]({});\n"
+            "for (let k = 0; k < 3; k++) { el('s-plan-add').click(); size(k, 400); }\n"
+            "out.plan = el('s-plan-check').textContent;\n"
+            "el('s-go').click(); out.started = !!store.get('calib-site:active');\n"
+            "out.before = el('tiles').innerHTML;\n"
+            "el('d-val').value = '10'; el('d-go').click(); el('d-val').value = '10'; el('d-go').click();\n"
+            "out.t0 = el('tiles').innerHTML;\n"
+            "el('t-plus').click(); out.t1 = el('tiles').innerHTML;\n"
+            "el('t-plus').click(); out.t2 = el('tiles').innerHTML;\n"
+            "el('p-go').click(); out.t3 = el('tiles').innerHTML; out.expect = el('dip-expect-a').textContent;\n"
+            "el('d-val').value = '368.9'; el('d-go').click();\n"
+            "if (!el('dip-card')._classes.has('hidden')) { el('d-val').value = '368.9'; el('d-go').click(); }\n"
+            "out.t4 = el('tiles').innerHTML;\n"
+            "// No plan: the right number follows the tapped cans, and the track is a plain connector.\n"
+            "const s2 = new Map(); const p2 = stub.boot(page, corePath, s2), e2 = p2.el;\n"
+            "e2('s-tank').value = 't2'; e2('s-D').value = '1800'; e2('s-L').value = '3000';\n"
+            "e2('s-dip').value = '400'; e2('s-unit').value = '200';\n"
+            "e2('s-go').click(); e2('d-val').value = '400'; e2('d-go').click(); e2('d-val').value = '400'; e2('d-go').click();\n"
+            "out.n0 = e2('tiles').innerHTML;\n"
+            "e2('t-plus').click(); e2('t-plus').click(); out.n1 = e2('tiles').innerHTML;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["empty"], [True, "calib site"], "no campaign: no tile row")
+        self.assertEqual(got["plan"], "3 batches · 1200 L = nominal ✓ · symmetric ✓")
+        self.assertTrue(got["started"])
+        self.assertIn("no level", got["before"])
+        self.assertIn("no prediction (the first level)", got["before"])
+        t0 = self._tile(got["t0"])
+        self.assertEqual((t0["cur"], t0["pred"], t0["prog"], t0["width"]),
+                         ("10.0", "368.9", "0/2", "0.0"), "the plan batch is 2 cans of 200 L")
+        self.assertFalse(t0["plain"], "a plan draws the progress track")
+        t1 = self._tile(got["t1"])
+        self.assertEqual((t1["prog"], t1["width"], t1["pred"]), ("1/2", "50.0", "368.9"),
+                         "the prediction stays at the batch end while the track fills")
+        t2 = self._tile(got["t2"])
+        self.assertEqual((t2["prog"], t2["width"], t2["pred"]), ("2/2", "100.0", "368.9"))
+        t3 = self._tile(got["t3"])
+        self.assertEqual((t3["prog"], t3["width"], t3["pred"]), ("2/2", "100.0", "368.9"),
+                         "after Batch done the prediction is the expected dip")
+        self.assertIn("368.9", got["expect"], "the tile agrees with the dip card")
+        t4 = self._tile(got["t4"])
+        self.assertEqual((t4["cur"], t4["prog"], t4["width"]), ("368.9", "0/2", "0.0"),
+                         "the accepted dip becomes the current level; the next batch starts empty")
+        self.assertNotEqual(t4["pred"], "368.9", "the next batch predicts from the new level")
+        n0 = self._tile(got["n0"])
+        self.assertEqual((n0["cur"], n0["pred"]), ("400.0", "pour to predict"),
+                         "no plan and no can: the tile asks for a pour")
+        self.assertTrue(n0["plain"], "no plan: a plain connector")
+        n1 = self._tile(got["n1"])
+        self.assertEqual(n1["cur"], "400.0")
+        self.assertNotEqual(n1["pred"], "pour to predict", "the tapped cans give the prediction")
+        self.assertTrue(n1["plain"], "no plan: still a plain connector")
+
+    def test_page_tiles_pending_batch_keeps_its_own_group(self):
+        """The tally of a batch waiting for its dip counts that batch's cans.
+
+        A plan of 400/1000/400 L with 200 L cans is 2/5/2 cans.  The plan
+        has already moved on to the next batch while the dip waits, so the
+        tile must not take the next batch's count for the batch just poured.
+        """
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "const size = (i, v) => el('s-plan')._listeners.input[0]({ target: { dataset: { i: String(i) }, value: String(v) } });\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-step').value = '?'; el('s-dip').value = '10'; el('s-unit').value = '200';\n"
+            "el('s-unit')._listeners.input[0]({});\n"
+            "el('s-nom').value = '1800'; el('s-nom')._listeners.input[0]({});\n"
+            "[[0, 400], [1, 1000], [2, 400]].forEach(([i, v]) => { el('s-plan-add').click(); size(i, v); });\n"
+            "out.plan = el('s-plan-check').textContent;\n"
+            "el('s-go').click();\n"
+            "el('d-val').value = '10'; el('d-go').click(); el('d-val').value = '10'; el('d-go').click();\n"
+            "out.open0 = el('tiles').innerHTML;\n"
+            "el('t-plus').click(); el('t-plus').click(); out.tapped = el('tiles').innerHTML;\n"
+            "el('p-go').click(); out.pending = el('tiles').innerHTML;\n"
+            "const pred = /class=\"num pred\">([^<]*)</.exec(out.pending)[1];\n"
+            "el('d-val').value = pred; el('d-go').click();\n"
+            "if (!el('dip-card')._classes.has('hidden')) { el('d-val').value = pred; el('d-go').click(); }\n"
+            "out.next = el('tiles').innerHTML;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["plan"], "3 batches · 1800 L = nominal ✓ · symmetric ✓")
+        self.assertEqual(self._tile(got["open0"])["prog"], "0/2", "group 1 takes 2 cans of 200 L")
+        self.assertEqual(self._tile(got["tapped"])["prog"], "2/2")
+        pending = self._tile(got["pending"])
+        self.assertEqual(pending["prog"], "2/2",
+                         "the batch just poured is 2 cans, not the next batch's 5")
+        self.assertEqual(pending["width"], "100.0", "the track is full while the dip waits")
+        self.assertEqual(got["next"].count('class="num cur"'), 1)
+        nxt = self._tile(got["next"])
+        self.assertEqual(nxt["prog"], "0/5", "the next group holds 5 cans")
+
+    def test_page_tiles_transfer_own_levels(self):
+        """Each transfer tile keeps its own level and prediction, one tally."""
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "el('s-dir-transfer').click();\n"
+            "el('s-tank').value = 'alpha'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('sB-tank').value = 'beta'; el('sB-D').value = '2480'; el('sB-L').value = '5200';\n"
+            "el('s-dip').value = '1800'; el('sB-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click();\n"
+            "el('d-val').value = '1800'; el('d-val-b').value = '400'; el('d-go-a').click(); el('d-go-b').click();\n"
+            "el('d-val').value = '1800'; el('d-go-a').click(); el('d-val-b').value = '400'; el('d-go-b').click();\n"
+            "out.start = el('tiles').innerHTML.split('</button>').slice(0, 2);\n"
+            "el('t-plus').click(); el('t-plus').click(); el('p-go').click();\n"
+            "out.tiles = el('tiles').innerHTML.split('</button>').slice(0, 2);\n"
+            "console.log(JSON.stringify(out));"
+        )
+        start = [self._tile(h) for h in got["start"]]
+        self.assertEqual([t["cur"] for t in start], ["1800.0", "400.0"], "each tile shows its own first dip")
+        tiles = [self._tile(h) for h in got["tiles"]]
+        self.assertEqual([t["prog"] for t in tiles], ["2/2", "2/2"], "one shared tally")
+        self.assertIn('data-tank="out"', got["tiles"][0])
+        self.assertIn('data-tank="in"', got["tiles"][1])
+        a, b = tiles
+        self.assertEqual(a["cur"], "1800.0")
+        self.assertEqual(b["cur"], "400.0")
+        self.assertLess(float(a["pred"]), 1800.0, "A falls as it pumps out")
+        self.assertGreater(float(b["pred"]), 400.0, "B rises as it pours in")
+        self.assertNotEqual(a["pred"], b["pred"], "the same litres land differently in each shell")
+
+    def test_tile_view_overflow_and_neck(self):
+        """A brim or neck reading is shown as the level, with no prediction.
+
+        An overflow row is vent-column height, so lastGood() skips it; the
+        tile must take it from the current level instead.
+        """
+        got = _node(
+            "const s = new core.Session({D: 1800, Lest: 3000, direction: 'fill', pourUnit: 200});\n"
+            "s.start('?', 400); s.dip(400); s.dip(400);\n"
+            "const before = s.tileView();\n"
+            "s.pour('200', {overflow: true}); s.dip(500); s.dip(500);\n"
+            "const over = s.tileView();\n"
+            "const d = new core.Session({D: 2400, Lest: 5100, direction: 'drain'});\n"
+            "d.start('?', 2600, '', undefined, {at: 'neck'}); d.dip(2600); d.dip(2600);\n"
+            "d.pour('200', {neck: true}); d.dip(2500); d.dip(2500);\n"
+            "console.log(JSON.stringify({before, over, neck: d.tileView()}));"
+        )
+        self.assertEqual(got["before"]["why"], "no-cans", "the shell level stands while no can is tapped")
+        self.assertEqual((got["over"]["from"], got["over"]["to"], got["over"]["why"]),
+                         (500, None, "overflow"), "the overflow reading is the level, with no prediction")
+        self.assertIsNone(got["over"]["cans"]["total"], "no tally at the brim row")
+        self.assertEqual((got["neck"]["from"], got["neck"]["to"], got["neck"]["why"]),
+                         (2500, None, "neck"), "the neck reading is the level, with no prediction")
+
+    def test_page_tile_arrow_follows_the_live_can(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "let clock = Date.UTC(2026, 10, 16, 8, 0, 0), beats = [];\n"
+            "class FD extends Date { constructor(...a) { if (a.length) super(...a); else super(clock); } }\n"
+            "FD.now = () => clock;\n"
+            "const extra = () => ({ Date: FD, setInterval: (fn) => { beats.push(fn); return beats.length; } });\n"
+            "const out = {}, store = new Map();\n"
+            "let p = stub.boot(page, corePath, store, extra()), el = p.el;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click(); el('d-val').value = '400'; el('d-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "const s = JSON.parse(store.get('calib-site:active'));\n"
+            "s.config.fillSeconds = { '200': 60 }; s.config.drainSeconds = { '200': 30 };\n"
+            "store.set('calib-site:active', JSON.stringify(s));\n"
+            "beats = []; p = stub.boot(page, corePath, store, extra()); el = p.el;\n"
+            "const beat = () => { for (const fn of beats) fn(); };\n"
+            "const look = () => [el('tiles').dataset.liveOne, el('tiles').dataset.liveOut, el('tiles').dataset.liveIn];\n"
+            "beat(); out.idle = look();\n"
+            "el('pt-start').click(); clock += 15000; beat(); out.fill = look();\n"
+            "el('t-plus').click(); clock += 15000; beat(); out.drain = look();\n"
+            "clock += 30000; beat(); out.after = look();\n"
+            "// A transfer: A loses water while the pump fills the can, B gains it while the can empties.\n"
+            "const s2 = new Map(); let p2 = stub.boot(page, corePath, s2, extra()), e2 = p2.el;\n"
+            "e2('s-dir-transfer').click();\n"
+            "e2('s-tank').value = 'alpha'; e2('s-D').value = '1800'; e2('s-L').value = '3000';\n"
+            "e2('sB-tank').value = 'beta'; e2('sB-D').value = '2480'; e2('sB-L').value = '5200';\n"
+            "e2('s-dip').value = '1800'; e2('sB-dip').value = '400'; e2('s-unit').value = '200';\n"
+            "e2('s-go').click();\n"
+            "e2('d-val').value = '1800'; e2('d-val-b').value = '400'; e2('d-go-a').click(); e2('d-go-b').click();\n"
+            "e2('d-val').value = '1800'; e2('d-go-a').click(); e2('d-val-b').value = '400'; e2('d-go-b').click();\n"
+            "const t = JSON.parse(s2.get('calib-site:active'));\n"
+            "for (const side of [t.out, t.in]) { side.config.fillSeconds = { '200': 60 }; side.config.drainSeconds = { '200': 30 }; }\n"
+            "s2.set('calib-site:active', JSON.stringify(t));\n"
+            "beats = []; p2 = stub.boot(page, corePath, s2, extra()); e2 = p2.el;\n"
+            "const beat2 = () => { for (const fn of beats) fn(); };\n"
+            "const look2 = () => [e2('tiles').dataset.liveOne, e2('tiles').dataset.liveOut, e2('tiles').dataset.liveIn];\n"
+            "beat2(); out.tidle = look2();\n"
+            "e2('pt-start').click(); clock += 15000; beat2(); out.tfill = look2();\n"
+            "e2('t-plus').click(); clock += 15000; beat2(); out.tdrain = look2();\n"
+            "clock += 30000; beat2(); out.tafter = look2();\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["idle"], ["", "", ""])
+        self.assertEqual(got["fill"], ["", "", ""], "a fill tank does not move while the can fills")
+        self.assertEqual(got["drain"], ["up", "", ""], "the can empties into the tank: the arrow rises")
+        self.assertEqual(got["after"], ["", "", ""])
+        self.assertEqual(got["tidle"], ["", "", ""])
+        self.assertEqual(got["tfill"], ["", "down", ""], "A loses water while the pump fills the can")
+        self.assertEqual(got["tdrain"], ["", "", "up"], "B gains water while the can empties")
+        self.assertEqual(got["tafter"], ["", "", ""])
 
 
 if __name__ == "__main__":
