@@ -107,7 +107,7 @@
      that tank's water. */
   .chrome { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); box-shadow: 0 3px 8px var(--shadow); }
   .chrome-in { max-width: 760px; margin: 0 auto; padding: 0 0.8rem; }
-  .tiles { display: flex; gap: 0.35rem; padding: 0.3rem 0 0.45rem; }
+  .tiles { display: flex; gap: 0.35rem; padding: 0 0 0.45rem; }
   .tiles.hidden { display: none; }
   .tile { flex: 1 1 0; min-width: 0; background: var(--card); border: 1px solid var(--line); border-bottom: 3px solid transparent; border-radius: 8px; padding: 0.2rem 0.4rem 0.15rem; color: var(--ink); text-align: left; font: inherit; font-weight: 400; min-height: 0; }
   button.tile { cursor: pointer; }
@@ -211,7 +211,9 @@
   #chart .mark:focus { outline: none; }
   #chart .mark:focus-visible .hit { stroke: var(--mark); stroke-width: 1.5; stroke-dasharray: 2 2; }
   td input.note { width: 16rem; max-width: 55vw; font-size: 0.9rem; padding: 0.25rem 0.4rem; }
-  .tabs { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+  /* The tab labels keep a gap under the header and above the tiles (or the
+     stack's lower edge when no campaign is open). */
+  .tabs { display: flex; gap: 0.3rem; flex-wrap: wrap; padding: 0.4rem 0 0.35rem; }
   .tabs button { background: var(--surface); color: var(--brand-ink); min-height: 2.3rem; padding: 0.3rem 0.8rem; }
   .tabs button[aria-pressed=true] { background: var(--brand); color: #fff; }
   .hidden { display: none !important; }
@@ -372,7 +374,7 @@
     .card { padding: 0.75rem; }
     #live > .card, #live > .verdict, #live > .row, #settings > .card { margin-top: 0.6rem !important; }
     /* The tabs: one line that scrolls sideways, not three wrapped lines. */
-    .tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; scroll-snap-type: x proximity; margin: 0 -0.5rem; padding: 0 0.5rem 0.1rem; scroll-padding: 0 0.5rem; }
+    .tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; scroll-snap-type: x proximity; margin: 0 -0.5rem; padding: 0.4rem 0.5rem 0.35rem; scroll-padding: 0 0.5rem; }
     .tabs::-webkit-scrollbar { display: none; }
     .tabs button { flex: 0 0 auto; scroll-snap-align: start; white-space: nowrap; }
     /* Two fields per line, so a pair such as D and D ± stays side by side. */

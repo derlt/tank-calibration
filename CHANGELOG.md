@@ -148,6 +148,8 @@ All notable changes to this project are documented here. The format follows
   (also for a closed campaign in *Files*). The workspace is the campaign's
   cloud workspace, else the one logged in on the device; with none, the
   names stay `tank_raw.csv` and `tank_site.json`.
+- **On-site page: the tab labels have room.** The tab row keeps a gap under
+  the header and above the tank tiles.
 
 - One word, **brim**: the drain start *At the neck entrance* is now *At the
   brim*, and "neck entrance" / "shell crown" are "brim" in the page, the
