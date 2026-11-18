@@ -324,7 +324,6 @@
   /* A finished calibration: the banner sits above the Now card, in the card's look. */
   #fin-banner { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--ok);
     border-radius: var(--radius); padding: 0.6rem 0.75rem; margin: 0 0 0.8rem; font-weight: 600; }
-  #now-fin-wrap { gap: 0.5rem; }
   .pred.muted { font-weight: 400; }
   .dipfield-h { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
   .dipfield-in { display: flex; gap: 0.5rem; align-items: stretch; margin-top: 0.55rem; flex-wrap: wrap; }
@@ -607,11 +606,6 @@
       <div id="now-eta" class="eta"></div>
       <button class="secondary small hidden" id="eta-use"></button>
       <p id="now-drift" class="muted" style="margin:0.3rem 0 0"></p>
-      <div class="row" id="now-fin-wrap" style="margin-top:0.5rem">
-        <button class="secondary small" id="now-fin-a"></button>
-        <button class="secondary small" id="now-fin-b"></button>
-      </div>
-      <p id="now-fin-note" class="muted" style="margin:0.3rem 0 0"></p>
     </details>
 
     <div class="card hidden" id="dip-card" style="margin-top:0.8rem">
@@ -672,8 +666,11 @@
       <button class="secondary small" id="a-redip">Take another reading</button>
       <button class="secondary small" id="a-edit">Recount: edit pour</button>
       <button class="secondary small" id="a-override">Accept anyway</button>
+      <button class="secondary small" id="now-fin-a"></button>
+      <button class="secondary small" id="now-fin-b"></button>
       <button class="danger small" id="a-undo">Undo last entry</button>
     </div>
+    <p id="now-fin-note" class="muted" style="margin:0.3rem 0 0"></p>
   </section>
 
   <!-- ===================================================== log -->
@@ -6809,8 +6806,9 @@
   }
 
   /**
-   * The Now card's finish buttons: one per tank in a transfer, one for a
-   * single calibration.  A finished tank offers Reopen until the next batch.
+   * The finish buttons, in the level actions under the verdict: one per tank
+   * in a transfer, one for a single calibration.  A finished tank offers
+   * Reopen until the next batch.
    */
   function renderFinish() {
     const transfer = isTransfer();

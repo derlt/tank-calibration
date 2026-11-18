@@ -271,8 +271,9 @@ mode the time block becomes one short line for the same limit:
 `To brim: 412 mm · ≈ 1800 L · after this pour: 330 mm · ≈ 1400 L · ≈ 2 h 10 ·
 done ≈ 14:35`.
 
-**Finish a tank.** The Now card has *Finish this calibration* once one level
-is accepted: the calibration is done, also when it has not reached the brim
+**Finish a tank.** The level actions under the verdict (with *Take another
+reading*, *Recount: edit pour* and *Undo last entry*) have *Finish this
+calibration* once one level is accepted: the calibration is done, also when it has not reached the brim
 or the bottom. The pour and dip cards close, the tile says `finished`, and a
 banner names the level and the clock. The last row of the raw CSV carries
 `finished at 1700.0 mm`, so the file says why the record stops; `calib`
@@ -910,8 +911,9 @@ has no switch of its own: its table and chart are always the chosen tank's
 own (A's table reads *drained L*, B's *pour L*). The Live tab always shows
 both tanks. *Files* exports one raw CSV per tank.
 
-**Finishing one tank.** Each tank's line in the Now card has a *Finish*
-button once that tank has an accepted level: the tank is done, and the page
+**Finishing one tank.** The level actions under the verdict have one
+*Finish* button per tank, for example *Finish (alpha)*, once that tank has an
+accepted level: the tank is done, and the page
 stops asking for its dip. Its dip field stays in place, closed, and reads
 `alpha: finished at 1800.0 mm`; its tile keeps the last level with the word
 `finished`; the verdict box says the tank is finished. The water still moves

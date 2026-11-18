@@ -153,6 +153,12 @@ class TestSitePage(unittest.TestCase):
         self.assertIn('class="sr-only" id="pt-status"', page, "the timer shows no status text, only to a screen reader")
         live = page.split('<section id="live"', 1)[1]
         self.assertLess(live.index('id="pour-card"'), live.index('id="now-card"'), "the Now card follows the pour card")
+        now = page.split('<details class="card" id="now-card"', 1)[1].split("</details>", 1)[0]
+        acts = page.split('id="level-actions">', 1)[1].split("</div>", 1)[0]
+        for i in ("now-fin-a", "now-fin-b"):
+            self.assertNotIn(f'id="{i}"', now, f"{i} left the Now card")
+            self.assertIn(f'id="{i}"', acts, f"{i} sits with the level actions")
+        self.assertLess(acts.index('id="now-fin-b"'), acts.index('id="a-undo"'), "Undo last entry stays last")
 
     def test_css_colours_come_from_the_theme(self):
         """Every colour in a CSS rule is a theme variable, so dark mode covers it.

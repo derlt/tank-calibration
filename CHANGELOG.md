@@ -8,6 +8,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **On-site page: Finish sits with the level actions.** *Finish this
+  calibration* (a transfer: *Finish (tank)* per tank) and *Reopen* moved
+  from the Now card to the row under the verdict, with *Take another
+  reading*, *Recount: edit pour*, *Accept anyway* and *Undo last entry*.
+  Its note follows the row.
+
 - **On-site page: a denser pour card.** The batch line sits close under
   the title: `Batch 800 L · 3/8` (the batch size, its number in the group in
   work, `(plan 8)` after a recount), or `Batch ≈ 400 L` without a plan. The
