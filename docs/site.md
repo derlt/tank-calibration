@@ -939,14 +939,19 @@ timers are one set for both tanks (§9.1).
 
 ## After the campaign
 
-1. *Files → Download raw CSV* gives `TANK_raw.csv`: one row per level with the
+1. *Files → Download raw CSV* gives `WORKSPACE_TANK_raw.csv`: one row per level with the
    adopted reading (the mean of the two readings that agree). The note holds
    every reading and the live state. *Download session JSON* keeps the full
-   session, the times included.
+   session, the times included, as `WORKSPACE_TANK_site.json` (a transfer:
+   `WORKSPACE_A-B_site.json`). WORKSPACE is the cloud workspace of the
+   campaign; a campaign only in this browser takes the workspace logged in on
+   this device. With no workspace at all, the name starts at the tank:
+   `TANK_raw.csv`. A character that a file system refuses (`/ \ : * ? " < >
+   |`) becomes `-`.
 2. Run the normal pipeline:
 
    ```bash
-   uv run python -m calib init TANK_raw.csv --r <D/2> --L <L>
+   uv run python -m calib init WORKSPACE_TANK_raw.csv --r <D/2> --L <L>
    uv run python -m calib fit TANK.json -o TANK_out
    ```
 

@@ -1765,14 +1765,29 @@
   }));
 
   // ------------------------------------------------------------ files
+  /**
+   * The workspace in a file name: the cloud workspace of the campaign, else
+   * the one logged in on this device, else none.  link is the campaign's
+   * cloud link (the open campaign's when omitted).
+   */
+  function fileWorkspace(link) {
+    if (!CL) return "";
+    const l = link === undefined ? (S ? CL.link() : null) : link;
+    return (l && l.ws) || CL.auth().workspace || "";
+  }
+  /** workspace_tank_kind, or tank_kind with no workspace; no character a file system refuses. */
+  function fileName(tank, kind, link) {
+    const ws = fileWorkspace(link);
+    return `${ws ? ws + "_" : ""}${tank}_${kind}`.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "-");
+  }
   $("f-csv").addEventListener("click", () => {
     // In a transfer the A button always exports tank A: the facade reads the
     // active tank, and a file with the wrong tank's rows is a wrong calibration.
     const T = isTransfer() ? S.out : S;
-    download(`${T.cfg.tank}_raw.csv`, T.toRawCsv(), "text/csv");
+    download(fileName(T.cfg.tank, "raw.csv"), T.toRawCsv(), "text/csv");
   });
-  $("f-csv-b").addEventListener("click", () => download(`${S.in.cfg.tank}_raw.csv`, S.in.toRawCsv(), "text/csv"));
-  $("f-json").addEventListener("click", () => download(`${isTransfer() ? S.out.cfg.tank + "-" + S.in.cfg.tank : S.cfg.tank}_site.json`, JSON.stringify(S.toJSON(), null, 2), "application/json"));
+  $("f-csv-b").addEventListener("click", () => download(fileName(S.in.cfg.tank, "raw.csv"), S.in.toRawCsv(), "text/csv"));
+  $("f-json").addEventListener("click", () => download(fileName(isTransfer() ? S.out.cfg.tank + "-" + S.in.cfg.tank : S.cfg.tank, "site.json"), JSON.stringify(S.toJSON(), null, 2), "application/json"));
   $("f-show").addEventListener("click", () => { const t = $("f-text"); t.value = S.toRawCsv(); t.classList.toggle("hidden"); t.select(); });
   $("f-import").addEventListener("change", (ev) => {
     const file = ev.target.files[0]; if (!file) return;
@@ -1818,7 +1833,7 @@
       if (CL && item.cloud) { CL.attach(item.cloud); keepLocal(); if (CL.dirty()) scheduleSync(); } else { cloudNew(); save(); }
       tab = "live"; render();
     } else {
-      download(`${item.tank}_site.json`, JSON.stringify(item.session, null, 2), "application/json");
+      download(fileName(item.tank, "site.json", item.cloud || null), JSON.stringify(item.session, null, 2), "application/json");
     }
   });
 
@@ -1863,7 +1878,7 @@
     const has = !!S;
     $("p-neck-wrap").classList.toggle("hidden", !isTransfer());
     $("f-csv-b").classList.toggle("hidden", !isTransfer());
-    $("f-csv").textContent = isTransfer() ? `Download ${S.out.cfg.tank}_raw.csv (tank A)` : "Download raw CSV";
+    $("f-csv").textContent = isTransfer() ? `Download ${fileName(S.out.cfg.tank, "raw.csv")} (tank A)` : "Download raw CSV";
     $("f-show").textContent = isTransfer() ? `Show ${S.cfg.tank} CSV` : "Show CSV";
     $("setup").classList.toggle("hidden", has || tab !== "live");
     for (const id of ["live", "log", "shell", "settings", "files", "replay", "help"]) {

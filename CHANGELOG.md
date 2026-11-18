@@ -143,6 +143,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **On-site page: file names carry the workspace.** The raw CSV is
+  `workspace_tank_raw.csv` and the session JSON `workspace_tank_site.json`
+  (also for a closed campaign in *Files*). The workspace is the campaign's
+  cloud workspace, else the one logged in on the device; with none, the
+  names stay `tank_raw.csv` and `tank_site.json`.
+
 - One word, **brim**: the drain start *At the neck entrance* is now *At the
   brim*, and "neck entrance" / "shell crown" are "brim" in the page, the
   docs and the methodology. New raw files write `at brim` on row 1; `calib`

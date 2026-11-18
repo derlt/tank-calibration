@@ -4094,6 +4094,36 @@ class TestSiteBrim(unittest.TestCase):
         self.assertNotIn("shell crown", html)
 
 
+class TestSiteFileNames(unittest.TestCase):
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_downloads_carry_the_workspace(self):
+        """workspace_tank_raw.csv: the campaign's workspace, else the login's, else none."""
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {};\n"
+            "function names(seed) {\n"
+            "  const store = new Map(Object.entries(seed));\n"
+            "  let p = stub.boot(page, corePath, store), el = p.el;\n"
+            "  el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "  el('s-dip').value = '400'; el('s-go').click();\n"
+            "  if (seed.link) { store.set('calib-site:link', seed.link); p = stub.boot(page, corePath, store); el = p.el; }\n"
+            "  el('f-csv').click(); el('f-json').click();\n"
+            "  return p.downloads.slice(-2).map((a) => a.download);\n"
+            "}\n"
+            "out.none = names({});\n"
+            "out.login = names({ 'calib-site:cloud': JSON.stringify({ workspace: 'crew9' }) });\n"
+            "out.link = names({ 'calib-site:cloud': JSON.stringify({ workspace: 'crew9' }),"
+            " link: JSON.stringify({ id: 'c1', copy: 'k1', ws: 'yard', base: '', rev: 1, synced: 1, version: 1 }) });\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["none"], ["t1_raw.csv", "t1_site.json"], "no workspace: the tank name alone")
+        self.assertEqual(got["login"], ["crew9_t1_raw.csv", "crew9_t1_site.json"], "the logged-in workspace")
+        self.assertEqual(got["link"], ["yard_t1_raw.csv", "yard_t1_site.json"], "the campaign's own workspace wins")
+
+
 _EARLY_HEAD = """
 let clock = Date.UTC(2026, 10, 18, 8, 0, 0), beats = [], answer = true;
 const asked = [];
