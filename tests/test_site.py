@@ -3408,6 +3408,69 @@ class TestSiteTiles(unittest.TestCase):
         self.assertNotEqual(n1["pred"], "pour to predict", "the tapped cans give the prediction")
         self.assertTrue(n1["plain"], "no plan: still a plain connector")
 
+    @staticmethod
+    def _mark(html):
+        """The result marks of the tiles, in order: [(class, text)]."""
+        return re.findall(r'class="mk (\w+)" aria-hidden="true">([^<]*)<', html)
+
+    def test_page_tile_result_mark(self):
+        """The tile shows the last reading's result, from the reading to the next Batch done."""
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click(); out.first = el('tiles').innerHTML;\n"
+            "el('d-val').value = '400'; el('d-go').click(); out.good = el('tiles').innerHTML;\n"
+            "el('t-plus').click(); out.tapped = el('tiles').innerHTML;\n"
+            "el('p-go').click(); out.batch = el('tiles').innerHTML;\n"
+            "const pred = /class=\"num pred\">([^<]*)</.exec(out.batch)[1];\n"
+            "el('d-val').value = String(Number(pred) + 40); el('d-go').click(); out.miss = el('tiles').innerHTML;\n"
+            "// A tap on a tile with a mark brings the result card into view on the Live tab.\n"
+            "let scrolled = 0; el('verdict').scrollIntoView = () => { scrolled++; };\n"
+            "const tap = () => el('tiles')._listeners.click[0]({ target: { closest: () => ({ dataset: { tank: 'one' }, querySelector: (s) => (s === '.mk' ? {} : null) }) } });\n"
+            "tap(); out.scrolled = scrolled;\n"
+            "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'log' } }) } });\n"
+            "tap(); out.otherTab = scrolled;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(self._mark(got["first"]), [("warn", "↻ again")],
+                         "the start reading asks for a second reading")
+        self.assertEqual(self._mark(got["good"]), [("ok", "✓ good")])
+        self.assertIn("Reading confirmed", got["good"], "the tooltip names the verdict")
+        self.assertEqual(self._mark(got["tapped"]), [("ok", "✓ good")], "the mark stays while the cans are tapped")
+        self.assertEqual(self._mark(got["batch"]), [], "Batch done: the new level has no reading yet")
+        self.assertEqual(self._mark(got["miss"]), [("warn", "↻ again")], "a miss asks for another dip")
+        self.assertIn('class="wt"', got["miss"], "the waiting ring stays with the mark")
+        self.assertEqual(got["scrolled"], 1, "a tap on the tile shows the result card")
+        self.assertEqual(got["otherTab"], 1, "other tabs do not scroll")
+
+    def test_page_tile_result_mark_transfer(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "el('s-dir-transfer').click();\n"
+            "el('s-tank').value = 'alpha'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('sB-tank').value = 'beta'; el('sB-D').value = '2480'; el('sB-L').value = '5200';\n"
+            "el('s-dip').value = '1800'; el('sB-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click();\n"
+            "out.start = el('tiles').innerHTML;\n"
+            "el('d-val').value = '1800'; el('d-go-a').click(); out.a = el('tiles').innerHTML;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(self._mark(got["start"]), [("warn", "↻ again"), ("warn", "↻ again")],
+                         "both start readings wait for a second reading")
+        self.assertEqual(self._mark(got["a"]), [("ok", "✓ good"), ("warn", "↻ again")],
+                         "each tile has its own mark: A is decided, B still waits")
+
     def test_page_tiles_pending_batch_and_the_waiting_ring(self):
         """A batch waiting for its dip: a full track and the expected dip.
 

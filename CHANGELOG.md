@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **On-site page: the reading result on the tank tile.** After each
+  reading, the tile in the frozen stack shows the verdict in one coloured
+  word next to the tank name (`✓ good`, `↻ again`, `! watch`, `✕ off`, …),
+  on every tab and without a scroll. It stays while the next batch is tapped
+  and goes at *Batch done*. On the Live tab a tap on the tile brings the full
+  reading card into view. A transfer marks each tank on its own tile.
+
 - **On-site page: the next can's fill timer while the dip waits.** After
   *Batch done* (or *Poured*) in a fill, the pour card stays under the dip
   card as *1 · Next can*: the fill timer and the can size work, so the pump

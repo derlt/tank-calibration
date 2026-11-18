@@ -128,6 +128,13 @@
   /* A reading at the open level is not decided yet: a small red ring. */
   .tile .wt { display: inline-block; width: 0.38rem; height: 0.38rem; border: 1.5px solid var(--bad); border-radius: 50%; margin-left: 0.12rem; vertical-align: 0.35rem; animation: tile-wait 1.6s ease-in-out infinite; }
   @keyframes tile-wait { 50% { opacity: 0.45; } }
+  /* The result of the last reading, next to the tank name: the verdict in
+     one word and its colour, until the next batch is done. */
+  .tile .mk { margin-left: auto; flex: 0 0 auto; font-size: 0.62rem; font-weight: 700; line-height: 0.95rem; padding: 0 0.3rem; border-radius: 0.5rem; border: 1px solid; white-space: nowrap; }
+  .tile .mk.ok { color: var(--ok); background: var(--ok-bg); border-color: var(--ok); }
+  .tile .mk.warn { color: var(--warn); background: var(--warn-bg); border-color: var(--warn); }
+  .tile .mk.bad { color: var(--bad); background: var(--bad-bg); border-color: var(--bad); }
+  .tile .mk.info { color: var(--info); background: var(--info-bg); border-color: var(--info); }
   .tile .trk { flex: 1 1 0.8rem; min-width: 0.6rem; height: 2px; background: var(--line); border-radius: 2px; overflow: hidden; }
   .tile .trk i { display: block; height: 100%; background: var(--role); border-radius: 2px; }
   .tile .trk.plain { background: none; border-top: 1px dashed var(--line); height: 0; }
@@ -1282,11 +1289,19 @@
   }, { passive: true });
   $("main").addEventListener("touchcancel", () => { springBack(swipe); swipe = null; }, { passive: true });
   $("tiles").addEventListener("click", (ev) => {
-    const b = ev.target.closest("button[data-tank]");
-    if (!b || !isTransfer()) return;
+    const b = ev.target.closest("[data-tank]");
+    if (!b || !S) return;
     if (tab === "replay" || tab === "help") return;
-    S.active = b.dataset.tank; editRow = null; keepLocal(); render();   // a view: not a cloud change
+    if (isTransfer() && b.dataset.tank !== "one") { S.active = b.dataset.tank; editRow = null; keepLocal(); render(); }   // a view: not a cloud change
+    // On the Live tab, a tile with a result mark brings the full result card into view.
+    if (tab === "live" && b.querySelector && b.querySelector(".mk")) showVerdict();
   });
+  /** The result card under the frozen stack (scroll-padding-top keeps it clear). */
+  function showVerdict() {
+    const box = $("verdict");
+    if (box.classList.contains("hidden") || !box.scrollIntoView) return;
+    box.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
 
   // ------------------------------------------------------------ setup
   // The direction and the start level are chosen once, at Start campaign.
@@ -1917,7 +1932,29 @@
   // width (two whole waves) loops without a jump.
   const TILE_WAVE = "M0 3 q2.5 -2.6 5 0 t5 0 t5 0 t5 0 t5 0 t5 0 t5 0 t5 0";
 
-  function tileHtml(v, tank, selected, readOnly) {
+  /**
+   * The result of the tank's last reading for its tile: { cls, text, title }
+   * or null.  It follows the open level's verdict: a reading that waits for
+   * another says "again"; a decided level says its verdict in one word.  A
+   * level with no reading yet (the batch just done) and a finished tank
+   * show none, so the mark lasts from the reading to the next Batch done.
+   */
+  const TILE_MARK = {
+    ACCEPT: ["ok", "✓ good"], LEARNING: ["ok", "✓ learning"], WATCH: ["info", "! watch"],
+    ALARM: ["bad", "✕ off"], OVERRIDE: ["warn", "✓ kept"], NECK: ["info", "neck"], OVERFLOW: ["info", "overflow"],
+  };
+  const TILE_MARK_COLOR = { ok: "✓ good", warn: "! check", info: "! note", bad: "✕ off" };
+  function tileMark(sess) {
+    if (!sess || sess.finished) return null;
+    const L = sess.current(), v = L && L.verdict;
+    if (!v || !L.dips || !L.dips.length) return null;
+    if (L.state === "pending") return { cls: "warn", text: "↻ again", title: v.title };
+    const m = TILE_MARK[v.status];
+    const cls = m ? m[0] : (TILE_MARK_COLOR[v.color] ? v.color : "info");
+    return { cls, text: m ? m[1] : TILE_MARK_COLOR[cls], title: v.title };
+  }
+
+  function tileHtml(v, tank, selected, readOnly, mark) {
     const tag = isTransfer() && !readOnly ? "button" : "div";
     const attrs = tag === "button"
       ? ` type="button" data-tank="${tank}" aria-pressed="${selected}"`
@@ -1934,7 +1971,7 @@
     const after = v.why === "finished" ? `finished${v.finAt ? ` at ${hhmm(v.finAt)}` : ""}`
       : v.to != null ? `${f(v.to)} mm after the batch${v.edge ? ` · ${TILE_EDGE[v.edge]}` : ""}`
         : v.why === "no-cans" ? "pour to predict" : `no prediction (${why})`;
-    const label = `${v.name} · ${now}${v.wait ? " · a newer reading waits" : ""} · ${after}`;
+    const label = `${v.name} · ${now}${v.wait ? " · a newer reading waits" : ""}${mark ? ` · ${mark.title}` : ""} · ${after}`;
     const dir = v.dir;
     const d = dir === "up" ? "M10 15 V4 M5.5 8.5 L10 4 L14.5 8.5" : "M10 3 V14 M5.5 9.5 L10 14 L14.5 9.5";
     const arrow = `<span class="arw-wrap" aria-hidden="true">`
@@ -1943,8 +1980,9 @@
     const track = v.frac == null ? `<span class="trk plain"></span>`
       : `<span class="trk"><i style="width:${(100 * v.frac).toFixed(1)}%"></i></span>`;
     const ring = v.wait ? `<i class="wt" aria-hidden="true"></i>` : "";
+    const mk = mark ? `<span class="mk ${mark.cls}" aria-hidden="true">${esc(mark.text)}</span>` : "";
     return `<${tag} class="tile ${v.role}${selected ? " sel" : ""}"${attrs} data-dir="${dir}" aria-label="${esc(label)}" title="${esc(label)}">`
-      + `<span class="top">${arrow}<span class="nm">${esc(v.name)}</span></span>`
+      + `<span class="top">${arrow}<span class="nm">${esc(v.name)}</span>${mk}</span>`
       + `<span class="line"><span class="num cur">${cur}${ring}</span>${track}${pred}</span>`
       + `</${tag}>`;
   }
@@ -1956,10 +1994,10 @@
     const readOnly = tab === "replay" || tab === "help";
     if (isTransfer()) {
       const t = S.tiles(panelInput());
-      box.innerHTML = tileHtml(t.out, "out", S.active === "out", readOnly)
-        + tileHtml(t.in, "in", S.active === "in", readOnly);
+      box.innerHTML = tileHtml(t.out, "out", S.active === "out", readOnly, tileMark(S.out))
+        + tileHtml(t.in, "in", S.active === "in", readOnly, tileMark(S.in));
     } else {
-      box.innerHTML = tileHtml(S.tileView(panelInput()), "one", true, true);
+      box.innerHTML = tileHtml(S.tileView(panelInput()), "one", true, true, tileMark(S));
     }
     tileLive(liveState(Date.now()));
     chromePad();

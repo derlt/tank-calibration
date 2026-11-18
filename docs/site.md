@@ -538,6 +538,26 @@ decided yet: a first reading that waits for its pair, a pair that disagrees,
 or a miss that asks for another dip. The number stays the last accepted dip
 until the page decides.
 
+**The result mark.** After each reading, a small coloured mark at the right
+of the tank name shows the result of the reading card in one word, so you
+see it at the top of every tab without a scroll:
+
+| Mark | Verdict |
+|---|---|
+| `✓ good` (green) | *Reading good*, *Reading confirmed* |
+| `✓ learning` (green) | *Reading confirmed, shape still unknown* |
+| `! watch` (blue) | *Reading confirmed: watch item* |
+| `✕ off` (red) | *The pour or the tank is off* |
+| `✓ kept` (amber) | *Accept anyway* |
+| `neck`, `overflow` (blue) | a level in the neck, an overflow reading |
+| `↻ again` (amber) | the page asks for another reading (with the red ring) |
+
+The mark stays while you tap the cans of the next batch, and goes at *Batch
+done*: the new level has no reading yet. A finished tank has no mark. The
+tooltip names the verdict. On the Live tab, tap a tile with a mark to bring
+the full reading card into view. In a transfer, each tile has its own mark;
+the pair view of the two tanks stays in the card.
+
 The chosen tank keeps the thick line under it in its role colour (amber for
 A, blue for B). Tap a tile to choose the tank: the Log & charts, Shell,
 Settings and Files tabs follow it. On Replay and How it works the tiles are
