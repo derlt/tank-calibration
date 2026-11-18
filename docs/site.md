@@ -179,7 +179,7 @@ explanation. **Simple** shows only what to do and the numbers to read:
 
 - the level, and where the batch in the pour panel lands:
   `After 400 L: 531.4 ± 2.3 mm`;
-- the can target (`Target: 2 × 200 L`) and every warning (brim, bottom,
+- the batch line (`Batch 800 L · 3/8`) and every warning (brim, bottom,
   overflow, drift alarm);
 - a short settle line (`Settling: 3:20 left.`, `Settled: dip now.`) and the
   expected level in the dip panel (`Expect 572.8 ± 3.3 mm`);
@@ -189,16 +189,18 @@ explanation. **Simple** shows only what to do and the numbers to read:
 
 Simple mode hides the help paragraphs, the shell figures (liquid, brim,
 slope), the full time block (*To half* and its breakdown), the batch plan's
-note under the pour card's tally (a changed count still shows in its head line, `batch 5 of 9 (plan
+note under the pour card's batch line (a changed count still shows in the line, `Batch 800 L · 5/9 (plan
 8)`) and the drift line until it alarms. The check
 is the same in both modes: only the text changes.
 
 1. **Pour.** Tap *+1 can poured* each time a can is empty, then press
    *Batch done* (see *A batch of cans* below). The card reads from the top:
-   the count, the target, the timer, the big pour button, *Undo last can*,
-   *Batch done*, the can size block and *Options*. *Options* folds the
-   part-can tick, *reached the neck / overflowed*, *level still in the neck*,
-   the note and *Enter litres instead* (meter, unknown pour). Tick *whole pour
+   the batch line, the count, the can tally, the timer, and one action bar:
+   *↶* (Undo last can), the big pour button, *✓* (Batch done). Then
+   *Options*. *Options* folds the can size first, then the part-can tick,
+   *reached the neck / overflowed*, *level still in the neck*, the note and
+   *Enter litres instead* (meter, unknown pour). The Now card follows the
+   pour card. Tick *whole pour
    unknown* for `?`, or *plus an unknown extra* for `N+?`.
 2. **Wait.** The settle timer on the dip card counts down the settle time
    (5:00 unless you change it) and rings when the level is ready to dip
@@ -316,22 +318,35 @@ the next batch.
   even before the first can of the batch. With no size chosen on this
   device, it starts at the last can's size, then at the default. The big
   pour button keeps the size in its label: `+1 can poured (200 L)`.
-- **The advice is a target, not a limit.** The page shows the advised number
-  of cans for a rise of about 30 mm. It warns near the brim, and when the
-  batch is more than the gap that is left in the shell. With a batch plan,
-  the target is the plan's batch in its cans (*Plan: 200 + 100 L = 300 L*).
+- **The advice is a target, not a limit.** Without a plan the batch line
+  shows the advised batch for a rise of about 30 mm (`Batch ≈ 400 L`), and
+  the tally has one cell per can of it. With a batch plan, the cells are the
+  plan's batch in its cans (`200 + 100 L` for 300 L).
+- **The volume warning.** When the batch passes a litre limit — the shell
+  gap of a fill, the liquid left of a drain, for a transfer the nearer of
+  tank A's liquid and tank B's gap — a red chip follows the batch line
+  (`⚠ overflow · gap ≈ 784 L`), a line marks the limit on the tally, and the
+  cans past it are hatched (a counted one is solid red). The line under the
+  bar names the limit in place of the finish times. The warning counts the
+  whole planned or advised batch, so it shows before the can that passes the
+  limit. Near the brim (a drain: the bottom) the chip is amber
+  (`⚠ near the brim`) and the tally has no line. Tap the chip for the full
+  sentence; tap it again to fold it.
 - **A second tap in less than 20 s** asks if it is a new can.
-- **Undo last can** asks first (*Remove the last can from the count?*) and
-  removes one tap on *OK*. *Undo last entry* does the same while a batch is
+- **Undo last can** (*↶*, the left end of the action bar) asks first
+  (*Remove the last can from the count?*) and removes one tap on *OK*. *Undo last entry* does the same while a batch is
   open, also with a question. After *Batch done*, *Undo last entry* opens the
   batch again with its cans.
 - **Last can not fully poured** records the batch as `N+?`: the full cans are
   known, and the shell estimates the part can. The part can is the last tap,
   so tap it with its own size. The tick is in *Options*.
-- **Batch done** closes the batch and starts the settle timer from the last
-  can. It is faded and quiet below the batch's target, green and bold on the
-  last can of the target, and amber one can past it. With no can and no typed
-  litres it is disabled. The raw file keeps the count and the times in the
+- **Batch done** (*✓*, the right end of the action bar, as wide as *↶*)
+  closes the batch and starts the settle timer from the last can. It is quiet
+  below the batch's cans, green on the last can, and amber one can past it.
+  Below the batch it asks first (*Only 2 of 4 cans. Close the batch?*),
+  unless *Options* says why: typed litres or a part can. With no can it is
+  green when *Options* has typed litres or *whole pour unknown*, and disabled
+  without them. The raw file keeps the count and the times in the
   note, for example `cans 6x200 L 14:02-14:19`, or `cans 2x200+4x100 L` for a
   mixed batch.
 - **Typed litres replace the batch volume.** Enter the measured volume in
@@ -341,8 +356,9 @@ the next batch.
   trend. A typed volume is a measurement, so the page adds no count-error
   hint to this level. A transfer records the typed volume for both tanks.
 - **Options folds and stays folded.** The device keeps the choice, as it does
-  for the Now card. The part-can, neck, overflow, note and manual litres
-  fields are inside.
+  for the Now card. The can size, the part-can, neck, overflow, note and
+  manual litres fields are inside. With no can size known, *Options* opens by
+  itself, so the size field shows.
 
 After the dip, a confirmed miss of a whole number of cans names the count
 error: *the miss is 0.99 can of 200 L: 1 can more than the count (7, not 6)
@@ -387,12 +403,12 @@ campaign; it is fixed at the start.
 those the largest cans: 300 L with 200 L and 100 L cans is `200 + 100`, not
 `3 × 100`. Fewer cans is less pumping and less carrying. The size field of
 the pour card starts each batch at its first can and moves to the next can
-of the plan after each tap. The chips of the cans to come show their sizes.
+of the plan after each tap. The tally cells of the cans to come show their sizes.
 You can still choose another size.
 
-**The batch tally.** The pour card shows the group in work, for example
-`Group 3 of 5 · 800 L · batch 5 of 8 · 9 of 16 in all`, and one chip per
-batch of that group. The tally counts only the adjacent batches of one group:
+**The batch tally.** The batch line under the pour card's title shows the
+batch size and its number in the group in work, for example
+`Batch 800 L · 5/8`. The tally counts only the adjacent batches of one group:
 the 300 L batches at the bottom and the 300 L batches at the top are two
 groups. Each level records its group, so a reload or an undo keeps the
 tally. The Now card adds `batch plan: 8 of 16 batches poured · nominal
@@ -456,13 +472,14 @@ counts down. The duration is the typed fill time; with none typed, the
 trend of the cans you already timed (the start button says which:
 *▶ Start fill timer (1:40)*). *+20 s* and *−20 s* change this one run.
 Untick *pour animation* to drop the drawing: the clock, the bar and the
-alarm stay.
+alarm stay. The panel has no text under the clock: its colour tells the
+state. A screen reader still reads the state.
 
 | Time left | Panel | Alarm | Do |
 |---|---|---|---|
-| more than the lead | blue, *Filling a 200 L can* | — | watch the can |
-| the lead or less | amber, *15 s to full: close the valve now* | two beeps | close the valve |
-| 0:00 | green, *Can full: the pump must be off* | three beeps every 2.5 s for 3 min | pump off, tap *+1 can poured* |
+| more than the lead | blue | — | watch the can |
+| the lead or less | amber | two beeps, banner *Close the valve* | close the valve |
+| 0:00 | green, *+1 can* pulses | three beeps every 2.5 s for 3 min, banner *Can full: pump off* | pump off, tap *+1 can poured* |
 
 The lead is the time from the alarm to the closed valve, not a safety margin.
 If you close faster than the lead, every can is short by that difference, and
@@ -479,11 +496,12 @@ outside the tank, so the next can can fill while the level settles and you
 dip. After *Batch done* (or *Poured*), the pour card stays under the dip
 card, titled *1 · Next can*:
 
-- *Start fill timer*, *Stop timer*, *±20 s* and the can size work;
-- *+1 can*, *Undo last can*, *Batch done* and *Options* are locked, and a
-  line says why: empty the can into the tank after the dip;
-- at 0:00 the panel says *Empty it into the tank after the dip, then tap +1
-  can poured*, and *+1 can* does not pulse.
+- *Start fill timer*, *Stop timer*, *±20 s* and the can size (in *Options*)
+  work;
+- *+1 can*, *Undo last can*, *Batch done* and the other options are locked
+  (hidden), and a line says why: empty the can into the tank after the dip;
+- at 0:00 the panel turns green and *+1 can* does not pulse: empty the can
+  into the tank after the dip, then tap *+1 can poured*.
 
 When the dip is decided, the card moves back above the dip card and opens.
 The timer runs on: tap *+1 can* as usual. That can gives no fill time to the
@@ -609,7 +627,7 @@ timer (10 s)*. The page opens
 
 Safari first asks *Open in "Shortcuts"?*. The iPhone timer starts only when
 you tap *Open*, so the page timer does not start at the tap on *Start fill
-timer*. The panel waits (*Waiting for Shortcuts: tap Open*), and the page
+timer*. The panel waits in amber with the full time on the clock, and the page
 timer starts when iOS leaves the page for Shortcuts: both timers run
 together. While it waits, *Open Shortcuts again* asks again, *Start without
 iPhone timer* starts the page timer alone, and *Cancel* stops the wait. If

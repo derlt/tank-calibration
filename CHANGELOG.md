@@ -8,6 +8,26 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **On-site page: a denser pour card.** The batch line sits close under
+  the title: `Batch 800 L · 3/8` (the batch size, its number in the group in
+  work, `(plan 8)` after a recount), or `Batch ≈ 400 L` without a plan. The
+  group chips and the target line (`Target: 6 × 200 L`, `Plan: …`) are gone.
+  *Undo last can*, the big +1 button and *Batch done* are one bar: *↶* and
+  *✓* at the two ends, the same width, and the +1 keeps its full size. *✓*
+  turns green on the last can of the batch and amber past it; below the
+  batch it asks first (*Only 2 of 4 cans. Close the batch?*). The can size
+  moved into *Options*, at the top. The fill timer has no text under the
+  clock: its colour tells the state. The Now card follows the pour card, and
+  the header drops the extra-dip count.
+
+- **On-site page: the volume warning on the batch line and the tally.** When
+  the batch passes the shell gap (a drain: the liquid left; a transfer: the
+  nearer of tank A's liquid and tank B's gap), a red chip follows the batch
+  line (`⚠ overflow · gap ≈ 784 L`), a line marks the limit on the can
+  tally, and the cans past it are hatched. It shows before the can that
+  passes the limit. Near the brim or the bottom the chip is amber. A tap on
+  the chip opens the full sentence.
+
 - **On-site page: the reading result on the tank tile.** After each
   reading, the tile in the frozen stack shows the verdict in one coloured
   word next to the tank name (`✓ good`, `↻ again`, `! watch`, `✕ off`, …),

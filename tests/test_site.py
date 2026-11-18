@@ -137,13 +137,21 @@ class TestSitePage(unittest.TestCase):
         )
 
     def test_pour_card_foot_order(self):
-        """The foot reads +1 can, Undo last can, Batch done, can size, Options."""
+        """The foot is one bar (Undo last can, +1 can, Batch done), then Options with the can size first."""
         page = (SITE / "page.html").read_text(encoding="utf-8")
-        order = [page.index(f'id="{i}"') for i in ("t-plus", "t-undo", "p-go", "t-unit", "p-opts")]
+        order = [page.index(f'id="{i}"') for i in ("t-undo", "t-plus", "p-go", "p-opts", "t-unit", "p-opts-rest")]
         self.assertEqual(order, sorted(order), "the pour card's foot is in the set order")
+        bar = page.split('<div class="actbar" id="t-act">', 1)[1].split("</div>", 1)[0]
+        for i in ("t-undo", "t-plus", "p-go"):
+            self.assertIn(f'id="{i}"', bar, f"{i} is in the action bar")
         opts = page.split('<details id="p-opts">', 1)[1].split("</details>", 1)[0]
-        for i in ("t-part", "p-over", "p-neck", "p-unknown", "p-extra", "p-note", "p-vol"):
+        for i in ("t-unit", "t-units", "t-dec", "t-inc", "t-part", "p-over", "p-neck", "p-unknown", "p-extra", "p-note", "p-vol"):
             self.assertIn(f'id="{i}"', opts, f"{i} is folded into Options")
+        for gone in ("t-target", "t-plan-chips"):
+            self.assertNotIn(f'id="{gone}"', page, f"{gone} is gone from the pour card")
+        self.assertIn('class="sr-only" id="pt-status"', page, "the timer shows no status text, only to a screen reader")
+        live = page.split('<section id="live"', 1)[1]
+        self.assertLess(live.index('id="pour-card"'), live.index('id="now-card"'), "the Now card follows the pour card")
 
     def test_css_colours_come_from_the_theme(self):
         """Every colour in a CSS rule is a theme variable, so dark mode covers it.
@@ -258,7 +266,7 @@ class TestSitePage(unittest.TestCase):
             "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
             "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
             "out.count0 = el('t-count').textContent;\n"
-            "out.note0 = el('t-target').textContent;\n"
+            "out.note0 = el('t-plan-head').textContent;\n"
             "el('t-plus').click();\n"
             "out.count1 = el('t-count').textContent;\n"
             "// A smaller can mid-batch: the poured 200 L keeps its own size, and the\n"
@@ -266,19 +274,19 @@ class TestSitePage(unittest.TestCase):
             "el('t-unit').value = '100';\n"
             "el('t-plus').click();\n"
             "out.count2 = el('t-count').textContent;\n"
-            "out.note2 = el('t-target').textContent;\n"
+            "out.note2 = el('t-plan-head').textContent;\n"
             "out.seg = el('t-bar').innerHTML;\n"
             "console.log(JSON.stringify(out));"
         )
         self.assertEqual(got["count0"], "0 / 2 cans · 0 L")
-        self.assertEqual(got["note0"], "Advice ≈ 400 L = 2 × 200 L (≈ 30 mm rise).")
+        self.assertEqual(got["note0"], "Batch ≈ 400 L", "the batch line names the advised batch")
         self.assertEqual(got["count1"], "1 / 2 cans · 200 L")
         self.assertEqual(got["count2"], "2 / 3 cans · 300 L",
                          "the poured can keeps its own size in the denominator")
         self.assertEqual(got["seg"].count('data-state="done"'), 2, "both counted cans stay done")
         self.assertNotIn('data-state="over"', got["seg"], "the batch is not over the advice")
-        self.assertEqual(got["note2"], "Advice ≈ 400 L (≈ 30 mm rise).",
-                         "no multiplication when the cans no longer divide the advice evenly")
+        self.assertEqual(got["note2"], "Batch ≈ 400 L",
+                         "a smaller can mid-batch does not change the advised batch")
 
     @unittest.skipUnless(NODE, "node is not installed")
     def test_page_batch_done_button_states(self):
@@ -292,7 +300,7 @@ class TestSitePage(unittest.TestCase):
             "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
             "el('s-dip').value = '400'; el('s-unit').value = '50';\n"
             "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
-            "const state = () => ({text: el('p-go').textContent, ok: el('p-go')._classes.has('ok'),"
+            "const state = () => ({text: el('p-go')['aria-label'], ok: el('p-go')._classes.has('ok'),"
             " over: el('p-go')._classes.has('over'), quiet: el('p-go')._classes.has('quiet'),"
             " off: el('p-go').disabled});\n"
             "out.none = state();\n"
@@ -315,6 +323,77 @@ class TestSitePage(unittest.TestCase):
         self.assertTrue(got["four"]["over"], "one can past the batch is amber")
         self.assertFalse(got["four"]["ok"])
         self.assertFalse(got["opts"], "the Options block starts folded")
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_batch_done_asks_below_the_batch(self):
+        """Batch done sits next to +1: below the batch it asks first; a typed pour turns it green."""
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map(), asks = [];\n"
+            "let yes = false;\n"
+            "const p = stub.boot(page, corePath, store, { confirm: (m) => { asks.push(m); return yes; } });\n"
+            "const el = p.el;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '50';\n"
+            "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "out.hdr = el('hdr-count').textContent;\n"
+            "el('p-unknown').checked = true; el('p-unknown')._listeners.change[0]({});\n"
+            "out.typed = { ok: el('p-go')._classes.has('ok'), off: el('p-go').disabled };\n"
+            "el('p-unknown').checked = false; el('p-unknown')._listeners.change[0]({});\n"
+            "el('t-plus').click();\n"
+            "el('p-go').click(); out.kept = [el('t-count').textContent, el('dip-card')._classes.has('hidden')];\n"
+            "out.asks = asks.slice();\n"
+            "yes = true; el('p-go').click(); out.closed = el('dip-card')._classes.has('hidden');\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["hdr"], "1 level", "the header has no extra-dip count")
+        self.assertEqual(got["typed"], {"ok": True, "off": False}, "no can, a typed pour: Batch done is green")
+        self.assertEqual(got["kept"], ["1 / 3 cans · 50 L", True], "No keeps the batch open")
+        self.assertEqual(got["asks"], ["Only 1 of 3 cans. Close the batch?"])
+        self.assertFalse(got["closed"], "Yes closes the batch: the dip card opens")
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_volume_warning_chip_and_limit(self):
+        """A batch past the shell gap: a red chip on the batch line and a limit line on the tally."""
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "const chip = () => ({ shown: !el('t-warn')._classes.has('hidden'), bad: el('t-warn')._classes.has('bad'),"
+            " text: el('t-warn').textContent, open: !el('t-warn-text')._classes.has('hidden'),"
+            " line: el('t-warn-text').textContent, lim: el('t-times')._classes.has('lim'), bar: el('t-bar').innerHTML,"
+            " times: el('t-times').innerHTML });\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1000'; el('s-L').value = '1000';\n"
+            "el('s-dip').value = '10'; el('s-unit').value = '200';\n"
+            "el('s-go').click(); el('d-val').value = '10'; el('d-go').click();\n"
+            "out.before = chip();\n"
+            "for (let k = 0; k < 5; k++) el('t-plus').click();\n"
+            "out.after = chip();\n"
+            "el('t-warn').click(); out.opened = chip();\n"
+            "el('t-plus').click(); out.stays = chip().open;\n"
+            "el('t-warn').click(); out.closed = chip().open;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        b, a = got["before"], got["after"]
+        self.assertFalse(b["shown"], "one can inside the gap: no warning")
+        self.assertNotIn('class="lim"', b["bar"])
+        self.assertTrue(a["shown"] and a["bad"], "five 200 L cans pass the gap: a red chip")
+        self.assertRegex(a["text"], r"^⚠ overflow · gap ≈ \d+ L$")
+        self.assertFalse(a["open"], "the sentence waits for a tap on the chip")
+        self.assertIn('class="lim"', a["bar"], "the limit line sits on the tally")
+        self.assertEqual(a["bar"].count('data-past="1"'), 2, "the cans past the gap are marked")
+        self.assertTrue(a["lim"], "the line under the bar names the limit")
+        self.assertRegex(a["times"], r">gap ≈ \d+ L<")
+        self.assertTrue(got["opened"]["open"])
+        self.assertRegex(got["opened"]["line"], r"^1000 L is more than the shell gap \(≈ \d+ L\): expect an overflow\.$")
+        self.assertTrue(got["stays"], "another can keeps the sentence open")
+        self.assertFalse(got["closed"], "a second tap folds it")
 
     @unittest.skipUnless(NODE, "node is not installed")
     def test_page_undo_asks_first_and_remembers_options(self):
@@ -1158,7 +1237,7 @@ class TestSitePage(unittest.TestCase):
             "// The header switch toggles; aria-pressed is true in simple mode.\n"
             "const mode = (m) => { if (el('hdr-mode')['aria-pressed'] !== String(m === 'simple')) el('hdr-mode').click(); };\n"
             "const grab = () => ({ kv: el('now-kv').innerHTML, advice: el('now-advice').textContent,"
-            " target: el('t-target').textContent, verdict: el('verdict').innerHTML,"
+            " target: el('t-plan-head').textContent, verdict: el('verdict').innerHTML,"
             " expect: el('dip-expect-a').textContent, drift: el('now-drift').textContent });\n"
             "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
             "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
@@ -1194,8 +1273,7 @@ class TestSitePage(unittest.TestCase):
         self.assertIn("<dt>level</dt>", s["kv"])
         self.assertEqual(s["advice"], "", "no advised next pour and no prediction for it")
         self.assertEqual(v["advice"], "")
-        self.assertEqual(s["target"], "Target: ≈ 200 L",
-                         "one can of the advice: no multiplication to show")
+        self.assertEqual(s["target"], "Batch ≈ 200 L", "no plan: the batch line names the advice")
         self.assertNotIn("<p>", s["verdict"], "simple mode drops the verdict message")
         self.assertIn("<h3>", s["verdict"])
         self.assertEqual(got["saved"], "simple")
@@ -1359,7 +1437,7 @@ class TestSitePage(unittest.TestCase):
             "const cfg = JSON.parse(store.get('calib-site:active')).config;\n"
             "out.cfg = {direction: cfg.direction, brimStart: cfg.brimStart, brimPm: cfg.brimPm};\n"
             "out.csv1 = JSON.parse(store.get('calib-site:active')).levels[0].tags;\n"
-            "out.plus = el('t-plus').textContent; out.go = el('p-go').textContent;\n"
+            "out.plus = el('t-plus').textContent; out.go = el('p-go')['aria-label'];\n"
             "out.title = el('pour-title').textContent; out.over = el('p-over-text').textContent;\n"
             "out.part = el('t-part-text').textContent; out.help = el('t-help').innerHTML;\n"
             "out.phase = el('hdr-phase').textContent; out.kv = el('now-kv').innerHTML;\n"
@@ -1371,7 +1449,7 @@ class TestSitePage(unittest.TestCase):
             "el('p-vol').value = '400'; el('p-over').checked = true; el('p-over')._listeners.change[0]({target: el('p-over')});\n"
             "out.neckLine = el('now-pred').textContent;\n"
             "el('p-over').checked = false; el('p-vol').value = '';\n"
-            "el('t-plus').click(); out.batch = el('p-go').textContent; out.tally = el('t-target').textContent;\n"
+            "el('t-plus').click(); out.batch = el('p-go')['aria-label']; out.tally = el('t-plan-head').textContent;\n"
             "el('p-go').click(); out.dip = el('dip-label').textContent;\n"
             "el('d-val').value = '1700'; el('d-go').click();\n"
             "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'settings' } }) } });\n"
@@ -1409,7 +1487,7 @@ class TestSitePage(unittest.TestCase):
         self.assertIn("still in the neck", got["neckLine"])
         self.assertEqual(got["batch"], "Batch done")
 
-        self.assertIn("mm fall", got["tally"])
+        self.assertEqual(got["tally"], "Batch ≈ 200 L", "a drain names its advised batch too")
         self.assertIn("draining 200 L", got["dip"])
         self.assertIn("drain", got["dir"])
         self.assertIn("at the brim (brim B = 1800.0 mm)", got["dir"])
@@ -1784,7 +1862,7 @@ console.log(JSON.stringify(out));
             " neck: !el('p-neck-wrap')._classes.has('hidden'), over: el('p-over-text').textContent,"
             " neckText: el('p-neck-text').textContent, advice: el('now-advice').textContent};\n"
             "el('t-plus').click(); el('t-plus').click(); el('t-plus').click();\n"
-            "out.go = el('p-go').textContent;\n"
+            "out.go = el('p-go')['aria-label'];\n"
             "el('p-go').click();\n"
             "out.dip1 = {a: el('dip-label').textContent, b: el('dip-label-b').textContent,"
             " btnA: el('d-go-a').textContent, btnB: el('d-go-b').textContent,"
@@ -3176,18 +3254,18 @@ class TestSitePlan(unittest.TestCase):
             "out.draft = [p2.el('s-plan').innerHTML.split('plan-row').length - 1, p2.el('s-plan-check').textContent];\n"
             "el('s-go').click(); out.err = el('s-err').textContent;\n"
             "el('d-val').value = '10'; el('d-go').click(); el('d-val').value = '10'; el('d-go').click();\n"
-            "out.head = el('t-plan-head').textContent; out.chips = el('t-plan-chips').innerHTML;\n"
+            "out.head = el('t-plan-head').textContent;\n"
             "out.hidden = el('t-plan')._classes.has('hidden');\n"
-            "out.unit0 = el('t-unit').value; out.target = el('t-target').textContent;\n"
+            "out.unit0 = el('t-unit').value; out.target = el('t-count').textContent;\n"
             "el('t-plus').click(); out.unit1 = el('t-unit').value; out.todo = el('t-bar').innerHTML; out.todoLab = el('t-times').innerHTML;\n"
             "el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'settings' } }) } });\n"
             "out.settings = el('set-plan').textContent;\n"
             "out.cfg = JSON.parse(store.get('calib-site:active')).config;\n"
-            "// Without a plan the pour card has no plan block.\n"
+            "// Without a plan the batch line names the advised batch.\n"
             "const s3 = new Map(); const p3 = stub.boot(page, corePath, s3), e3 = p3.el;\n"
             "e3('s-D').value = '1800'; e3('s-L').value = '3000'; e3('s-dip').value = '400'; e3('s-unit').value = '200';\n"
             "e3('s-go').click(); e3('d-val').value = '400'; e3('d-go').click(); e3('d-val').value = '400'; e3('d-go').click();\n"
-            "out.plain = [e3('t-plan')._classes.has('hidden'), e3('t-target').textContent];\n"
+            "out.plain = [e3('t-plan')._classes.has('hidden'), e3('t-plan-head').textContent];\n"
             "console.log(JSON.stringify(out));"
         )
         self.assertEqual(got["none"], "No batch plan yet: tap + group.")
@@ -3200,10 +3278,9 @@ class TestSitePlan(unittest.TestCase):
         self.assertEqual(got["draft"], [5, "16 batches · 10000 L = nominal ✓ · symmetric ✓"])
         self.assertEqual(got["err"], "")
         self.assertFalse(got["hidden"])
-        self.assertEqual(got["head"], "Group 1 of 5 · 300 L · batch 1 of 2 · 1 of 16 in all")
-        self.assertEqual(got["chips"], '<span class="now">1</span><span class="todo">2</span>')
+        self.assertEqual(got["head"], "Batch 300 L · 1/2", "the batch size, then its number in the group")
         self.assertEqual(got["unit0"], "200", "the batch starts with its largest can")
-        self.assertTrue(got["target"].startswith("Plan: 200 + 100 L = 300 L"), got["target"])
+        self.assertEqual(got["target"], "0 / 2 cans · 0 L", "the plan's batch is two cans: 200 + 100 L")
         self.assertEqual(got["unit1"], "100", "the next tap is the 100 L can of the mix")
         self.assertIn('data-state="now"', got["todo"], "the next planned can is the cell in work")
         self.assertIn('aria-hidden="true">100</span>', got["todo"],
@@ -3213,8 +3290,8 @@ class TestSitePlan(unittest.TestCase):
                          " · nominal 10000 L · cans 200, 100 L. Fixed at the start.")
         cfg = got["cfg"]
         self.assertEqual((cfg["canSizes"], cfg["nominal"], len(cfg["plan"])), ([200, 100], 10000, 5))
-        self.assertTrue(got["plain"][0], "no plan: no plan block")
-        self.assertTrue(got["plain"][1].startswith("Advice ≈"), "no plan: the 30 mm advice")
+        self.assertFalse(got["plain"][0], "no plan: the batch line still shows")
+        self.assertRegex(got["plain"][1], r"^Batch ≈ \d+ L$", "no plan: the 30 mm advice, no count")
 
 
 @unittest.skipUnless(NODE, "node is not installed")
@@ -4146,7 +4223,7 @@ function timers(s) {
 const card = () => ({ hidden: el('pour-card')._classes.has('hidden'),
   note: el('t-early')._classes.has('hidden') ? '' : el('t-early').textContent,
   title: el('pour-title').textContent, plus: el('t-plus').disabled, go: el('p-go').disabled,
-  undo: el('t-undo').disabled, opts: el('p-opts')._classes.has('hidden'),
+  undo: el('t-undo').disabled, opts: el('p-opts-rest')._classes.has('hidden'), fold: el('p-opts')._classes.has('hidden'),
   start: !el('pt-start')._classes.has('hidden'), size: el('t-unit').disabled });
 const timer = () => JSON.parse(store.get('calib-site:timer') || '{}');
 """
@@ -4197,7 +4274,8 @@ class TestSiteEarlyTimer(unittest.TestCase):
         self.assertEqual(w["title"], "1 · Next can")
         self.assertIn("The pump can fill the next can now", w["note"])
         self.assertTrue(w["plus"] and w["go"] and w["undo"], "the count and the batch wait for the verdict")
-        self.assertTrue(w["opts"], "Options hide while the dip waits")
+        self.assertTrue(w["opts"], "the batch options hide while the dip waits")
+        self.assertFalse(w["fold"], "the Options fold stays: it holds the can size")
         self.assertTrue(w["start"])
         self.assertFalse(w["size"], "the can size stays editable")
         self.assertTrue(got["early"], "the run knows it started while a dip waited")

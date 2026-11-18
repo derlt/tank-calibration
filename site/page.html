@@ -246,12 +246,41 @@
   .tally-lab .pill { display: inline-block; background: var(--ok-bg); color: var(--ok); border-radius: 6px; padding: 0 0.25rem; font: 600 0.66rem var(--mono); white-space: nowrap; max-width: 100%; overflow: hidden; }
   .tally-lab .pill.none { background: var(--todo-bg); color: var(--todo); }
   button.huge { width: 100%; min-height: 4.8rem; font-size: 1.3rem; margin-top: 0.3rem; }
-  /* The batch action under Undo last can: quiet until the batch's cans are
-     all tapped, then green and bold; amber once a can past the batch. */
-  #p-go.quiet { background: var(--surface); border-color: var(--line); color: var(--muted); }
-  #p-go.ok { background: var(--ok); border-color: var(--ok); color: var(--bg); font-weight: 800; }
-  #p-go.over { background: var(--warn-bg); border-color: var(--warn); color: var(--warn); font-weight: 800; }
-  /* The pour card's foot: the can size block, then the folded extras. */
+  /* A litre limit inside the batch (the shell gap of a fill, the liquid left
+     of a drain): a line across the tally at that litre, and the cans past it
+     hatched in the alarm colour.  The label under the bar names the limit. */
+  .tally-seg { position: relative; }
+  .tally-seg > i.past { background: repeating-linear-gradient(135deg, var(--bad-bg) 0 0.25rem, var(--card) 0.25rem 0.5rem); box-shadow: inset 0 0 0 1px var(--bad); }
+  .tally-seg > i.past > span { color: var(--bad); opacity: 1; }
+  .tally-seg > i.past.done, .tally-seg > i.past.over { background: var(--bad); }
+  .tally-seg > i.past.done > span, .tally-seg > i.past.over > span { color: var(--bg); }
+  .tally-seg > b.lim { position: absolute; top: -0.25rem; bottom: -0.25rem; width: 2px; margin-left: -1px; background: var(--bad); border-radius: 1px; }
+  .tally-lab.lim { display: block; position: relative; height: 1.15rem; }
+  .tally-lab.lim > span { position: absolute; top: 0; white-space: nowrap; font: 700 0.66rem var(--mono); color: var(--bad); }
+  /* The action bar: Undo last can, the big +1, Batch done, as one bar.  The
+     +1 keeps the full height and text size of the big button; Undo and Batch
+     done are the same width at each end.  Batch done is quiet until the
+     batch's cans are all tapped, then green; amber once a can past it. */
+  .actbar { display: flex; margin-top: 0.3rem; border: 1px solid var(--brand); border-radius: 10px; overflow: hidden; }
+  .actbar > button { border: 0; border-radius: 0; margin: 0; min-height: 4.8rem; }
+  .actbar > #t-plus { flex: 1 1 auto; width: auto; min-width: 0; padding: 0.5rem 0.6rem; }
+  .actbar > #t-undo, .actbar > #p-go { flex: 0 0 3.4rem; padding: 0; font-size: 1.45rem; font-weight: 800; }
+  .actbar > #t-undo { border-right: 1px solid var(--line); }
+  .actbar > #p-go { border-left: 1px solid var(--line); }
+  #p-go.quiet { background: var(--surface); color: var(--muted); }
+  #p-go.ok { background: var(--ok); color: var(--bg); }
+  #p-go.over { background: var(--warn-bg); color: var(--warn); }
+  /* The title and the batch line sit close; the warning chip follows the
+     batch and opens its sentence under the line. */
+  #pour-card > h2 { margin-bottom: 0.15rem; }
+  .bline { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+  .bline b { font-size: 0.95rem; }
+  button.vchip { min-height: 1.6rem; padding: 0 0.55rem; border-radius: 999px; font-size: 0.74rem; font-weight: 700; border: 1px solid; }
+  button.vchip.bad, #t-warn-text.bad { color: var(--bad); background: var(--bad-bg); border-color: var(--bad); }
+  button.vchip.warn, #t-warn-text.warn { color: var(--warn); background: var(--warn-bg); border-color: var(--warn); }
+  #t-warn-text { margin: 0.3rem 0 0; padding: 0.3rem 0.5rem; border: 1px solid; border-radius: 8px; font-size: 0.85rem; font-weight: 600; }
+  #t-count { margin-top: 0.3rem; }
+  /* The pour card's foot: the folded extras, the can size first. */
   .sect { border-top: 1px solid var(--line); margin-top: 0.7rem; padding-top: 0.55rem; }
   #p-opts { border-top: 1px solid var(--line); margin-top: 0.65rem; padding-top: 0.1rem; }
   #p-opts > summary { list-style: none; min-height: 2.6rem; display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-weight: 600; }
@@ -259,10 +288,6 @@
   #p-opts > summary::after { content: "▸"; font-size: 0.8rem; transition: transform 0.15s; }
   #p-opts[open] > summary::after { transform: rotate(90deg); }
   #p-opts .optbody { display: grid; gap: 0.45rem; padding-bottom: 0.2rem; }
-  .chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.5rem 0; }
-  .chips span { background: var(--ok-bg); color: var(--ok); border-radius: 6px; padding: 0 0.4rem; font: 600 0.78rem var(--mono); }
-  .chips span.todo { background: var(--todo-bg); color: var(--todo); }
-  .chips span.now { background: var(--info-bg); color: var(--info); box-shadow: inset 0 0 0 2px var(--info); }
   /* The batch plan: one row per group in the setup, the group in work on the pour card. */
   .plan-lab { display: block; font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; }
   .plan-row { display: flex; align-items: center; gap: 0.35rem; margin-top: 0.35rem; flex-wrap: wrap; }
@@ -272,8 +297,7 @@
   .plan-row .plan-mix { flex: 1 1 6rem; min-width: 0; font-family: var(--mono); }
   .plan-row button { min-height: 2.3rem; min-width: 2.3rem; padding: 0.2rem 0.5rem; }
   #s-plan-check.ok { color: var(--ok); font-weight: 650; }
-  .plan-live { border-bottom: 1px solid var(--line); padding-bottom: 0.5rem; margin-bottom: 0.6rem; }
-  .plan-live #t-plan-head { font-size: 0.95rem; }
+  .plan-live { margin: 0; }
   .sizes { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem; }
   .sizes button { min-height: 2.3rem; padding: 0.2rem 0.7rem; font-size: 0.9rem; background: var(--surface); color: var(--brand-ink); }
   .sizes button[aria-pressed=true] { background: var(--brand); color: #fff; }
@@ -381,7 +405,7 @@
     .grid { grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: 0.5rem; }
     #setup > .grid:first-of-type > label:first-child, #s-b-wrap .grid > label:first-child, #set-campaign .grid > label:first-child { grid-column: 1 / -1; }
     /* The main action of a card fills the width: one thumb, one target. */
-    #s-go, #p-go, #set-save, #set-noise-save, #r-go { flex: 1 1 100%; }
+    #s-go, #set-save, #set-noise-save, #r-go { flex: 1 1 100%; }
     #level-actions > button, #files .row > button { flex: 1 1 auto; }
     .verdict { padding: 0.75rem 0.8rem; }
     .verdict h3 { font-size: 1.15rem; }
@@ -491,34 +515,19 @@
   <!-- ===================================================== live -->
   <section id="live" class="hidden">
     <p id="fin-banner" class="pred hidden"></p>
-    <details class="card" id="now-card" open>
-      <summary><h2>Now</h2><span class="now-sum" id="now-sum"></span></summary>
-      <div class="kv" id="now-kv"></div>
-      <p id="now-pred" class="pred"></p>
-      <p id="now-advice" style="margin:0.6rem 0 0;font-weight:650"></p>
-      <div id="now-eta" class="eta"></div>
-      <button class="secondary small hidden" id="eta-use"></button>
-      <p id="now-drift" class="muted" style="margin:0.3rem 0 0"></p>
-      <div class="row" id="now-fin-wrap" style="margin-top:0.5rem">
-        <button class="secondary small" id="now-fin-a"></button>
-        <button class="secondary small" id="now-fin-b"></button>
-      </div>
-      <p id="now-fin-note" class="muted" style="margin:0.3rem 0 0"></p>
-    </details>
 
-    <div class="card" id="pour-card" style="margin-top:0.8rem">
+    <div class="card" id="pour-card">
       <h2 id="pour-title">1 · Pour</h2>
       <p class="muted hidden" id="t-early" style="margin-top:0"></p>
       <div id="tally">
         <div class="plan-live hidden" id="t-plan">
-          <div id="t-plan-head"></div>
-          <div class="chips" id="t-plan-chips"></div>
+          <div class="bline"><b id="t-plan-head"></b><button class="vchip hidden" id="t-warn" aria-expanded="false" aria-controls="t-warn-text"></button></div>
+          <p class="hidden" id="t-warn-text"></p>
           <p class="muted" id="t-plan-note" style="margin:0"></p>
         </div>
-        <div class="big-num" id="t-count" style="margin-top:0.6rem"></div>
+        <div class="big-num" id="t-count"></div>
         <div class="tally-seg" id="t-bar" role="progressbar" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div>
         <div class="tally-lab" id="t-times" role="group" aria-label="Finish times"></div>
-        <p class="muted" id="t-target" style="margin:0"></p>
         <div class="timer" id="pt">
           <svg class="pour-anim" id="pt-anim" viewBox="0 0 120 90" aria-hidden="true">
             <defs>
@@ -537,7 +546,7 @@
           </svg>
           <div>
             <div class="clock" id="pt-clock">—:—</div>
-            <div class="muted" id="pt-status"></div>
+            <div class="sr-only" id="pt-status"></div>
             <div class="tally-bar"><i id="pt-bar"></i></div>
           </div>
           <div class="acts">
@@ -548,50 +557,67 @@
             <button class="danger small hidden" id="pt-stop">Stop timer</button>
           </div>
         </div>
-        <p class="muted vb" id="t-help">Start the fill timer when you start the pump. The alarm rings before the can is full: close the valve. Tap <b>+1 can poured</b> when the can is full. Emptying the can into the tank has no timer. Each can keeps the size shown below, so one batch can mix sizes. The count is saved after each tap. One dip follows the batch.</p>
-        <button class="huge" id="t-plus"></button>
-        <div class="row" style="margin-top:0.5rem">
-          <button class="secondary small" id="t-undo">Undo last can</button>
-        </div>
-        <button id="p-go" style="margin-top:0.5rem">Poured</button>
-        <div class="sect" id="t-size">
-          <div class="row" style="align-items:end;flex-wrap:nowrap">
-            <label style="min-width:0;flex:1 1 0">Can size for the next can, L<input id="t-unit" type="number" inputmode="decimal" step="0.5"></label>
-            <button class="secondary hidden" id="t-dec"></button>
-            <button class="secondary hidden" id="t-inc"></button>
-          </div>
-          <div class="sizes" id="t-units"></div>
+        <p class="muted vb" id="t-help">Start the fill timer when you start the pump. The alarm rings before the can is full: close the valve. Tap <b>+1 can poured</b> when the can is full: ↶ removes the last can, ✓ closes the batch. Emptying the can into the tank has no timer. Each can keeps the size set in Options, so one batch can mix sizes. The count is saved after each tap. One dip follows the batch.</p>
+        <div class="actbar" id="t-act">
+          <button class="secondary" id="t-undo" aria-label="Undo last can" title="Undo last can">↶</button>
+          <button class="huge" id="t-plus"></button>
+          <button class="quiet" id="p-go" aria-label="Poured" title="Poured">✓</button>
         </div>
         <details id="p-opts">
           <summary>Options</summary>
           <div class="optbody">
-            <label class="check"><input type="checkbox" id="t-part"> <span id="t-part-text">last can not fully poured</span></label>
-            <div class="row">
-              <label class="check"><input type="checkbox" id="p-over"> <span id="p-over-text">liquid reached the neck / overflowed</span></label>
-            </div>
-            <div class="row hidden" id="p-neck-wrap">
-              <label class="check"><input type="checkbox" id="p-neck"> <span id="p-neck-text">tank A: level still in the neck</span></label>
-            </div>
-            <div class="row">
-              <label class="check"><input type="checkbox" id="p-unknown"> <span id="p-unknown-text">whole pour unknown (?)</span></label>
-              <label class="check"><input type="checkbox" id="p-extra"> plus an unknown extra (N+?)</label>
-            </div>
-            <label>Note (optional)<input id="p-note"></label>
-            <div class="sect">
-              <p class="muted" id="p-vol-title" style="margin:0 0 0.35rem">Enter litres instead</p>
-              <div class="row" style="align-items:end">
-                <label style="min-width:9rem"><span id="p-vol-label">Pour, L</span><input id="p-vol" class="big" type="number" inputmode="decimal"></label>
-                <button class="secondary small" id="p-advice">Use advice</button>
-                <button class="secondary small" id="p-minus">− unit</button>
-                <button class="secondary small" id="p-plus">+ unit</button>
+            <div id="t-size">
+              <div class="row" style="align-items:end;flex-wrap:nowrap">
+                <label style="min-width:0;flex:1 1 0">Can size for the next can, L<input id="t-unit" type="number" inputmode="decimal" step="0.5"></label>
+                <button class="secondary hidden" id="t-dec"></button>
+                <button class="secondary hidden" id="t-inc"></button>
               </div>
-              <p class="muted" id="p-vol-hint" style="margin:0.35rem 0 0">Typed litres replace the batch volume; the can taps and times stay in the note.</p>
+              <div class="sizes" id="t-units"></div>
+            </div>
+            <div class="optbody" id="p-opts-rest">
+              <label class="check"><input type="checkbox" id="t-part"> <span id="t-part-text">last can not fully poured</span></label>
+              <div class="row">
+                <label class="check"><input type="checkbox" id="p-over"> <span id="p-over-text">liquid reached the neck / overflowed</span></label>
+              </div>
+              <div class="row hidden" id="p-neck-wrap">
+                <label class="check"><input type="checkbox" id="p-neck"> <span id="p-neck-text">tank A: level still in the neck</span></label>
+              </div>
+              <div class="row">
+                <label class="check"><input type="checkbox" id="p-unknown"> <span id="p-unknown-text">whole pour unknown (?)</span></label>
+                <label class="check"><input type="checkbox" id="p-extra"> plus an unknown extra (N+?)</label>
+              </div>
+              <label>Note (optional)<input id="p-note"></label>
+              <div class="sect">
+                <p class="muted" id="p-vol-title" style="margin:0 0 0.35rem">Enter litres instead</p>
+                <div class="row" style="align-items:end">
+                  <label style="min-width:9rem"><span id="p-vol-label">Pour, L</span><input id="p-vol" class="big" type="number" inputmode="decimal"></label>
+                  <button class="secondary small" id="p-advice">Use advice</button>
+                  <button class="secondary small" id="p-minus">− unit</button>
+                  <button class="secondary small" id="p-plus">+ unit</button>
+                </div>
+                <p class="muted" id="p-vol-hint" style="margin:0.35rem 0 0">Typed litres replace the batch volume; the can taps and times stay in the note.</p>
+              </div>
             </div>
           </div>
         </details>
       </div>
       <p id="p-err" class="error"></p>
     </div>
+
+    <details class="card" id="now-card" style="margin-top:0.8rem" open>
+      <summary><h2>Now</h2><span class="now-sum" id="now-sum"></span></summary>
+      <div class="kv" id="now-kv"></div>
+      <p id="now-pred" class="pred"></p>
+      <p id="now-advice" style="margin:0.6rem 0 0;font-weight:650"></p>
+      <div id="now-eta" class="eta"></div>
+      <button class="secondary small hidden" id="eta-use"></button>
+      <p id="now-drift" class="muted" style="margin:0.3rem 0 0"></p>
+      <div class="row" id="now-fin-wrap" style="margin-top:0.5rem">
+        <button class="secondary small" id="now-fin-a"></button>
+        <button class="secondary small" id="now-fin-b"></button>
+      </div>
+      <p id="now-fin-note" class="muted" style="margin:0.3rem 0 0"></p>
+    </details>
 
     <div class="card hidden" id="dip-card" style="margin-top:0.8rem">
       <h2 id="dip-title">2 · Dip</h2>
@@ -1621,12 +1647,22 @@
     S.untap(); save(); followPlan();
   }));
   $("t-part").addEventListener("change", () => render());
+  $("t-warn").addEventListener("click", () => {
+    const t = $("t-warn").dataset.key || null;
+    warnOpen = warnOpen === t ? null : t;
+    render();
+  });
   $("p-go").addEventListener("click", guard("p-err", () => {
     // Typed litres in Options replace the batch volume; the can taps stay in
     // the note and in the time trend.  A '?' or 'N+?' tick wins as usual.
     const vol = num("p-vol");
     const typed = $("p-unknown").checked ? "?"
       : vol > 0 ? ($("p-extra").checked ? `${vol}+?` : String(vol)) : null;
+    // Batch done sits next to +1: below the batch it asks first, unless
+    // Options says why (typed litres, a part can).
+    const n = S.cans();
+    if (n && n < tallyCans && typed == null && !$("t-part").checked
+      && !confirm(tr(`Only ${n} of ${tallyCans} cans. Close the batch?`))) return;
     if (S.cans()) {
       const o = Object.assign({ partial: $("t-part").checked, note: $("p-note").value.trim() }, overNeck());
       if (typed != null) o.volume = typed;
@@ -1910,8 +1946,7 @@
     $("hdr-phase").textContent = (st.learning ? `learning ${st.intervals}/${S.cfg.learnN}` : "checking")
       + (isDrain() && !isTransfer() ? " · drain" : "")
       + (!isTransfer() && S.finished ? " · finished" : "");
-    $("hdr-count").textContent = `${S.levels.length} level${S.levels.length === 1 ? "" : "s"}`
-      + (st.redips ? ` · ${st.redips} extra dip${st.redips === 1 ? "" : "s"}` : "");
+    $("hdr-count").textContent = `${S.levels.length} level${S.levels.length === 1 ? "" : "s"}`;
     renderLive(st); renderLog(); renderShell(st);
     renderTiles();
   }
@@ -2648,6 +2683,9 @@
     settingsSig = "";
   }
 
+  // The batch size in cans of the last tally (Batch done asks below it), and
+  // the warning chip whose sentence is open (it closes when the chip changes).
+  let tallyCans = 0, warnOpen = null;
   function renderTally(adv) {
     const def = unit(), n = S.cans();
     $("tally").classList.remove("hidden");
@@ -2668,7 +2706,6 @@
       $("t-unit").value = String(planned[0]); $("t-unit").dataset.set = "1";
       keepUnit();
     }
-    renderPlanLive();
     const act = activeUnit(), part = $("t-part").checked && n > 0;
     const step = def > 0 ? String(Math.round(1000 * def) / 1000) : null;
     for (const [id, sign, word] of [["t-dec", "−", "less"], ["t-inc", "+", "more"]]) {
@@ -2693,10 +2730,6 @@
         cans = i + 1;
       }
     }
-    // The advice in whole cans of one size, when it divides evenly: the note
-    // says "= 2 × 200 L" only when that arithmetic holds.
-    const per = adv && cans > 0 ? adv.target / cans : 0;
-    const even = !planned && cans > 1 && per > 0 && Math.abs(per - Math.round(per)) < 0.05;
     const tally = cans > 1 ? `${n} / ${cans} cans`
       : cans === 1 && n > 1 ? `${n} / 1 can`
       : `${n} can${n === 1 ? "" : "s"}`;
@@ -2730,91 +2763,129 @@
     // narrower than a time (about 46 px) drops its time pill, and one
     // narrower than its size drops the size; the cell's tooltip keeps both,
     // and the time line shows the last time alone.
-    const sizeOf = (i) => { const r = i < n ? list[i].u : planned && planned[i] ? planned[i] : act; return r > 0 ? r : 1; };
-    let sum = 0;
-    for (let i = 0; i < total; i++) sum += sizeOf(i);
+    const rawOf = (i) => i < n ? list[i].u : planned && planned[i] ? planned[i] : act;
+    const sizeOf = (i) => { const r = rawOf(i); return r > 0 ? r : 1; };
+    let sum = 0, litres = 0;
+    for (let i = 0; i < total; i++) { sum += sizeOf(i); litres += rawOf(i) > 0 ? rawOf(i) : 0; }
+    // The volume warning: the batch is the larger of the tapped litres and
+    // the cans of the tally, so it shows before the can that passes the limit.
+    const vw = volumeWarn(adv, vol, Math.max(litres, adv && adv.target > 0 ? adv.target : 0));
+    const limit = vw && vw.limit != null && total > 0 && vw.limit < litres ? vw.limit : null;
     const room = Math.min(window.innerWidth || 360, 760) - 56 - 3 * Math.max(total - 1, 0);
-    let cells = "", times = "", hidden = false, lastT = null;
+    let cells = "", times = "", hidden = false, lastT = null, from = 0, at = null;
     for (let i = 0; i < total; i++) {
       const over = cans > 0 && i >= cans;
       const state = i < n ? (over ? "over" : "done") : i === n ? "now" : "todo";
-      const raw = i < n ? list[i].u : planned && planned[i] ? planned[i] : act;
+      const raw = rawOf(i);
       const size = sizeOf(i), w = sum ? room * size / sum : room;
       const t = i < n && list[i].t ? hhmm(list[i].t) : null;
       if (t) lastT = t;
       const fitT = w >= 46, fitS = w >= 22;
       if (t && !fitT) hidden = true;
+      // A can whose litres end past the limit: hatched (counted: solid red).
+      const lit = raw > 0 ? raw : 0, past = limit != null && from + lit > limit + 1e-9;
+      if (limit != null && at == null && past) at = { i, frac: lit > 0 ? (limit - from) / lit : 0, before: from };
+      from += lit;
+      const cls = [state === "todo" ? "" : state, past ? "past" : ""].filter(Boolean).join(" ");
       const tip = `${raw > 0 ? f(raw, 0) + " L" : "—"}${t ? " · " + t : ""}`;
-      cells += `<i class="${state === "todo" ? "" : state}" data-state="${state}" style="flex:${size} 1 0" title="${esc(tip)}">`
+      cells += `<i class="${cls}" data-state="${state}"${past ? ' data-past="1"' : ""} style="flex:${size} 1 0" title="${esc(tip)}">`
         + (fitS ? `<span aria-hidden="true">${raw > 0 ? f(raw, 0) : "—"}</span>` : "") + `${state === "now" ? "<b></b>" : ""}</i>`;
       times += `<div style="flex:${size} 1 0">`
         + (t && fitT ? `<span class="pill">${t}</span>` : state === "now" && fitT ? `<span class="pill none" aria-hidden="true">—</span>` : "")
         + `</div>`;
     }
-    seg.innerHTML = cells;
+    // The limit line, placed by litres across the cells.  The cells share the
+    // bar less the 3 px gaps, each as wide as its share of the flex sum.
+    let line = "";
+    if (at) {
+      let flexBefore = 0;
+      for (let i = 0; i < at.i; i++) flexBefore += sizeOf(i);
+      const share = (flexBefore + at.frac * sizeOf(at.i)) / sum;
+      const pos = `calc(${(100 * share).toFixed(3)}% - ${(share * 3 * Math.max(total - 1, 0)).toFixed(2)}px + ${3 * at.i}px)`;
+      line = `<b class="lim" style="left:${pos}" aria-hidden="true"></b>`;
+      // The label stays inside the bar's width: centred on the line, or held
+      // at an end when the line is near it.
+      const place = share > 0.75 ? "right:0" : share < 0.25 ? `left:${pos}` : `left:${pos};transform:translateX(-50%)`;
+      lab.innerHTML = `<span style="${place}">${esc(vw.label)}</span>`;
+    }
+    seg.innerHTML = cells + line;
+    lab.classList.toggle("lim", !!line);
     // Too crowded for a time under each can: one pill with the last time.
-    lab.innerHTML = hidden && lastT ? `<div style="flex:1 1 auto;text-align:left"><span class="pill">last ${lastT}</span></div>` : times;
-    let note = "", warn = false;
-    // The recommended batch: the plan's next batch in its cans, or the
-    // 30 mm advice.  The warnings are the same for both.
-    const mixT = pb && pb.mix ? `${C.mixText(pb.mix)} L = ` : "";
-    const rec = (tail) => (pb
-      ? `Plan: ${mixT}${f(pb.size, 0)} L` + (transfer ? "." : ` (≈ ${f(adv.travel, 0)} mm ${drain ? "fall" : "rise"}).`) + (adv.riseNote ? " " + adv.riseNote : "")
-      : `Advice ≈ ${f(adv.target, 0)} L` + (even ? ` = ${cans} × ${f(Math.round(per), 0)} L` : "") + tail);
-    const more = cans && n > cans ? ` ${n - cans} more than the ${pb ? "plan" : "advice"}.` : "";
-    if (transfer && adv && adv.out && adv.in) {
-      const aO = adv.out, aI = adv.in;
-      if (vol > aO.left) { note = `${f(vol, 0)} L is more than tank A's liquid (≈ ${f(aO.left, 0)} L): the pump will lose suction. Tick the part can.`; warn = true; }
-      else if (vol > aI.gap) { note = `${f(vol, 0)} L is more than tank B's shell gap (≈ ${f(aI.gap, 0)} L): B overflows. This is the final batch — tick "tank B reached the neck".`; warn = true; }
-      else {
-        if (aO.bottom) { note += "Tank A near the bottom: the pump may lose suction; a part can is fine (N+?). "; warn = true; }
-        if (aI.halve) { note += "Tank B near the brim: small batches. "; warn = true; }
-        note += rec(" (≈ 30 mm in each tank).") + (pb ? more : "");
-      }
-    } else if (adv && drain) {
-      note = rec(" (≈ 30 mm fall).");
-      if (vol > adv.left) { note = `${f(vol, 0)} L is more than the liquid left (≈ ${f(adv.left, 0)} L): the pump will lose suction. Tick the part can.`; warn = true; }
-      else if (adv.bottom) { note = "Near the bottom: the pump may lose suction; a part can is fine (N+?). " + note; warn = true; }
-      else note += more;
-    } else if (adv) {
-      note = rec(" (≈ 30 mm rise).");
-      if (vol > adv.gap) { note = `${f(vol, 0)} L is more than the shell gap (≈ ${f(adv.gap, 0)} L): expect an overflow.`; warn = true; }
-      else if (adv.halve) { note = "Near the brim: small batches. " + note; warn = true; }
-      else note += more;
-    }
-    if (simple() && !warn) {
-      const tgt = adv ? adv.target : null;
-      note = pb && pb.mix ? `Target: ${C.mixText(pb.mix)} L`
-        : tgt ? `Target: ${even ? `${cans} × ${f(Math.round(per), 0)} L` : `≈ ${f(tgt, 0)} L`}` : "";
-    }
-    $("t-target").textContent = note;
-    $("t-target").className = warn ? "error" : "muted";
+    // While a limit shows, its label takes the line under the bar.
+    if (!line) lab.innerHTML = hidden && lastT ? `<div style="flex:1 1 auto;text-align:left"><span class="pill">last ${lastT}</span></div>` : times;
+    renderPlanLive(adv, vw);
 
     $("t-undo").disabled = n === 0;
     $("t-part").disabled = n === 0;
-    // The action under Undo last can: short, and coloured by the batch.  A
-    // reached target is green and bold, a can past it amber, below it quiet.
-    const go = $("p-go");
-    go.textContent = n ? "Batch done" : transfer ? "Pumped" : drain ? "Drained" : "Poured";
-    go.classList.toggle("ok", cans > 0 && n === cans);
+    // Batch done at the end of the bar: quiet below the batch, green when
+    // its cans are all counted, amber past it.  With no can counted it
+    // closes a typed or unknown pour (Options), and is green when one is set.
+    const go = $("p-go"), typed = $("p-unknown").checked || num("p-vol") > 0;
+    const goWord = n ? "Batch done" : transfer ? "Pumped" : drain ? "Drained" : "Poured";
+    go.setAttribute("aria-label", goWord);
+    go.setAttribute("title", goWord);
+    const ok = (cans > 0 && n === cans) || (n === 0 && typed);
+    go.classList.toggle("ok", ok);
     go.classList.toggle("over", cans > 0 && n > cans);
-    go.classList.toggle("quiet", !(cans > 0 && n >= cans));
-    go.disabled = !(n > 0 || $("p-unknown").checked || num("p-vol") > 0);
+    go.classList.toggle("quiet", !ok && !(cans > 0 && n > cans));
+    go.disabled = !(n > 0 || typed);
+    tallyCans = cans;
     nextCanMode(earlyTimer());
     tickPour(Date.now());
   }
 
   /**
+   * The volume warning of the batch in work, or null.  Red: a litre limit
+   * inside the batch — the shell gap of a fill, the liquid left of a drain,
+   * for a transfer the nearer of tank A's liquid and tank B's gap.  Amber:
+   * near the brim (fill) or the bottom (drain).  `batch` is the larger of
+   * the tapped litres and the planned or advised batch, so the warning shows
+   * before the can that passes the limit.
+   */
+  function volumeWarn(adv, vol, batch) {
+    if (!adv) return null;
+    const need = Math.max(vol, batch), lims = [];
+    const ok = (x) => typeof x === "number" && isFinite(x);
+    if (isTransfer()) {
+      if (adv.out && ok(adv.out.left)) lims.push({ L: adv.out.left, tag: "tank A left", short: "suction",
+        text: (v, x) => `${v} L is more than tank A's liquid (≈ ${x} L): the pump will lose suction. Tick the part can.` });
+      if (adv.in && ok(adv.in.gap)) lims.push({ L: adv.in.gap, tag: "tank B gap", short: "overflow",
+        text: (v, x) => `${v} L is more than tank B's shell gap (≈ ${x} L): B overflows. This is the final batch — tick "tank B reached the neck".` });
+    } else if (isDrain()) {
+      if (ok(adv.left)) lims.push({ L: adv.left, tag: "left", short: "suction",
+        text: (v, x) => `${v} L is more than the liquid left (≈ ${x} L): the pump will lose suction. Tick the part can.` });
+    } else if (ok(adv.gap)) {
+      lims.push({ L: adv.gap, tag: "gap", short: "overflow",
+        text: (v, x) => `${v} L is more than the shell gap (≈ ${x} L): expect an overflow.` });
+    }
+    const hit = lims.filter((l) => need > l.L).sort((a, b) => a.L - b.L)[0];
+    if (hit) {
+      const x = f(Math.max(0, hit.L), 0), label = `${hit.tag} ≈ ${x} L`;
+      return { tone: "bad", chip: `⚠ ${hit.short} · ${label}`, text: hit.text(f(need, 0), x), limit: Math.max(0, hit.L), label };
+    }
+    const parts = [];
+    if (isTransfer()) {
+      if (adv.out && adv.out.bottom) parts.push(["⚠ A near the bottom", "Tank A near the bottom: the pump may lose suction; a part can is fine (N+?)."]);
+      if (adv.in && adv.in.halve) parts.push(["⚠ B near the brim", "Tank B near the brim: small batches."]);
+    } else if (isDrain()) {
+      if (adv.bottom) parts.push(["⚠ near the bottom", "Near the bottom: the pump may lose suction; a part can is fine (N+?)."]);
+    } else if (adv.halve) parts.push(["⚠ near the brim", "Near the brim: small batches."]);
+    if (!parts.length) return null;
+    return { tone: "warn", chip: parts.map((p) => p[0]).join(" · "), text: parts.map((p) => p[1]).join(" "), limit: null, label: "" };
+  }
+
+  /**
    * The pour card while a dip waits: the fill timer and the can size work,
-   * so the pump can fill the next can.  The count, the batch and its options
-   * wait for the verdict: the can is emptied into the tank after the dip.
-   * The card moves under the dip card, and back above it after the verdict.
+   * so the pump can fill the next can.  The count, the batch and the other
+   * options wait for the verdict: the can is emptied into the tank after the
+   * dip.  The card moves under the dip card, and back above it after the
+   * verdict.
    */
   function nextCanMode(on) {
     placePourCard(on);
     const note = $("t-early");
     note.classList.toggle("hidden", !on);
-    $("p-opts").classList.toggle("hidden", on);
+    $("p-opts-rest").classList.toggle("hidden", on);
     if (!on) { note.textContent = ""; return; }
     $("pour-title").textContent = "1 · Next can";
     note.textContent = isTransfer()
@@ -2822,43 +2893,55 @@
       : "The dip waits. The pump can fill the next can now. Empty it into the tank after the dip: +1 can and Batch done open when the dip is decided.";
     for (const id of ["t-plus", "t-undo", "t-part", "p-go"]) $(id).disabled = true;
   }
-  /** The pour card above the dip card (normal), or last on the Live tab (next-can mode). */
+  /**
+   * The pour card above the dip card (normal), or last on the Live tab
+   * (next-can mode).  The Now card follows the pour card.
+   */
   let pourBelow = false;
   function placePourCard(below) {
     if (below === pourBelow) return;
     pourBelow = below;
-    const live = $("live"), card = $("pour-card");
+    const live = $("live"), card = $("pour-card"), now = $("now-card");
     if (!live.insertBefore) return;   // the test stub has no DOM tree
-    if (below) live.appendChild(card); else live.insertBefore(card, $("dip-card"));
+    if (below) { live.appendChild(card); live.appendChild(now); }
+    else { live.insertBefore(card, $("dip-card")); live.insertBefore(now, $("dip-card")); }
   }
 
   /**
-   * The batch plan on the pour card: the group in work and the batch in it,
-   * one chip per batch of that group only (the small batches at the bottom
-   * and at the top are two groups), and why a count differs from the plan.
+   * The batch line under the pour card's title: the batch size and its
+   * number in the group in work (`Batch 800 L · 3/8`), the advised batch
+   * without a plan (`Batch ≈ 300 L`), and the volume warning chip.  The
+   * small batches at the bottom and at the top are two groups.  Verbose
+   * mode adds why a count differs from the plan.
    */
-  function renderPlanLive() {
+  function renderPlanLive(adv, vw) {
     const st = S && S.planNow ? S.planNow() : null;
-    $("t-plan").classList.toggle("hidden", !st);
-    if (!st) return;
-    const b = st.batch, sm = simple();
-    if (!b) {
-      $("t-plan-head").textContent = `Batch plan complete: ${st.poured} batches.`;
-      $("t-plan-chips").innerHTML = "";
-      $("t-plan-note").textContent = sm ? "" : isTransfer()
+    const b = st ? st.batch : null, sm = simple();
+    const head = b ? `Batch ${f(b.size, 0)} L · ${b.inGroup}/${b.count}` + (b.count !== b.planned ? ` (plan ${b.planned})` : "")
+      : st ? `Batch plan complete: ${st.poured} batches.`
+        : adv && adv.target > 0 ? `Batch ≈ ${f(adv.target, 0)} L` : "";
+    $("t-plan").classList.toggle("hidden", !head && !vw);
+    $("t-plan-head").textContent = head;
+    const chip = $("t-warn"), text = $("t-warn-text");
+    const open = !!vw && warnOpen === vw.chip;
+    for (const tone of ["bad", "warn"]) {
+      chip.classList.toggle(tone, !!vw && vw.tone === tone);
+      text.classList.toggle(tone, !!vw && vw.tone === tone);
+    }
+    chip.classList.toggle("hidden", !vw);
+    chip.textContent = vw ? vw.chip : "";
+    chip.dataset.key = vw ? vw.chip : "";
+    chip.setAttribute("aria-expanded", String(open));
+    text.classList.toggle("hidden", !open);
+    text.textContent = vw ? vw.text : "";
+    let note = "";
+    if (!st) note = "";
+    else if (!b) {
+      note = isTransfer()
         ? "The running shells have no room for another batch: tank A is at the bottom or tank B at the brim."
         : isDrain() ? "The running shell puts the level at the bottom: drain on until the pump loses suction."
           : "The running shell puts the level at the brim: the last pour overflows on purpose (§3.7).";
-      return;
-    }
-    $("t-plan-head").textContent = `Group ${b.number} of ${b.groups} · ${f(b.size, 0)} L · `
-      + (b.count !== b.planned ? `batch ${b.inGroup} of ${b.count} (plan ${b.planned})` : `batch ${b.inGroup} of ${b.count}`)
-      + (sm ? "" : ` · ${b.index} of ${st.total} in all`);
-    let chips = "";
-    for (let i = 1; i <= b.count; i++) chips += `<span class="${i < b.inGroup ? "" : i === b.inGroup ? "now" : "todo"}">${i}</span>`;
-    $("t-plan-chips").innerHTML = chips;
-    let note = "";
-    if (st.adapted && st.past) {
+    } else if (st.adapted && st.past) {
       note = `The running shell puts the tank at ≈ ${f(st.capacity, 0)} L`
         + (st.nominal ? ` (nominal ${f(st.nominal, 0)} L)` : "") + ": the end of the plan changes.";
       st.groups.forEach((g, i) => {
@@ -2871,8 +2954,9 @@
     } else if (!st.past) {
       note = "After the halfway level, the page recounts the batches still to come from the litres the running shell says are left.";
     }
-    // Simple mode: the head line already shows a changed count (`batch 5 of 9 (plan 8)`).
+    // Simple mode: the batch line already shows a changed count (`3/9 (plan 8)`).
     $("t-plan-note").textContent = sm ? "" : note;
+    $("t-plan-note").classList.toggle("hidden", sm || !note);
   }
 
   /** With a plan, each tap moves the size field to the next planned can of the batch. */
@@ -2902,7 +2986,7 @@
     $("p-over-text").textContent = drain ? "level still in the neck" : "liquid reached the neck / overflowed";
     $("t-help").innerHTML = drain
       ? "Start the fill timer when you start the pump. The pump fills the can <b>from the tank</b>. The alarm rings before the can is full: close the valve at the calibrated mark. Tap <b>+1 can full</b> when the can is full. A spill is litres that left the tank but not the record. Keep the hose in the same state at every dip. When the pump loses suction, tap the part can and tick <i>pump lost suction: last can part</i>, or enter its measured litres instead. The count is saved after each tap. One dip follows the batch."
-      : "Start the fill timer when you start the pump. The alarm rings before the can is full: close the valve. Tap <b>+1 can poured</b> when the can is full. Emptying the can into the tank has no timer. Each can keeps the size shown below, so one batch can mix sizes. The count is saved after each tap. One dip follows the batch.";
+      : "Start the fill timer when you start the pump. The alarm rings before the can is full: close the valve. Tap <b>+1 can poured</b> when the can is full: ↶ removes the last can, ✓ closes the batch. Emptying the can into the tank has no timer. Each can keeps the size set in Options, so one batch can mix sizes. The count is saved after each tap. One dip follows the batch.";
   }
 
   // ------------------------------------------------------------ settings
