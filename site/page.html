@@ -499,6 +499,7 @@
 
     <div class="card" id="pour-card" style="margin-top:0.8rem">
       <h2 id="pour-title">1 · Pour</h2>
+      <p class="muted hidden" id="t-early" style="margin-top:0"></p>
       <div id="tally">
         <div class="plan-live hidden" id="t-plan">
           <div id="t-plan-head"></div>
@@ -1136,6 +1137,25 @@
   }
   /** A drain campaign (reverse strapping): the level falls, the cans fill from the tank. */
   function isDrain() { return !!S && S.cfg.dir < 0; }
+  /**
+   * The next can may fill while a dip still waits, when the pump does not
+   * draw from a tank that waits: a fill (the can fills from outside the
+   * tank), or a transfer whose tank A is decided or finished (only B waits).
+   * A drain draws from the dipped tank, and a transfer draws from A: while
+   * that tank waits, the timer stays locked.  The can is counted, and
+   * emptied, after the dip: +1 can and Batch done stay locked.
+   */
+  function earlyTimer() {
+    if (!S || !pending()) return false;
+    if (isTransfer()) {
+      if (S.out.finished) return true;
+      const a = S.out.current();
+      return !(a && a.state === "pending");
+    }
+    return !isDrain();
+  }
+  /** A fill timer runs, or waits for Shortcuts. */
+  function timerOn() { return !!(T.pour || T.wait); }
 
   // ------------------------------------------------------------ tabs
   const TABS = ["live", "log", "shell", "settings", "files", "replay", "help"];
@@ -1536,8 +1556,10 @@
     const now = Date.now(), u = activeUnit();
     if (!(u > 0)) throw new Error("Enter the can size in litres.");
     if (S.quickTap(now) && !confirm(tr(`Less than ${S.cfg.tapGap} s since the last can. Is this a new can?`))) return;
-    // The fill timer of this can, when it ran: the time trend learns the fill and drain times from it.
-    S.tap(now, u, T.pour && T.pour.size === u && T.pour.start <= now ? T.pour.start : null); save();
+    // The fill timer of this can, when it ran: the time trend learns the fill
+    // and drain times from it.  A timer started while a dip waited gives no
+    // fill time: the can waited full for the verdict.
+    S.tap(now, u, T.pour && !T.pour.early && T.pour.size === u && T.pour.start <= now ? T.pour.start : null); save();
     followPlan();
     // The can is counted: its pour timer and alarm are done.
     if (T.pour || T.wait) { delete T.pour; delete T.wait; saveTimer(); }
@@ -1663,9 +1685,38 @@
   }
 
   // ------------------------------------------------------------ level actions
+  /**
+   * Transfer: an action opens tank A again while a fill timer runs.  The
+   * pump draws the can from A, so A's level moves under the new reading:
+   * the operator stops the pump first.  False: the action does not go on.
+   */
+  function stopPumpForA(opensA) {
+    if (!isTransfer() || !opensA || !timerOn()) return true;
+    if (!confirm(tr("The fill timer runs: the pump draws from tank A. Stop the pump and the timer?"))) return false;
+    delete T.pour; delete T.wait; saveTimer(); stopAlarm();
+    return true;
+  }
+  /** Transfer: Undo last entry takes back a reading of tank A. */
+  function undoOpensA() {
+    if (S.cans()) return false;
+    const order = (S.lastDip === "in" ? ["in", "out"] : ["out", "in"]).filter((k) => !S[k].finished);
+    for (const k of order) { const L = S[k].current(); if (L && L.dips.length) return k === "out"; }
+    return false;
+  }
+  /**
+   * An early timer whose tank waits again by a path that did not ask (a
+   * recount, a reload of an older state): the timer stops.
+   */
+  function dropStaleTimer() {
+    const run = T.pour || T.wait;
+    if (!run || !run.early || !pending() || earlyTimer()) return;
+    delete T.pour; delete T.wait; saveTimer();
+  }
+
   $("a-redip").addEventListener("click", () => {
     const L = isTransfer() ? S[S.liveKey()].current() : S.current();
     if (!L) return;
+    if (!stopPumpForA(isTransfer() && S.liveKey() === "out")) return;
     L.state = "pending"; L.verdict = Object.assign({}, L.verdict || {}, { status: "REDIP", hidden: true, color: "warn", title: "Extra reading", message: "The earlier readings are hidden.", advice: "Dip again." });
     if (isTransfer()) S._pair();   // the pair judged a decided level: it leaves while this one is open again
     save(); render(); $("d-val").focus();
@@ -1687,6 +1738,7 @@
       ? "Remove the last reading (the tank dipped last), or the last batch when it has no readings?"
       : S.cans() ? "Remove the last can from the count?" : "Remove the last entry (the last reading, or the last pour if it has no reading)?"))) return;
     if (isTransfer()) {
+      if (!stopPumpForA(undoOpensA())) return;
       const a = S.out.current(), b = S.in.current();
       if (S.out.levels.length === 1 && S.in.levels.length === 1
         && (!a || !a.dips.length) && (!b || !b.dips.length)) { S = null; localStorage.removeItem(KEY); cloudNew(); return; }
@@ -2106,8 +2158,9 @@
     $("fin-banner").classList.toggle("hidden", !fin);
     renderFinish();
 
-    // pour and dip cards
-    $("pour-card").classList.toggle("hidden", fin || !!pend);
+    // pour and dip cards: while the dip waits, the pour card stays for the
+    // next can's fill timer (nextCanMode), under the dip card.
+    $("pour-card").classList.toggle("hidden", fin || (!!pend && !earlyTimer()));
     $("dip-card").classList.toggle("hidden", fin || !pend);
     renderTally(adv);
     renderNowPrediction(adv, views);
@@ -2213,6 +2266,7 @@
 
   /** The live tab of a transfer: both tanks, one can tally, one dip at a time. */
   function renderLiveTransfer() {
+    dropStaleTimer();
     const stO = S.out.status(), stI = S.in.status();
     const giO = S.out.lastGood(), giI = S.in.lastGood();
     const GO = giO >= 0 ? S.out.levels[giO] : null;
@@ -2243,7 +2297,7 @@
 
     $("fin-banner").classList.add("hidden");
     renderFinish();
-    $("pour-card").classList.toggle("hidden", both || !!pend);
+    $("pour-card").classList.toggle("hidden", both || (!!pend && !earlyTimer()));
     $("dip-card").classList.toggle("hidden", both || !pend);
     renderTally(adv);
     renderNowPrediction(adv, views);
@@ -2691,7 +2745,36 @@
     go.classList.toggle("over", cans > 0 && n > cans);
     go.classList.toggle("quiet", !(cans > 0 && n >= cans));
     go.disabled = !(n > 0 || $("p-unknown").checked || num("p-vol") > 0);
+    nextCanMode(earlyTimer());
     tickPour(Date.now());
+  }
+
+  /**
+   * The pour card while a dip waits: the fill timer and the can size work,
+   * so the pump can fill the next can.  The count, the batch and its options
+   * wait for the verdict: the can is emptied into the tank after the dip.
+   * The card moves under the dip card, and back above it after the verdict.
+   */
+  function nextCanMode(on) {
+    placePourCard(on);
+    const note = $("t-early");
+    note.classList.toggle("hidden", !on);
+    $("p-opts").classList.toggle("hidden", on);
+    if (!on) { note.textContent = ""; return; }
+    $("pour-title").textContent = "1 · Next can";
+    note.textContent = isTransfer()
+      ? "Tank B waits for its dip. The pump can fill the next can from tank A now. Empty it into tank B after the dip: +1 can and Batch done open when tank B is decided."
+      : "The dip waits. The pump can fill the next can now. Empty it into the tank after the dip: +1 can and Batch done open when the dip is decided.";
+    for (const id of ["t-plus", "t-undo", "t-part", "p-go"]) $(id).disabled = true;
+  }
+  /** The pour card above the dip card (normal), or last on the Live tab (next-can mode). */
+  let pourBelow = false;
+  function placePourCard(below) {
+    if (below === pourBelow) return;
+    pourBelow = below;
+    const live = $("live"), card = $("pour-card");
+    if (!live.insertBefore) return;   // the test stub has no DOM tree
+    if (below) live.appendChild(card); else live.insertBefore(card, $("dip-card"));
   }
 
   /**
@@ -2969,7 +3052,7 @@
   }
 
   // ---- sound, vibration, screen
-  let actx = null, alarmOn = false, alarmUntil = 0, lastRing = 0, alarmBeeps = 3, wake = null;
+  let actx = null, alarmOn = false, alarmUntil = 0, lastRing = 0, alarmBeeps = 3, wake = null, alarmKind = null;
   const TITLE = document.title;
   function unlockAudio() {
     // Browsers start sound only from a tap: make the audio ready on each tap.
@@ -2990,7 +3073,9 @@
       o.start(a); o.stop(a + 0.27);
     }
   }
-  function alarm(text, seconds, beeps) {
+  /** kind "fill": a fill-timer alarm, which a settle alarm must not replace. */
+  function alarm(text, seconds, beeps, kind) {
+    alarmKind = kind || null;
     alarmOn = true; alarmUntil = Date.now() + 1000 * (seconds || 60); lastRing = 0;
     alarmBeeps = beeps || 3;
     $("alarm-text").textContent = text;
@@ -3008,7 +3093,7 @@
   }
   function stopAlarm() {
     const was = alarmOn || !$("alarm").classList.contains("hidden");
-    alarmOn = false;
+    alarmOn = false; alarmKind = null;
     $("alarm").classList.add("hidden");
     document.title = tr(TITLE);
     if (was && navigator.vibrate) navigator.vibrate(0);
@@ -3088,7 +3173,9 @@
       return;
     }
     stopAlarm(); unlockAudio();
-    const run = { dur: d.seconds, size: u, lead: S.cfg.alarmLead };
+    // early: the timer starts while a dip waits.  The can is counted after
+    // the verdict, so its fill time includes the wait: +1 can drops it.
+    const run = { dur: d.seconds, size: u, lead: S.cfg.alarmLead, early: !!pending() };
     if (!P.iosTimer) { startPour(run, Date.now(), false); return; }
     // Safari first asks "Open in Shortcuts?".  The iPhone timer starts only
     // when the operator taps Open, so the page waits for that moment: iOS
@@ -3101,7 +3188,7 @@
   /** ios: the iPhone timer runs too, so the page's fill alarms stay quiet. */
   function startPour(run, now, ios) {
     delete T.wait;
-    T.pour = { start: now, dur: run.dur, size: run.size, lead: run.lead, preAlarmed: false, fullAlarmed: false, ios: !!ios };
+    T.pour = { start: now, dur: run.dur, size: run.size, lead: run.lead, preAlarmed: false, fullAlarmed: false, ios: !!ios, early: !!run.early };
     saveTimer(); keepAwake(); render();
   }
   /** Shortcuts must open within this time of the tap, or the wait is over. */
@@ -3181,16 +3268,20 @@
         if (!pt.preAlarmed) {
           pt.preAlarmed = true; saveTimer();
           // With the iPhone timer, the phone rings: no banner, no sound here.
-          if (!pt.ios) alarm(`Close the valve: ${fmtClock(Math.ceil(left))} to full`, 30, 2);
+          if (!pt.ios) alarm(`Close the valve: ${fmtClock(Math.ceil(left))} to full`, 30, 2, "fill");
         }
       } else {
         box.className = "timer done";
         $("pt-clock").textContent = "0:00";
-        $("pt-status").textContent = `Can full (${f(pt.size, 0)} L): the pump must be off. Tap +1 can ${isDrain() ? "full" : "poured"}.`;
-        $("t-plus").classList.add("pulse");
+        // While the dip waits, the can stays full: it is counted and emptied after the dip.
+        const early = earlyTimer();
+        $("pt-status").textContent = early
+          ? `Can full (${f(pt.size, 0)} L): the pump must be off. ${isTransfer() ? "Empty it into tank B after the dip, then tap +1 can full." : "Empty it into the tank after the dip, then tap +1 can poured."}`
+          : `Can full (${f(pt.size, 0)} L): the pump must be off. Tap +1 can ${isDrain() ? "full" : "poured"}.`;
+        $("t-plus").classList.toggle("pulse", !early);
         if (!pt.fullAlarmed) {
           pt.fullAlarmed = true; saveTimer();
-          if (!pt.ios) alarm(`Can full: pump off (${f(pt.size, 0)} L)`, 180, 3);
+          if (!pt.ios) alarm(`Can full: pump off (${f(pt.size, 0)} L)`, 180, 3, "fill");
         }
       }
     }
@@ -3316,7 +3407,10 @@
     // One batch, one alarm: both tanks share the pour time, so the second
     // tank's first reading must not ring again.
     const key = isTransfer() ? `batch@${t0}` : `${pend.row}@${t0}`;
-    if (settle > 0 && T.settled !== key) { T.settled = key; saveTimer(); alarm("Settled: dip now"); }
+    // A fill alarm on the banner wins: the next can needs the valve now, and
+    // the line above still says "Settled: dip now".
+    const fillAlarm = alarmKind === "fill" && !$("alarm").classList.contains("hidden");
+    if (settle > 0 && T.settled !== key) { T.settled = key; saveTimer(); if (!fillAlarm) alarm("Settled: dip now"); }
   }
 
   // ---- time to half, to the brim and to the suction floor.  The estimate
@@ -3538,7 +3632,8 @@
     tickLive(now);
     if (!S) return;
     // Every tab: an alarm must ring while the operator looks at a chart.
-    if (!pending()) tickPour(now);
+    dropStaleTimer();
+    if (!pending() || earlyTimer()) tickPour(now);
     tickSettle(now);
     if (now - lastEta > 10000) tickEta(now);
     // Keep the screen on for the whole campaign, not only during a timer: the

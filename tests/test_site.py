@@ -3891,7 +3891,8 @@ class TestSiteFinish(unittest.TestCase):
         self.assertIn("the reading belongs to beta", got["batch"]["header"])
         self.assertEqual(got["batch"]["title"], "2 · Dip beta")
         self.assertIn("beta: reading after the 400 L batch", got["batch"]["bLabel"])
-        self.assertTrue(got["batch"]["pour"], "a batch done hides the pour card")
+        self.assertFalse(got["batch"]["pour"],
+                         "A is finished, only B waits: the pour card stays for the next can's fill timer")
         self.assertIn("alpha — finished", got["batch"]["verdict"])
         self.assertIn("beta", got["batch"]["eta"], "the time line keeps the open tank")
         self.assertNotIn("alpha", got["batch"]["eta"], "and drops the finished one")
@@ -4028,6 +4029,145 @@ class TestSiteBrim(unittest.TestCase):
         self.assertNotIn("brim", noise, "the brim ± is a campaign field, not a noise setting")
         self.assertNotIn("neck entrance", html)
         self.assertNotIn("shell crown", html)
+
+
+_EARLY_HEAD = """
+let clock = Date.UTC(2026, 10, 18, 8, 0, 0), beats = [], answer = true;
+const asked = [];
+class FD extends Date { constructor(...a) { if (a.length) super(...a); else super(clock); } }
+FD.now = () => clock;
+const extra = () => ({ Date: FD, setInterval: (fn) => { beats.push(fn); return beats.length; },
+  confirm: (q) => { asked.push(q); return answer; } });
+const beat = () => { for (const fn of beats) fn(); };
+const out = {}, store = new Map();
+let p = stub.boot(page, corePath, store, extra()), el = p.el;
+/** Set the timers in the saved session and boot again. */
+function timers(s) {
+  const a = JSON.parse(store.get('calib-site:active'));
+  for (const c of a.out ? [a.out.config, a.in.config] : [a.config]) {
+    c.fillSeconds = { '200': 60 }; c.settleSeconds = s;
+  }
+  store.set('calib-site:active', JSON.stringify(a));
+  beats = []; p = stub.boot(page, corePath, store, extra()); el = p.el;
+}
+const card = () => ({ hidden: el('pour-card')._classes.has('hidden'),
+  note: el('t-early')._classes.has('hidden') ? '' : el('t-early').textContent,
+  title: el('pour-title').textContent, plus: el('t-plus').disabled, go: el('p-go').disabled,
+  undo: el('t-undo').disabled, opts: el('p-opts')._classes.has('hidden'),
+  start: !el('pt-start')._classes.has('hidden'), size: el('t-unit').disabled });
+const timer = () => JSON.parse(store.get('calib-site:timer') || '{}');
+"""
+
+
+class TestSiteEarlyTimer(unittest.TestCase):
+    """The next can's fill timer while the dip waits (fill; transfer once A is decided)."""
+
+    def _run(self, body: str):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        return _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            + _EARLY_HEAD + body + "\nconsole.log(JSON.stringify(out));"
+        )
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_fill_timer_runs_while_the_dip_waits(self):
+        got = self._run(
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click();\n"
+            "for (let k = 0; k < 3 && !el('dip-card')._classes.has('hidden'); k++) { el('d-val').value = '400'; el('d-go').click(); }\n"
+            "timers(90);\n"
+            "out.before = card();\n"
+            "el('t-plus').click(); el('p-go').click();\n"
+            "out.wait = card();\n"
+            "out.dip = !el('dip-card')._classes.has('hidden');\n"
+            "el('pt-start').click(); out.early = timer().pour && timer().pour.early;\n"
+            "clock += 65000; beat();\n"
+            "out.full = { status: el('pt-status').textContent, pulse: el('t-plus')._classes.has('pulse'),"
+            " alarm: el('alarm-text').textContent };\n"
+            "clock += 30000; beat();\n"
+            "out.settled = { line: el('dip-settle').textContent, alarm: el('alarm-text').textContent };\n"
+            "for (let k = 0; k < 3 && !el('dip-card')._classes.has('hidden'); k++) { el('d-val').value = '470'; el('d-go').click(); }\n"
+            "if (!el('dip-card')._classes.has('hidden')) el('a-override').click();\n"
+            "out.after = card(); out.running = !!timer().pour;\n"
+            "el('t-plus').click();\n"
+            "const s = JSON.parse(store.get('calib-site:active'));\n"
+            "out.can = s.batch.cans[0]; out.stopped = !timer().pour;\n"
+        )
+        self.assertFalse(got["before"]["hidden"])
+        self.assertEqual(got["before"]["note"], "")
+        w = got["wait"]
+        self.assertTrue(got["dip"], "the dip waits")
+        self.assertFalse(w["hidden"], "the pour card stays for the next can")
+        self.assertEqual(w["title"], "1 · Next can")
+        self.assertIn("The pump can fill the next can now", w["note"])
+        self.assertTrue(w["plus"] and w["go"] and w["undo"], "the count and the batch wait for the verdict")
+        self.assertTrue(w["opts"], "Options hide while the dip waits")
+        self.assertTrue(w["start"])
+        self.assertFalse(w["size"], "the can size stays editable")
+        self.assertTrue(got["early"], "the run knows it started while a dip waited")
+        self.assertIn("Empty it into the tank after the dip", got["full"]["status"])
+        self.assertFalse(got["full"]["pulse"], "+1 can is locked: no pulse")
+        self.assertIn("Can full", got["full"]["alarm"])
+        self.assertIn("Settled", got["settled"]["line"])
+        self.assertIn("Can full", got["settled"]["alarm"], "the fill alarm wins over the settle alarm")
+        a = got["after"]
+        self.assertFalse(a["hidden"])
+        self.assertEqual(a["note"], "")
+        self.assertFalse(a["plus"], "+1 can opens after the verdict")
+        self.assertFalse(a["opts"])
+        self.assertTrue(got["running"], "the timer runs on after the verdict")
+        self.assertNotIn("f", got["can"], "the can that waited for the verdict gives no fill time")
+        self.assertTrue(got["stopped"], "the tap ends the timer")
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_drain_keeps_the_timer_locked(self):
+        got = self._run(
+            "el('s-dir-drain').click();\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '1500'; el('s-unit').value = '200';\n"
+            "el('s-go').click();\n"
+            "for (let k = 0; k < 3 && !el('dip-card')._classes.has('hidden'); k++) { el('d-val').value = '1500'; el('d-go').click(); }\n"
+            "timers(90);\n"
+            "el('t-plus').click(); el('p-go').click();\n"
+            "out.wait = card(); out.dip = !el('dip-card')._classes.has('hidden');\n"
+        )
+        self.assertTrue(got["dip"])
+        self.assertTrue(got["wait"]["hidden"], "a drain draws from the dipped tank: no early timer")
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_transfer_unlocks_when_tank_a_is_decided(self):
+        got = self._run(
+            "el('s-dir-transfer').click();\n"
+            "el('s-tank').value = 'alpha'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('sB-tank').value = 'beta'; el('sB-D').value = '2480'; el('sB-L').value = '5200';\n"
+            "el('s-dip').value = '1800'; el('sB-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click();\n"
+            "const dipA = (v) => { for (let k = 0; k < 3 && !el('d-go-a').disabled; k++) { el('d-val').value = v; el('d-go-a').click(); } };\n"
+            "const dipB = (v) => { for (let k = 0; k < 3 && !el('d-go-b').disabled; k++) { el('d-val-b').value = v; el('d-go-b').click(); } };\n"
+            "dipA('1800'); dipB('400');\n"
+            "timers(90);\n"
+            "el('t-plus').click(); el('p-go').click();\n"
+            "out.both = card();\n"
+            "dipA('1770');\n"
+            "out.aDone = card(); out.bOpen = !el('d-val-b').disabled;\n"
+            "el('pt-start').click(); out.early = timer().pour && timer().pour.early;\n"
+            "// Take another reading of A: the page asks to stop the pump first.\n"
+            "answer = false; el('a-redip').click();\n"
+            "out.kept = { asked: asked.length, running: !!timer().pour, card: card().hidden };\n"
+            "answer = true; el('a-redip').click();\n"
+            "out.redip = { asked: asked.length, running: !!timer().pour, card: card().hidden };\n"
+        )
+        self.assertTrue(got["both"]["hidden"], "A waits: the pump must not draw from it")
+        self.assertFalse(got["aDone"]["hidden"], "A decided: the next can may fill from A")
+        self.assertIn("Tank B waits for its dip", got["aDone"]["note"])
+        self.assertTrue(got["aDone"]["plus"] and got["aDone"]["go"])
+        self.assertTrue(got["bOpen"], "B's field stays open for its reading")
+        self.assertTrue(got["early"])
+        self.assertEqual(got["kept"], {"asked": 1, "running": True, "card": False}, "No keeps A decided and the timer on")
+        self.assertEqual(got["redip"], {"asked": 2, "running": False, "card": True}, "Yes stops the timer and re-opens A")
 
 
 if __name__ == "__main__":

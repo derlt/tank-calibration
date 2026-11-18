@@ -548,6 +548,17 @@
     "Can full ({0} L): the pump must be off.": "Bình đầy ({0} L): bơm phải tắt.",
     "Tap +1 can full.": "Chạm +1 bình đầy.",
     "Tap +1 can poured.": "Chạm +1 bình đã đổ.",
+    // The next can's fill timer while the dip waits.
+    "1 · Next can": "1 · Bình tiếp theo",
+    "The dip waits.": "Lần đo đang chờ.",
+    "The pump can fill the next can now.": "Bây giờ bơm có thể làm đầy bình tiếp theo.",
+    "Empty it into the tank after the dip: +1 can and Batch done open when the dip is decided.": "Trút bình vào bồn sau lần đo: +1 bình và Xong mẻ mở lại khi lần đo đã quyết định.",
+    "Tank B waits for its dip.": "Bồn B đang chờ lần đo của nó.",
+    "The pump can fill the next can from tank A now.": "Bây giờ bơm có thể làm đầy bình tiếp theo từ bồn A.",
+    "Empty it into tank B after the dip: +1 can and Batch done open when tank B is decided.": "Trút bình vào bồn B sau lần đo: +1 bình và Xong mẻ mở lại khi bồn B đã quyết định.",
+    "Empty it into the tank after the dip, then tap +1 can poured.": "Trút bình vào bồn sau lần đo, rồi chạm +1 bình đã đổ.",
+    "Empty it into tank B after the dip, then tap +1 can full.": "Trút bình vào bồn B sau lần đo, rồi chạm +1 bình đầy.",
+    "The fill timer runs: the pump draws from tank A. Stop the pump and the timer?": "Hẹn giờ bơm đang chạy: bơm đang hút từ bồn A. Tắt bơm và dừng hẹn giờ?",
     "Close the valve: {0} to full": "Khoá van: còn {0} là đầy",
     "Can full: pump off ({0} L)": "Bình đầy: tắt bơm ({0} L)",
     // The iPhone timer through Shortcuts.  The bold words are the names iOS

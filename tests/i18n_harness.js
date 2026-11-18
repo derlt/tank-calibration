@@ -247,6 +247,8 @@ coreTexts(readRows("demo_drain_raw.csv"), { D: 2480, Lest: 5280, pourUnit: 200, 
     tab("settings"); collect(p); tab("live");
     tryClick(p, "eta-use"); tab("settings"); collect(p); tab("live");
     tryClick(p, "t-plus"); tryClick(p, "p-go");
+    // The next can's fill timer while the dip waits: the note and the full can.
+    tryClick(p, "pt-start"); now += 100000; tab("live");
     for (const dt of [30, 200]) { now += dt * 1000; tab("live"); }
     el("d-val").value = "520"; tryClick(p, "d-go");
     now += 60000; tab("live");

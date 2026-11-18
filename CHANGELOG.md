@@ -8,6 +8,19 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **On-site page: the next can's fill timer while the dip waits.** After
+  *Batch done* (or *Poured*) in a fill, the pour card stays under the dip
+  card as *1 · Next can*: the fill timer and the can size work, so the pump
+  can fill the next can during the settle time and the dip. *+1 can*, *Undo
+  last can*, *Batch done* and *Options* stay locked until the verdict, because
+  the can goes into the tank after the dip. A transfer unlocks the timer once
+  tank A is decided (or finished) and only B waits; B's field stays open. A
+  drain, and a transfer while A waits, keep the timer locked: the pump draws
+  from the tank being dipped. A can whose timer started while a dip waited
+  gives no fill time to the trend. *Take another reading* or *Undo last
+  entry* on A asks to stop the pump and the timer first. A fill alarm on the
+  banner is not replaced by the settle alarm.
+
 - **On-site page: the pour card's foot.** The card now reads +1 can →
   *Undo last can* → *Batch done* → can size → *Options*. *Batch done* is
   short, faded below the batch's target, green and bold on its last can, amber

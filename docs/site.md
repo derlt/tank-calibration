@@ -202,7 +202,8 @@ is the same in both modes: only the text changes.
    unknown* for `?`, or *plus an unknown extra* for `N+?`.
 2. **Wait.** The settle timer on the dip card counts down the settle time
    (5:00 unless you change it) and rings when the level is ready to dip
-   (§3.5).
+   (§3.5). In a fill, you can fill the next can now: see *Next can while the
+   dip waits* below.
 3. **Dip.** Enter the reading and press *Check*.
 4. **Read the verdict.**
 
@@ -472,6 +473,35 @@ must be right.
 The timer does not count the can. Tap *+1 can poured* when the can is full.
 That tap is the record, and it also stops the timer and the alarm. Emptying
 the can into the tank has no timer.
+
+**Next can while the dip waits.** In a fill, the pump fills the can from
+outside the tank, so the next can can fill while the level settles and you
+dip. After *Batch done* (or *Poured*), the pour card stays under the dip
+card, titled *1 · Next can*:
+
+- *Start fill timer*, *Stop timer*, *±20 s* and the can size work;
+- *+1 can*, *Undo last can*, *Batch done* and *Options* are locked, and a
+  line says why: empty the can into the tank after the dip;
+- at 0:00 the panel says *Empty it into the tank after the dip, then tap +1
+  can poured*, and *+1 can* does not pulse.
+
+When the dip is decided, the card moves back above the dip card and opens.
+The timer runs on: tap *+1 can* as usual. That can gives no fill time to the
+time trend, because it waited full for the verdict.
+
+| Campaign | The next fill timer unlocks |
+|---|---|
+| fill | at *Batch done* or *Poured* |
+| transfer | when tank A is decided (or finished): only B waits. B's field stays open |
+| drain, and a transfer while A waits | never: the pump draws from the tank being dipped |
+
+In a transfer, *Take another reading* or *Undo last entry* on tank A while a
+fill timer runs asks *Stop the pump and the timer?* first: the pump changes
+A's level. *Cancel* keeps A decided and the timer on. A recount that opens A
+again stops the timer without a question.
+
+While a fill alarm shows, the settle alarm does not replace it: the dip card
+still says *Settled: dip now*.
 
 **Live indicator in the header.** A small can before the tank name and a
 thin line along the bottom edge of the header show the can in work, on every
