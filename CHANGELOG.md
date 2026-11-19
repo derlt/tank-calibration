@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **On-site page: the hosted page opens without a network.** A small service
+  worker (`site/sw.js`) keeps the last page the browser got. A load asks the
+  network first and waits up to 3 s; with no answer, the kept page opens. A
+  return from the Shortcuts timer, a reload or a tab the phone closed now
+  works at a tank with no signal. Only the page itself: `/api/*` goes to the
+  network as before. The security headers allow the worker
+  (`worker-src 'self'`). The one file on a phone (`calib_site.html`) is not
+  affected.
+
 - **On-site page: an F(H) calculator in the Shell tab.** Type a dip
   reading to get litres, or litres to get a dip reading. The other field
   shows the running shell's answer. Below the fields, the shell and the

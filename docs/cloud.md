@@ -92,7 +92,7 @@ make a new workspace.
 | Isolation | Every query is scoped to the workspace of the token. |
 | Overwrites | None: a save with an old version gets a conflict (409). |
 | CSRF | No cookies. The token goes in the `Authorization` header only. |
-| Page headers | `site/_headers`: CSP with `connect-src 'self'`, no framing, no referrer. |
+| Page headers | `site/_headers`: CSP with `connect-src 'self'` and `worker-src 'self'` (the offline copy), no framing, no referrer. |
 | Delete | Soft: the row stays in D1 with `deleted_at`, so an operator can restore it. A save never brings it back: it gets 409. |
 
 ## Flood and abuse limits
@@ -178,6 +178,7 @@ so the build finds the assets directory. It is a copy of the built page:
     site/calib_site.html      the page for a phone (one file)
     site/public/index.html    the same bytes, for the Worker's assets
     site/public/_headers      the security headers
+    site/public/sw.js         the offline copy of the page (site/sw.js)
 
 A test fails when the copy is stale. After a change to the page, run
 `make site`: it builds `site/calib_site.html` and copies it into
@@ -227,6 +228,7 @@ All bodies are JSON. Send `Authorization: Bearer <token>` after the login.
 | `worker/schema.sql` | The D1 tables |
 | `site/cloud.js` | The page's client: login, link, sync, conflict, poll (inlined in the page) |
 | `site/_headers` | Security headers for the hosted page |
+| `site/sw.js` | The hosted page's offline copy (service worker, copied to `site/public/`) |
 | `tests/test_cloud.py` | Tests: the Worker on an in-memory SQLite D1, the client, two page devices |
 | `tests/test_secrets.py` | No `.env` value or server code in the page or in git |
 | `tests/cloud_harness.mjs` | Runs the Worker under Node (`node:sqlite`, Node 22.5 or newer) |

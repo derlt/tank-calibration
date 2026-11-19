@@ -23,6 +23,7 @@ out=${1:-site/public}
 mkdir -p "$out"
 cp site/calib_site.html "$out/index.html"
 cp site/_headers "$out/_headers"
+cp site/sw.js "$out/sw.js"
 if [ -n "${D1_DATABASE_ID:-}" ]; then
   sed "s|\"D1_DATABASE_ID\"|\"$D1_DATABASE_ID\"|" wrangler.jsonc > wrangler.deploy.jsonc
 else

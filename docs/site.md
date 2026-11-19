@@ -47,7 +47,18 @@ in to a workspace with a secret keyword and share campaigns. See
 
 The hosted page still works offline after it loads. It makes network requests
 only when you log in to the cloud, and every entry saves in the browser first.
-To keep the one file on a phone, use `site/calib_site.html`.
+
+The hosted page also keeps an offline copy of itself (`site/sw.js`, a service
+worker), so it opens again without a network: after a reload, after the
+return from the Shortcuts timer, or when the phone closed the tab. The copy is
+the last page the browser got. A load asks the network first and waits up to
+3 s; with no answer by then, or no network, the copy opens. So a new deploy
+shows at the next load while the network works. The worker handles only the
+page itself, never `/api/*`. The copy starts after the first visit on that
+phone and browser.
+
+To keep the one file on a phone, use `site/calib_site.html` (a file opened
+from the phone has no worker; it needs none).
 
 ## Before the first pour
 
@@ -1076,6 +1087,7 @@ for example `1,2`) and `--at-brim` (row 1 is the brim reading; `--neck-entrance`
 | `site/i18n.js` | The page translator and the Vietnamese dictionary. |
 | `site/cloud.js` | The optional cloud client: login, sync, conflicts ([cloud.md](cloud.md)). |
 | `site/_headers` | Security headers for the hosted page. |
+| `site/sw.js` | The hosted page's offline copy (a service worker). |
 | `site/page.html` | The page template. |
 | `site/calib_site.html` | The built page. Copy this file to the device. |
 | `site/replay.js` | Replay a raw CSV from a terminal. |

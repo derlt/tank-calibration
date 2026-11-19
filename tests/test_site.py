@@ -91,6 +91,8 @@ class TestSitePage(unittest.TestCase):
         self.assertEqual(built, build_page(), "site/public/index.html is stale: run `make site-public`")
         headers = (SITE / "public" / "_headers").read_text(encoding="utf-8")
         self.assertEqual(headers, (SITE / "_headers").read_text(encoding="utf-8"))
+        sw = (SITE / "public" / "sw.js").read_text(encoding="utf-8")
+        self.assertEqual(sw, (SITE / "sw.js").read_text(encoding="utf-8"), "site/public/sw.js is stale: run `make site`")
 
     @unittest.skipUnless(SH, "sh is not installed")
     def test_cloud_build_copies_the_committed_page(self):
@@ -114,12 +116,78 @@ class TestSitePage(unittest.TestCase):
             )
             built = (run / "site" / "public" / "index.html").read_text(encoding="utf-8")
             headers = (run / "site" / "public" / "_headers").read_text(encoding="utf-8")
+            sw = (run / "site" / "public" / "sw.js").read_text(encoding="utf-8")
             self.assertEqual(built, build_page(), "the assets must be the current build")
             self.assertEqual(headers, (SITE / "_headers").read_text(encoding="utf-8"))
+            self.assertEqual(sw, (SITE / "sw.js").read_text(encoding="utf-8"), "the offline copy's worker")
             self.assertFalse(
                 (run / "wrangler.deploy.jsonc").exists(),
                 "no D1 id in the environment: no deploy config, and none with a placeholder",
             )
+
+    def test_csp_lets_the_offline_worker_run(self):
+        csp = re.search(r"Content-Security-Policy: (.*)", (SITE / "_headers").read_text(encoding="utf-8")).group(1)
+        self.assertIn("worker-src 'self'", csp, "without it the browser refuses /sw.js")
+        page = (SITE / "page.html").read_text(encoding="utf-8")
+        self.assertIn('navigator.serviceWorker.register("/sw.js")', page)
+        self.assertIn('location.protocol === "https:"', page, "the one file on a phone registers no worker")
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_offline_worker_keeps_the_page(self):
+        """site/sw.js: network first, the kept page when the network fails or is slow, never the API."""
+        sw = (SITE / "sw.js").read_text(encoding="utf-8").replace("WAIT_MS = 3000", "WAIT_MS = 30")
+        got = _node(
+            f"const src = {json.dumps(sw)};\n"
+            "const vm = require('vm');\n"
+            "const ORIGIN = 'https://site.example';\n"
+            "const store = new Map(); let net = 'up', calls = [];\n"
+            "const res = (body, o) => Object.assign({ status: 200, redirected: false, type: 'basic', body, clone() { return res(body, o); } }, o || {});\n"
+            "const cache = { put: async (k, r) => { store.set(k, r); }, match: async (k) => store.get(k) };\n"
+            "const ls = {};\n"
+            "const self = { location: { origin: ORIGIN }, clients: { claim: async () => {} }, skipWaiting: async () => {},\n"
+            "  addEventListener: (t, fn) => { ls[t] = fn; } };\n"
+            "const fetch = (req) => { const u = typeof req === 'string' ? req : req.url; calls.push(u);\n"
+            "  if (net === 'down') return Promise.reject(new TypeError('offline'));\n"
+            "  if (net === 'slow') return new Promise((r) => setTimeout(() => r(res('late')), 200));\n"
+            "  if (net === 'error') return Promise.resolve(res('oops', { status: 500 }));\n"
+            "  return Promise.resolve(res(net)); };\n"
+            "const ctx = { self, fetch, setTimeout, clearTimeout, URL, Promise,\n"
+            "  caches: { open: async () => cache, keys: async () => ['calib-page-v0', 'calib-page-v1', 'other'], delete: async (k) => { ctx.deleted.push(k); } },\n"
+            "  Request: function (u) { this.url = ORIGIN + u; this.method = 'GET'; this.mode = 'cors'; },\n"
+            "  Response: { error: () => ({ status: 0, type: 'error' }) }, deleted: [] };\n"
+            "vm.createContext(ctx); vm.runInContext(src, ctx);\n"
+            "const fire = (t, ev) => { const w = []; ev.waitUntil = (p) => w.push(p); let r = null; ev.respondWith = (p) => { r = p; };\n"
+            "  ls[t](ev); return { r, all: () => Promise.all(w) }; };\n"
+            "const page = (path, o) => ({ request: Object.assign({ url: ORIGIN + path, method: 'GET', mode: 'navigate' }, o || {}) });\n"
+            "const load = async (path, o) => { const e = fire('fetch', page(path, o)); const r = e.r ? await e.r : null; await e.all(); return r ? r.body || r.type : null; };\n"
+            "(async () => {\n"
+            "  const out = {};\n"
+            "  net = 'v1'; await fire('install', {}).all(); out.installed = store.get('/').body;\n"
+            "  await fire('activate', {}).all(); out.deleted = ctx.deleted;\n"
+            "  net = 'v2'; out.up = await load('/'); out.kept = store.get('/').body;\n"
+            "  net = 'down'; out.down = await load('/?x=1');\n"
+            "  net = 'slow'; out.slow = await load('/'); out.keptLate = store.get('/').body;\n"
+            "  net = 'error'; out.error = await load('/'); out.keptAfterError = store.get('/').body;\n"
+            "  calls = []; out.api = await load('/api/campaigns'); out.post = await load('/', { method: 'POST' });\n"
+            "  out.asset = await load('/sw.js', { mode: 'no-cors' }); out.other = await load('/', { url: 'https://other.example/' });\n"
+            "  out.calls = calls.length;\n"
+            "  store.clear(); net = 'down'; out.nothing = await load('/');\n"
+            "  console.log(JSON.stringify(out));\n"
+            "})();"
+        )
+        self.assertEqual(got["installed"], "v1", "the install keeps the page at once")
+        self.assertEqual(got["deleted"], ["calib-page-v0"], "an old copy goes; other caches stay")
+        self.assertEqual(got["up"], "v2", "network first: a new deploy shows at the next load")
+        self.assertEqual(got["kept"], "v2")
+        self.assertEqual(got["down"], "v2", "no network: the kept page, also with a query")
+        self.assertEqual(got["slow"], "v2", "a slow network: the kept page after the wait")
+        self.assertEqual(got["keptLate"], "late", "the late answer updates the copy for the next load")
+        self.assertEqual(got["error"], "oops", "a server error shows as it is")
+        self.assertEqual(got["keptAfterError"], "late", "a server error is not kept")
+        for k in ("api", "post", "asset", "other"):
+            self.assertIsNone(got[k], f"{k}: not the worker's request")
+        self.assertEqual(got["calls"], 0)
+        self.assertEqual(got["nothing"], "error", "nothing kept and no network: the browser's own error")
 
     def test_page_inlines_the_one_core(self):
         page = build_page()

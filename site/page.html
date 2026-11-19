@@ -4410,6 +4410,14 @@
     else if (mq.addListener) mq.addListener(follow);
   }
 
+  // The hosted page keeps an offline copy of itself (site/sw.js): a load
+  // without network (a return from Shortcuts at the tank) still opens the
+  // page.  Only on https: the one file on a phone has no worker.
+  if (typeof navigator !== "undefined" && navigator.serviceWorker && typeof location !== "undefined"
+    && location.protocol === "https:") {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  }
+
   S = load();
   startLang();
   applyTheme();
