@@ -5121,16 +5121,37 @@
     return this.current();
   };
 
-  /** Accept the pending level against the check (operator decision). */
-  TransferSession.prototype.override = function (why) {
-    // The current tank first: the header switch says which tank the level
-    // actions apply to.  A decided current tank leaves the only pending one.
-    // A finished tank is never the one (it has no level to decide).
-    const base = this[this.active].finished ? this.liveKey() : this.active;
-    const act = this[base].current();
-    const k = act && act.state === "pending" ? base : (this.pendingTank() || base);
-    const v = this[k].override(why);
+  /**
+   * Accept the pending level against the check (operator decision).
+   * k: the tank ("out" or "in"), else the page's own choice: the current
+   * tank first (the header switch says which tank the level actions apply
+   * to), then the only pending one.  A finished tank is never the one.
+   */
+  TransferSession.prototype.override = function (why, k) {
+    let key = k === "out" || k === "in" ? k : null;
+    if (!key) {
+      const base = this[this.active].finished ? this.liveKey() : this.active;
+      const cur = this[base].current();
+      key = cur && cur.state === "pending" ? base : (this.pendingTank() || base);
+    }
+    const v = this[key].override(why);
     this._pair();   // an override is not a prediction test: the pair leaves with it
+    return v;
+  };
+
+  /**
+   * Finish or reopen one tank (k: "out" or "in", else the tank in view).
+   * The page gives the tank, so the action replay (the cloud merge) does not
+   * depend on the view of the device.
+   */
+  TransferSession.prototype.finish = function (time, k) {
+    const v = this[k === "in" || k === "out" ? k : this.liveKey()].finish(time);
+    this._pair();
+    return v;
+  };
+  TransferSession.prototype.reopen = function (k) {
+    const v = this[k === "in" || k === "out" ? k : this.liveKey()].reopen();
+    this._pair();
     return v;
   };
 
@@ -5148,7 +5169,10 @@
     return Lo.verdict;
   };
 
-  TransferSession.prototype.editNote = function (row, text) { return this[this.active].editNote(row, text); };
+  /** A note on a row of one tank (k: "out" or "in", else the tank in view). */
+  TransferSession.prototype.editNote = function (row, text, k) {
+    return this[k === "in" || k === "out" ? k : this.active].editNote(row, text);
+  };
 
   /**
    * Campaign settings.  The tank record belongs to the active tank; the
@@ -5627,6 +5651,11 @@
    * opts.fetch    the fetch function; none -> every call is offline
    * opts.origin   the page's own origin when it is served over http(s)
    * opts.now      a clock, for the tests
+   * opts.rebase   the page's merge (page.html, rebase()): replays this
+   *               device's actions on the cloud copy at a 409.  Without it,
+   *               every 409 is a conflict (an older page, the tests).
+   * opts.mergeOn  false: no merge, today's conflict choice (the page's
+   *               kill switch in Files → Cloud)
    */
   function Client(opts) {
     this.store = opts.storage;
@@ -5634,6 +5663,8 @@
     this.origin = opts.origin || "";
     this.now = opts.now || (() => Date.now());
     this.onClosed = opts.onClosed || null;
+    this.rebase = opts.rebase || null;
+    this.mergeOn = opts.mergeOn || null;
     this.busy = null;
   }
 
@@ -5644,6 +5675,9 @@
   Client.prototype.loggedIn = function () { const a = this.auth(); return !!(a.token && a.expires > this.now()); };
   Client.prototype.auto = function () { return this.auth().auto !== false; };
   Client.prototype.setAuto = function (on) { this._set(AUTH, Object.assign(this.auth(), { auto: !!on })); };
+  /** Merge two writers of one campaign (Files → Cloud, on by default); off: today's conflict choice. */
+  Client.prototype.merge = function () { return this.auth().merge !== false; };
+  Client.prototype.setMerge = function (on) { this._set(AUTH, Object.assign(this.auth(), { merge: !!on })); };
   /** The server: the saved address, else the page's own site. */
   Client.prototype.base = function () { return this.auth().base || this.origin; };
 
@@ -5729,6 +5763,9 @@
   //             a 409 checks them before it calls a conflict
   //   conflict  someone else saved first: the user chooses
   //   gone      the campaign was deleted in the cloud
+  //   ops, noReplay, baseSig
+  //             this device's actions since `version`, for the merge (see
+  //             "the action list" above)
   //
   // The open session has one link (LINK).  A closed session with changes
   // that the cloud does not have waits in the outbox (OUTBOX) with its data,
@@ -5747,6 +5784,80 @@
     h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
     h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
     return text.length.toString(36) + ":" + (h2 >>> 0).toString(36) + (h1 >>> 0).toString(36);
+  }
+
+  // ------------------------------------------------------- the action list
+  //
+  // Two people can write into one campaign: one counts the cans, the other
+  // dips.  When the second save gets a conflict (409), the page replays this
+  // device's own actions on the cloud copy (page.html, rebase()), instead of
+  // asking the user to choose.  For that the link keeps:
+  //   ops       this device's actions since `version`: [{k, a, t, at, after, rev}]
+  //             k the Session method, a its arguments, t the time, at what
+  //             the action stood on, after the session's signature just
+  //             after it, rev the local change it made
+  //   noReplay  {rev, why}: a change that is not in ops (a settings form, an
+  //             undo); the list cannot explain the copy until the cloud has it
+  //   baseSig   the fingerprint of the cloud copy at `version` (see
+  //             fingerprint()): the replay finds what the other person changed
+  // No base copy is kept: a fingerprint is about 20 bytes per row.
+
+  /** At most this many actions; more, and the list is not replayable until the next upload. */
+  const OPS_MAX = 500;
+
+  /** JSON text with sorted keys: two copies of one session compare equal. */
+  function canon(v) {
+    if (v === null || typeof v !== "object") { const s = JSON.stringify(v); return s === undefined ? "null" : s; }
+    if (Array.isArray(v)) return "[" + v.map((x) => (x === undefined || typeof x === "function" ? "null" : canon(x))).join(",") + "]";
+    return "{" + Object.keys(v).filter((k) => v[k] !== undefined && typeof v[k] !== "function").sort()
+      .map((k) => JSON.stringify(k) + ":" + canon(v[k])).join(",") + "}";
+  }
+  /**
+   * A session without the per-device fields of a transfer: `active` is the
+   * tank view of this device, `lastDip` the tank it dipped last (undo order).
+   */
+  function shared(data) {
+    if (!data || data.kind !== "transfer" || (!("active" in data) && !("lastDip" in data))) return data;
+    const o = Object.assign({}, data);
+    delete o.active;
+    delete o.lastDip;
+    return o;
+  }
+  /** The signature of a whole session, without the per-device fields. */
+  function sessionSig(data) { return sig(canon(shared(data))); }
+  /** The parts of one tank's session: one signature per row, the tally, the settings, the finish, the rest. */
+  function tankPrint(d) {
+    const rest = Object.assign({}, d);
+    for (const k of ["levels", "batch", "config", "finished"]) delete rest[k];
+    return {
+      rows: (d.levels || []).map((l) => sig(canon(l))),
+      batch: sig(canon(d.batch == null ? null : d.batch)),
+      config: sig(canon(d.config == null ? null : d.config)),
+      finished: sig(canon(d.finished == null ? null : d.finished)),
+      rest: sig(canon(rest)),
+    };
+  }
+  /**
+   * The fingerprint of a cloud copy: per part, a signature.  A transfer has
+   * one per tank.  all: the whole session (sessionSig).
+   */
+  function fingerprint(data) {
+    if (!data || typeof data !== "object") return null;
+    const all = sessionSig(data);
+    if (data.kind === "transfer") {
+      const rest = shared(data), r = Object.assign({}, rest);
+      delete r.out; delete r.in;
+      return { kind: "transfer", out: tankPrint(data.out || {}), in: tankPrint(data.in || {}), rest: sig(canon(r)), all };
+    }
+    return Object.assign(tankPrint(data), { all });
+  }
+  /** The link takes a new cloud version: its fingerprint, and the actions the cloud now has leave the list. */
+  function moveBase(x, data, rev) {
+    x.baseSig = fingerprint(data);
+    if (rev == null) { delete x.ops; delete x.noReplay; return; }
+    if (x.ops) x.ops = x.ops.filter((o) => o.rev > rev);
+    if (x.ops && !x.ops.length) delete x.ops;
+    if (x.noReplay && x.noReplay.rev <= rev) delete x.noReplay;
   }
 
   Client.prototype.link = function () { return this._get(LINK); };
@@ -5785,13 +5896,51 @@
   /** Link the open session to a new cloud campaign; the next sync uploads it. */
   Client.prototype.linkNew = function () { return this._make({ id: newId(), version: 0, rev: 1 }); };
   /** Link to a campaign just read from the cloud: clean. */
-  Client.prototype.linkTo = function (c) { return this._make({ id: c.id, version: c.version, by: c.updated_by, at: c.updated_at }); };
-  /** The page saved the session: the cloud copy is behind by one more change. */
-  Client.prototype.markDirty = function () {
+  Client.prototype.linkTo = function (c) {
+    return this._make({ id: c.id, version: c.version, by: c.updated_by, at: c.updated_at, baseSig: fingerprint(c.data) });
+  };
+  /**
+   * The page saved the session: the cloud copy is behind by one more change.
+   *   op          the action that made the change ({k, a, t, at, after}):
+   *               it joins the action list
+   *   {cancel: k} the change takes back the last action, of kind k, when it
+   *               was the last change (an untap right after its tap): both
+   *               leave the list; else as a reason
+   *   a text      the reason why the change has no action (a settings form,
+   *               an undo): the list is not replayable until the cloud has it
+   *   nothing     the same, with the reason "edit"
+   * One write: the change and its action never part.
+   */
+  Client.prototype.markDirty = function (op) {
     const l = this.link();
     if (!l) return;
+    const ops = l.ops || [];
     l.rev += 1;
+    const last = ops[ops.length - 1];
+    if (op && typeof op === "object" && op.cancel) {
+      if (last && last.k === op.cancel && last.rev === l.rev - 1) {
+        // The copy is again what the list explained before the action.  (When
+        // the upload of the action itself lands later, the next replay finds
+        // the copy unexplained, and refuses.)
+        ops.pop();
+        if (ops.length) l.ops = ops; else delete l.ops;
+      } else l.noReplay = { rev: l.rev, why: "un" + op.cancel };
+    } else if (op && typeof op === "object") {
+      l.ops = ops.concat([Object.assign({}, op, { rev: l.rev })]);
+      if (l.ops.length > OPS_MAX) l.noReplay = { rev: l.rev, why: "long" };
+    } else l.noReplay = { rev: l.rev, why: typeof op === "string" && op ? op : "edit" };
+    // A change that is not replayable makes the earlier actions useless: they
+    // leave the list at the next upload anyway.
+    if (l.noReplay && l.noReplay.rev === l.rev) delete l.ops;
     this._set(LINK, l);
+  };
+  /** The link's action list as the replay needs it, or {why} when it cannot explain the copy. */
+  Client.prototype.actions = function (l) {
+    if (l === undefined) l = this.link();
+    if (!l) return { why: "none" };
+    if (l.noReplay) return { why: l.noReplay.why };
+    if (!l.baseSig) return { why: "base" };
+    return { ops: l.ops || [], baseSig: l.baseSig };
   };
 
   /**
@@ -5852,17 +6001,53 @@
       this._update(l.copy, (x) => {
         x.version = r.version; x.synced = Math.max(x.synced, try1.rev); x.by = r.updated_by; x.at = r.updated_at;
         delete x.sent;
+        moveBase(x, data, try1.rev);
       });
       return { state: "saved" };
     } catch (e) {
-      if (e.status === 409) return this._conflict(l.copy, l.id, base, e);
+      if (e.status === 409) return this._conflict(l.copy, l.id, base, e, data, try1.rev);
       if (e.status === 0) return { state: "offline", message: e.message };
       if (e.status === 401) return { state: "login", message: e.message };
       return { state: "error", status: e.status, message: e.message };
     }
   };
-  /** A 409: our own save whose answer was lost, a deleted campaign, or a real conflict. */
-  Client.prototype._conflict = async function (copy, id, base, e) {
+  /**
+   * A 409 on the open session: the page replays this device's actions on the
+   * cloud copy (opts.rebase) and the result uploads.  -> {merged} to upload
+   * the merged copy, {wait: why} to try again at the next tick, or
+   * {why} when the merge is refused (the user then gets the conflict).
+   */
+  Client.prototype._merge = async function (copy, l, base, cur, data, rev) {
+    if (!this.rebase || (this.mergeOn && !this.mergeOn())) return { why: "off" };
+    // Only the open session: a closed copy keeps the conflict choice.
+    const open = this.link();
+    if (!open || open.copy !== copy) return { why: "closed" };
+    const a = this.actions(l);
+    if (a.why) return { why: a.why };
+    const c = await this.fetchCampaign(l.id);
+    if (!c || !c.data) return { why: "none" };
+    // An upload whose answer was lost may have landed, and the cloud may
+    // already hold its actions: a replay would add them twice.  With the
+    // cloud exactly one version on and that version not ours, the earlier
+    // try's base version is taken, so it cannot land any more: then safe.
+    if (l.sent && l.sent.length > 1) {
+      if (c.version > base + 1 || l.sent.some((t) => t.sig === sig(JSON.stringify(c.data)))) return { why: "lost" };
+    }
+    let r;
+    try { r = this.rebase({ data: c.data, local: data, version: c.version, by: c.updated_by, at: c.updated_at },
+      { ops: a.ops, baseSig: a.baseSig, copy, rev }); } catch (e) { return { why: "threw" }; }
+    if (r && r.wait) return { wait: r.wait };
+    if (!r || r.refused) return { why: (r && r.refused) || "none" };
+    // The cloud copy is the new base; the actions stay, the cloud does not
+    // have them until this upload is saved.  sent goes: its tries are behind.
+    this._update(copy, (x) => {
+      x.version = c.version; x.baseSig = fingerprint(c.data); x.by = c.updated_by; x.at = c.updated_at;
+      delete x.sent;
+    });
+    return { merged: { by: c.updated_by, at: c.updated_at, n: a.ops.length } };
+  };
+  /** A 409: our own save whose answer was lost, a deleted campaign, a merge, or a real conflict. */
+  Client.prototype._conflict = async function (copy, id, base, e, data, rev) {
     const cur = e.body.current || null;
     const l = this._find(copy);
     if (cur && cur.deleted_at == null && cur.version === base + 1 && l && l.sent && l.sent.length) {
@@ -5874,6 +6059,7 @@
         this._update(copy, (x) => {
           x.version = c.version; x.synced = Math.max(x.synced, hit.rev); x.by = c.updated_by; x.at = c.updated_at;
           delete x.sent;
+          moveBase(x, c.data, hit.rev);
         });
         return { state: "recovered" };
       }
@@ -5882,19 +6068,39 @@
       this._update(copy, (x) => { x.gone = true; delete x.sent; });
       return { state: "gone", message: GONE };
     }
-    this._update(copy, (x) => { x.conflict = cur; delete x.sent; });
-    return { state: "conflict", message: e.message };
+    let m = null;
+    try { m = await this._merge(copy, l, base, cur, data, rev); } catch (x) { m = null; }
+    if (m && m.merged) return { state: "merged", merged: m.merged, current: cur };
+    if (m && m.wait) return { state: "wait", why: m.wait };
+    this._update(copy, (x) => {
+      x.conflict = m && m.why ? Object.assign({}, cur, { why: m.why }) : cur;
+      delete x.sent;
+    });
+    return { state: "conflict", message: e.message, why: m ? m.why : undefined };
   };
-  /** Upload one copy until the cloud has it: after a lost answer, once more with the right version. */
+  /**
+   * Upload one copy until the cloud has it: after a lost answer or a merge,
+   * once more with the right version.
+   * -> {state: "saved", merged?} | {state: "wait", why} | another state
+   */
   Client.prototype._push = async function (copy, getData, keepalive) {
+    let merged = null, last = null;
     for (let i = 0; i < 3; i++) {
       const l = this._find(copy);
       if (!l) return { state: "moved" };   // the copy was closed or opened again meanwhile
-      if (l.rev <= l.synced) return { state: "saved" };
+      if (l.rev <= l.synced) return merged ? { state: "saved", merged } : { state: "saved" };
       const data = getData();
       if (data == null) return { state: "idle" };
       const r = await this._upload(l, data, keepalive);
+      if (r.state === "merged") { merged = r.merged; last = r.current || last; continue; }
+      if (r.state === "wait") return r;
+      if (r.state === "saved") return merged ? { state: "saved", merged } : r;
       if (r.state !== "recovered") return r;
+    }
+    // Another writer at every try: the user chooses, as before.
+    if (merged && last) {
+      this._update(copy, (x) => { x.conflict = Object.assign({}, last, { why: "loop" }); delete x.sent; });
+      return { state: "conflict", message: "Someone else saved this campaign first.", why: "loop" };
     }
     return { state: "error", message: "The upload did not settle. Try again." };
   };
@@ -5941,7 +6147,9 @@
     if (r.state === "moved") return { state: "idle" };
     if (r.state !== "saved") return r;
     const cur = this.link();
-    return { state: cur && cur.copy === l.copy && cur.rev > cur.synced ? "pending" : "saved" };
+    const out = { state: cur && cur.copy === l.copy && cur.rev > cur.synced ? "pending" : "saved" };
+    if (r.merged) out.merged = r.merged;
+    return out;
   };
 
   /**
@@ -5961,7 +6169,7 @@
     const cur = this.link();
     if (!cur || cur.copy !== l.copy || this.state(cur) !== "clean") return null;   // the user typed meanwhile
     if (apply) apply(r);
-    this._update(l.copy, (x) => { x.version = r.version; x.by = r.updated_by; x.at = r.updated_at; });
+    this._update(l.copy, (x) => { x.version = r.version; x.by = r.updated_by; x.at = r.updated_at; moveBase(x, r.data); });
     return r;
   };
 
@@ -5987,7 +6195,7 @@
   /** Conflict, choice 2 (also for a deleted campaign or another workspace): the browser copy becomes a new cloud campaign. */
   Client.prototype.fork = function () { return this.linkNew(); };
 
-  const api = { Client, CloudError, newId, normBase, sig, gzip, AUTH, LINK, OUTBOX };
+  const api = { Client, CloudError, newId, normBase, sig, gzip, canon, sessionSig, fingerprint, AUTH, LINK, OUTBOX, OPS_MAX };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.CalibCloud = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);
@@ -5999,6 +6207,8 @@
   const C = window.CalibSite;
   const I18N = window.CalibI18n || null;
   const KEY = "calib-site:active", ARCH = "calib-site:archive";
+  // The merge: my copy from before the last one (one only), and its log.
+  const PREMERGE = "calib-site:premerge", MERGES = "calib-site:merges";
   const $ = (id) => document.getElementById(id);
   const f = (x, d = 1) => (x == null || !isFinite(x) ? "—" : Number(x).toFixed(d));
   const sg = (x, d = 1) => (x == null || !isFinite(x) ? "—" : (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(d));
@@ -6028,7 +6238,192 @@
   }
   /** Before a write: a newer session from another tab wins, and the write stops. */
   function guardStale() { if (changedElsewhere()) { adoptStored(); throw new Error(STALE); } }
-  function save() { if (S) { guardStale(); writeActive(JSON.stringify(S.toJSON())); cloudChanged(); askKeep(); } }
+  /**
+   * Write the session here, then mark the cloud copy behind.  op: the action
+   * that made the change, for the cloud link's action list, or why it has
+   * none (see act()).
+   */
+  function save(op) {
+    if (!S) return;
+    guardStale();
+    const json = S.toJSON();
+    writeActive(JSON.stringify(json));
+    cloudChanged(op, json);
+    askKeep();
+  }
+
+  // ------------------------------------------------------------ actions
+  // Every change of the session goes through act(): the Session method, the
+  // save, and the action in the cloud link's list (site/cloud.js, "the
+  // action list").  When another device saved the campaign first, the page
+  // replays the list on the cloud copy (rebase()).  So the arguments hold
+  // every value the method reads from the page or the clock, and the
+  // method runs on a copy of them, as the replay does.  A confirm stays in
+  // the page: it is never replayed.  These actions cannot be replayed: the
+  // list is not replayable until the cloud has their change.
+  const NO_REPLAY = { undo: 1, reopen: 1, start: 1, setCampaign: 1, setTimers: 1 };
+  /** Call S[name], save, record.  tk: the tank an op of a transfer stands on.  -> what the method returns. */
+  function act(name, args, tk) {
+    const a = JSON.parse(JSON.stringify(args || []));
+    const at = actAt();
+    const r = S[name].apply(S, a);
+    if (NO_REPLAY[name]) save(name);
+    // A wrong tap is common: an untap right after its own tap takes both out of the list.
+    else if (name === "untap") save({ cancel: "tap" });
+    else save(Object.assign({ k: name, a, t: Date.now(), at }, tk ? { tk } : {}));
+    return r;
+  }
+  /** What an action stands on: the current row of each tank, its dips, state and finish, and the open tally. */
+  function actAt() {
+    const one = (s) => {
+      const L = s.current();
+      return {
+        row: L ? L.row : 0, dips: L ? L.dips.length : 0, state: L ? L.state : null,
+        finished: !!s.finished, levels: s.levels.length,
+      };
+    };
+    const at = isTransfer() ? { active: S.active, out: one(S.out), in: one(S.in) } : one(S);
+    at.tally = S.cans();
+    return at;
+  }
+  /**
+   * The tank an override falls on (a transfer), the same choice as
+   * TransferSession.override: the current tank first, then the pending one.
+   */
+  function overrideTank() {
+    const base = S[S.active].finished ? S.liveKey() : S.active;
+    const L = S[base].current();
+    return L && L.state === "pending" ? base : (S.pendingTank() || base);
+  }
+
+  // ------------------------------------------------------------ the merge
+  // Another device saved the campaign first (a 409).  This device's session
+  // is the cloud copy it built on, plus its own actions (the link's list).
+  // The merge replays those actions on the cloud copy through the same
+  // Session methods, and uploads the result.  It is accepted only when
+  // neither person's work changes:
+  //   1. every part of the cloud copy that my actions do not touch is
+  //      byte-identical in the merged copy;
+  //   2. every row and the tally that my actions made or changed is
+  //      byte-identical to my copy;
+  //   3. the list explains my copy (the last action's signature).
+  // Otherwise the user gets the conflict choice, with the reason.  No base
+  // copy is kept, only a fingerprint of it (site/cloud.js, fingerprint()).
+  const OPS_ROW = { dip: 1, dipBoth: 1, override: 1, redip: 1, editPour: 1, editNote: 1, finish: 1 };
+  const OPS_TALLY = { tap: 1, untap: 1, closeBatch: 1 };
+  /** The tanks an action stands on (a transfer); one flat copy for a single tank. */
+  function tanksOn(op, tanks) {
+    if (tanks[0] === null) return [null];
+    return op.tk ? [op.tk] : tanks.slice();
+  }
+  /** The fingerprint part of one tank (a transfer) or of the whole copy. */
+  function printOf(p, k) { return k ? p[k] : p; }
+  function tankOf(d, k) { return k ? d[k] : d; }
+  /** The row indices that differ between two fingerprints of one tank. */
+  function rowsChanged(b, a) {
+    const out = new Set(), n = Math.max(b.rows.length, a.rows.length);
+    for (let i = 0; i < n; i++) if (b.rows[i] !== a.rows[i]) out.add(i);
+    return out;
+  }
+  /**
+   * Replay this device's actions on the cloud copy.  -> {ok} (S holds the
+   * merged session, saved here), {wait: why} (not now: try again at the next
+   * tick) or {refused: why} (the user gets the conflict choice).
+   * cloud: {data, local, by, at} from the client; ctx: {ops, baseSig, copy, rev}.
+   */
+  function rebase(cloud, ctx) {
+    const wait = (why) => ({ wait: why });
+    if (editRow != null) return wait("note");
+    if (changedElsewhere()) return wait("tab");
+    const link = CL.link();
+    if (!S || !link || link.copy !== ctx.copy || link.rev !== ctx.rev) return wait("typed");
+    const mine = cloud.local, ops = ctx.ops, tanks = S.isTransfer ? ["out", "in"] : [null];
+    // Check 3: my copy is what the list says it is.
+    if (CC.sessionSig(mine) !== (ops.length ? ops[ops.length - 1].after : ctx.baseSig.all)) return { refused: "trace" };
+    // Another kind of campaign, or another direction.
+    if ((cloud.data.kind === "transfer") !== !!S.isTransfer) return { refused: "kind" };
+    for (const k of tanks) {
+      const a = tankOf(cloud.data, k), b = tankOf(mine, k);
+      if (((a.config || {}).direction || "fill") !== ((b.config || {}).direction || "fill")) return { refused: "kind" };
+    }
+    const now = CC.fingerprint(cloud.data), myp = CC.fingerprint(mine), before = ctx.baseSig;
+    if (!now || !myp || !before) return { refused: "kind" };
+    // What the other person changed since my version.
+    const ch = {}, added = {};
+    for (const k of tanks) {
+      const nb = printOf(before, k), nn = printOf(now, k);
+      if (!nb || !nn) return { refused: "kind" };
+      // A row gone: their undo.  The rows after it would move: no safe merge.
+      if (nn.rows.length < nb.rows.length) return { refused: "their" };
+      ch[k] = { rows: rowsChanged(nb, nn), batch: nb.batch !== nn.batch, config: nb.config !== nn.config, finished: nb.finished !== nn.finished };
+      added[k] = nn.rows.length - nb.rows.length;
+    }
+    let merged;
+    try { merged = fromJSON(JSON.parse(JSON.stringify(cloud.data))); } catch (e) { return { refused: "kind" }; }
+    const touched = {}, count = {};
+    for (const k of tanks) { touched[k] = new Set(); count[k] = tankOf(merged, k).levels.length; }
+    for (const op of ops) {
+      const ks = tanksOn(op, tanks), ats = ks.map((k) => [k, k ? op.at[k] : op.at]), rowsOf = {};
+      for (const [k, at] of ats) {
+        rowsOf[k] = !at || !OPS_ROW[op.k] ? [] : op.k === "editNote" ? [op.a[0] - 1]
+          : op.k === "pour" || op.k === "closeBatch" ? (at.finished ? [] : [count[k]])
+            : op.k === "finish" ? [at.state === "pending" ? at.row - 2 : at.row - 1] : [at.row - 1];
+      }
+      // Their change on the same part: both people changed one thing.
+      for (const [k, at] of ats) {
+        if (!at) return { refused: "target" };
+        if (rowsOf[k].some((i) => ch[k].rows.has(i))) return { refused: "same" };
+        if (OPS_TALLY[op.k] && ch[k].batch) return { refused: "same" };
+        if (op.k === "finish" && ch[k].finished) return { refused: "same" };
+      }
+      // The op's target is what it was on my copy.
+      for (const [k, at] of ats) {
+        const s = tankOf(merged, k), tally = tankOf(merged, tanks[0] === null ? null : "out");
+        // A can is counted, then the tank is finished: a state the page makes.
+        // Any level action on a tank finished meanwhile is not offered there.
+        if (op.k !== "tap" && op.k !== "untap" && !!s.finished !== !!at.finished) return { refused: "target" };
+        if (op.k === "editNote") {
+          if (!s.levels.some((l) => l.row === op.a[0])) return { refused: "target" };
+        } else {
+          const L = s.current();
+          if (!L || L.row !== at.row || L.dips.length !== at.dips || L.state !== at.state) return { refused: "target" };
+          if (OPS_TALLY[op.k] && (tally.cans() || 0) !== (at.tally || 0)) return { refused: "target" };
+        }
+      }
+      try { merged[op.k].apply(merged, op.a); } catch (e) { return { refused: "threw" }; }
+      for (const [k, at] of ats) {
+        if (OPS_ROW[op.k]) for (const i of rowsOf[k]) touched[k].add(i);
+        if ((op.k === "pour" || op.k === "closeBatch") && !at.finished) { touched[k].add(count[k]); count[k] += 1; }
+        if (op.k === "finish" && at.state === "pending") count[k] -= 1;
+      }
+    }
+    // Checks 1 and 2, part by part.
+    const m = CC.fingerprint(merged.toJSON());
+    const tallyOn = ops.some((o) => OPS_TALLY[o.k]), finOn = ops.some((o) => o.k === "finish");
+    const tallyTank = tanks[0] === null ? null : "out";
+    for (const k of tanks) {
+      const mm = printOf(m, k), nn = printOf(now, k), ll = printOf(myp, k);
+      if (mm.config !== nn.config || mm.rest !== nn.rest) return { refused: "their" };
+      if (k === tallyTank && (tallyOn ? mm.batch !== ll.batch : mm.batch !== nn.batch)) return { refused: tallyOn ? "mine" : "their" };
+      if (finOn ? mm.finished !== ll.finished : mm.finished !== nn.finished) return { refused: finOn ? "mine" : "their" };
+      if (mm.rows.length !== ll.rows.length + added[k]) return { refused: "mine" };
+      for (let i = 0; i < nn.rows.length; i++) {
+        if (touched[k].has(i) || mm.rows[i] === nn.rows[i]) continue;
+        return { refused: "their" };
+      }
+      for (const i of touched[k]) {
+        const j = i - added[k];
+        if (j < 0 || mm.rows[i] !== ll.rows[j]) return { refused: "mine" };
+      }
+    }
+    // Apply: my copy goes aside (one only), the merged one takes its place.
+    try { localStorage.setItem(PREMERGE, JSON.stringify({ when: new Date().toISOString(), session: mine })); } catch (e) { /* no space: the merge still goes on */ }
+    S = merged;
+    // A transfer keeps this device's tank view.
+    if (S.isTransfer && mine.active) S.active = mine.active;
+    keepLocal();
+    return { ok: true };
+  }
 
   // The browser can delete a site's saved data: Safari after 7 days without
   // a visit (not from the Home Screen), other browsers when space runs low.
@@ -6096,7 +6491,13 @@
     fetch: typeof fetch === "function" ? (u, i) => fetch(u, i) : null,
     origin: pageOrigin,
     onClosed: closedDone,
+    // The merge at a 409 (rebase()): two people who write in turn keep both
+    // their work.  mergeOn: the switch in Files → Cloud can stop it.
+    rebase,
+    mergeOn: mergeAuto,
   }) : null;
+  /** The merge switch (Files → Cloud): off gives today's conflict choice. */
+  function mergeAuto() { return !!CL && CL.merge(); }
   let cloudMsg = "", cloudList = null, syncTimer = null;
   /** Write the session to this browser without a new cloud change (it came from the cloud). */
   function keepLocal() {
@@ -6142,7 +6543,13 @@
     if (S && S.active && s.active) s.active = S.active;
     S = s; keepLocal();
   }
-  function cloudChanged() { if (CL && CL.link()) { CL.markDirty(); scheduleSync(); } }
+  /** The session changed (json: its JSON now): the cloud copy is behind; op as save(). */
+  function cloudChanged(op, json) {
+    if (!CL || !CL.link()) return;
+    if (op && typeof op === "object" && !op.cancel) op.after = CC.sessionSig(json || S.toJSON());
+    CL.markDirty(op);
+    scheduleSync();
+  }
   function scheduleSync() {
     if (syncTimer != null) clearTimeout(syncTimer);
     syncTimer = setTimeout(() => { syncTimer = null; cloudSync(); }, 1500);
@@ -6153,15 +6560,53 @@
     offline: "Offline: the changes wait in this browser. They upload when the network is back.",
     conflict: "Someone else saved this campaign first. Choose below.",
     login: "Log in to upload the changes. They wait in this browser.",
+    // The merge waits for a note to close, or for a change to settle.
+    wait: "Uploading the latest changes.",
   };
+  /**
+   * Why the merge was refused, in a few words: the conflict line says it, and
+   * the merge log keeps the reason.  by: the other writer; the reasons about
+   * this device say "you".
+   */
+  function whyText(why, by) {
+    const who = by || "Someone";
+    switch (why) {
+      case "same": return `${who} changed the same level or tally.`;
+      case "target": return `${who} changed the level this device used.`;
+      case "threw": return "An action of this device does not apply to the cloud copy.";
+      case "trace": return "A change on this device is missing from its action list.";
+      case "mine": return "This device's copy would change in the merge.";
+      case "their": return "The cloud copy would change in the merge.";
+      case "kind": return "The two copies are different kinds of campaign.";
+      case "lost": return "An earlier upload may have landed: upload again.";
+      case "loop": return "Another device saved again while this one uploaded.";
+      case "undo": return "You removed an entry.";
+      case "reopen": return "You took a finish back.";
+      case "start": return "You started a campaign.";
+      case "setCampaign": return "You changed the settings.";
+      case "setTimers": return "You changed the timers.";
+      case "new": return "You started a new campaign.";
+      case "edit": return "A change on this device cannot be replayed.";
+      case "long": return "Too many changes wait on this device to replay them.";
+      case "base": return "This device has no copy of the version it built on.";
+      case "closed": return "This campaign was closed on this device.";
+      case "none": return "The cloud copy is not there.";
+      default: return "";
+    }
+  }
   function cloudSync(opts) {
     if (!CL) return Promise.resolve(null);
     const before = cloudMsg;
     return CL.sync(() => (S ? S.toJSON() : null), opts).then((r) => {
       // A message from a closed copy (closedDone) wins over "saved".
       if (cloudMsg !== before) { /* keep it */ }
+      else if (r.merged) cloudMsg = `Merged with ${r.merged.by}'s changes at ${C.clock(r.merged.at || Date.now())}.`;
       else if (r.state === "saved") cloudMsg = `Saved in the cloud at ${C.clock(Date.now())}.`;
       else if (r.state === "error") cloudMsg = r.message;
+      else if (r.state === "conflict") {
+        const c = CL.link() && CL.link().conflict;
+        cloudMsg = [SYNC_TEXT.conflict, whyText(r.why || (c && c.why), c && c.updated_by)].filter(Boolean).join(" ");
+      }
       else if (SYNC_TEXT[r.state]) cloudMsg = SYNC_TEXT[r.state];
       if (tab === "files") renderArchive();
       renderCloud();
@@ -6753,7 +7198,7 @@
       s.out.levels[0].pourTime = null;
       s.in.levels[0].pourTime = null;
       $("d-val").value = ""; $("d-val-b").value = "";
-      S = s; cloudNew(); save(); tab = "live";
+      S = s; cloudNew(); save("new"); tab = "live";
       P.noise = n;
       localStorage.setItem(PREFS, JSON.stringify(P));
       return;
@@ -6773,7 +7218,7 @@
     const s = new C.Session(cfg);
     s.start($("s-step").value.trim() || "?", dip, "", Date.now(), setupDir === "drain" ? { at: setupAt } : undefined);
     s.levels[0].pourTime = null;
-    S = s; cloudNew(); save(); tab = "live";
+    S = s; cloudNew(); save("new"); tab = "live";
     // The noise card is the draft: keep the next campaign in step with it.
     P.noise = n;
     localStorage.setItem(PREFS, JSON.stringify(P));
@@ -6805,7 +7250,7 @@
     // The fill timer of this can, when it ran: the time trend learns the fill
     // and drain times from it.  A timer started while a dip waited gives no
     // fill time: the can waited full for the verdict.
-    S.tap(now, u, T.pour && !T.pour.early && T.pour.size === u && T.pour.start <= now ? T.pour.start : null); save();
+    act("tap", [now, u, T.pour && !T.pour.early && T.pour.size === u && T.pour.start <= now ? T.pour.start : null]);
     followPlan();
     // The can is counted: its pour timer and alarm are done.
     if (T.pour || T.wait) { delete T.pour; delete T.wait; saveTimer(); }
@@ -6847,7 +7292,7 @@
   $("t-undo").addEventListener("click", guard("p-err", () => {
     if (!S.cans()) return;
     if (!confirm(tr("Remove the last can from the count?"))) return;
-    S.untap(); save(); followPlan();
+    act("untap", []); followPlan();
   }));
   $("t-part").addEventListener("change", () => render());
   $("t-warn").addEventListener("click", () => {
@@ -6872,11 +7317,10 @@
       // The batch went in at its last can, else now.
       const ts = S.canList().map((c) => c.t).filter((x) => x != null);
       o.pourTime = ts.length ? ts[ts.length - 1] : Date.now();
-      S.closeBatch(o);
+      act("closeBatch", [o]);
       if (T.pour || T.wait) { delete T.pour; delete T.wait; saveTimer(); }
       stopAlarm(); unlockAudio();
       $("p-note").value = ""; $("p-vol").value = ""; $("t-part").checked = false; $("p-over").checked = false; $("p-neck").checked = false;
-      save();
       setTimeout(() => $("d-val").focus(), 50);
       return;
     }
@@ -6890,11 +7334,10 @@
       }
       text = $("p-extra").checked ? `${v}+?` : String(v);
     }
-    S.pour(text, Object.assign({ note: $("p-note").value.trim(), pourTime: Date.now() }, overNeck()));
+    act("pour", [text, Object.assign({ note: $("p-note").value.trim(), pourTime: Date.now() }, overNeck())]);
     if (T.pour || T.wait) { delete T.pour; delete T.wait; saveTimer(); }
     stopAlarm(); unlockAudio();
     $("p-note").value = ""; $("p-vol").value = ""; $("p-unknown").checked = false; $("p-extra").checked = false; $("p-over").checked = false; $("p-neck").checked = false;
-    save();
     setTimeout(() => $("d-val").focus(), 50);
   }));
 
@@ -6916,9 +7359,8 @@
       const id = key === "in" ? "d-val-b" : "d-val";
       const v = num(id);
       if (v == null) throw new Error(`Enter ${S[key].cfg.tank}'s reading.`);
-      S.dipBoth(key === "out" ? v : null, key === "in" ? v : null, Date.now());
+      act("dipBoth", [key === "out" ? v : null, key === "in" ? v : null, Date.now()]);
       $(id).value = "";
-      save();
       const next = S[key].current().state === "pending" ? id
         : S.out.current().state === "pending" ? "d-val"
           : S.in.current().state === "pending" ? "d-val-b" : null;
@@ -6927,9 +7369,8 @@
     }
     const v = num("d-val");
     if (v == null) throw new Error("Enter the reading in mm.");
-    S.dip(v, Date.now());
+    act("dip", [v, Date.now()]);
     $("d-val").value = "";
-    save();
   }
   $("d-go").addEventListener("click", guard("d-err", () => doDip()));
   $("d-go-a").addEventListener("click", guard("d-err", () => doDip("out")));
@@ -6973,20 +7414,21 @@
     if (!L) return;
     if (!stopPumpForA(k === "out")) return;
     // A transfer: the pair judged a decided level; it leaves while this one is open again.
-    if (isTransfer()) S.redip(k); else S.redip();
-    save(); render(); $("d-val").focus();
+    if (k) act("redip", [k], k); else act("redip", []);
+    render(); $("d-val").focus();
   });
   $("a-edit").addEventListener("click", guard("d-err", () => {
     const L = isTransfer() ? S.out.current() : S.current();
     const what = isTransfer() ? "Batch" : isDrain() ? "Drain" : "Pour";
     const t = prompt(tr(`${what} after the recount, L (? = unknown, 200+? = 200 plus unknown):`), L.step.text);
     if (t == null) return;
-    S.editPour(t.trim()); save();
+    act("editPour", [t.trim()]);
   }));
   $("a-override").addEventListener("click", guard("d-err", () => {
     const why = prompt(tr("Why do you accept this level against the check?"), "");
     if (why == null) return;
-    S.override(why.trim()); save();
+    const k = isTransfer() ? overrideTank() : null;
+    if (k) act("override", [why.trim(), k], k); else act("override", [why.trim()]);
   }));
   $("a-undo").addEventListener("click", guard("d-err", () => {
     if (!confirm(tr(isTransfer()
@@ -6997,11 +7439,11 @@
       const a = S.out.current(), b = S.in.current();
       if (S.out.levels.length === 1 && S.in.levels.length === 1
         && (!a || !a.dips.length) && (!b || !b.dips.length)) { guardStale(); S = null; writeActive(null); cloudNew(); return; }
-      S.undo(); save();
+      act("undo", []);
       return;
     }
     if (S.levels.length === 1 && S.levels[0].dips.length <= 1) { guardStale(); S = null; writeActive(null); cloudNew(); return; }
-    S.undo(); save();
+    act("undo", []);
   }));
 
   // ------------------------------------------------------------ files
@@ -7037,7 +7479,7 @@
         if (S && !confirm(tr("Replace the open session? It goes to the archive."))) return;
         if (S) pushArchive(cloudClose());
         resetTallySize();
-        S = s; cloudNew(); save(); tab = "live"; render();
+        S = s; cloudNew(); save("new"); tab = "live"; render();
       } catch (e) { $("f-err").textContent = "Cannot read that file: " + e.message; }
     });
   });
@@ -7071,7 +7513,7 @@
       // A session that was in the cloud goes back to its cloud campaign, in
       // the state it closed with: no new change, so a clean copy only
       // follows the cloud, and a stale one gets a conflict, never an overwrite.
-      if (CL && item.cloud) { CL.attach(item.cloud); keepLocal(); if (CL.dirty()) scheduleSync(); } else { cloudNew(); save(); }
+      if (CL && item.cloud) { CL.attach(item.cloud); keepLocal(); if (CL.dirty()) scheduleSync(); } else { cloudNew(); save("new"); }
       tab = "live"; render();
     } else {
       download(fileName(item.tank, "site.json", item.cloud || null), JSON.stringify(item.session, null, 2), "application/json");
@@ -7386,16 +7828,18 @@
   function toggleFinish(k) {
     const s = finSess(k);
     if (!s) return;
+    // A transfer's tank is named; reopen cannot be replayed.
+    const tank = k === "one" ? null : k;
     if (s.finished) {
       if (!s.canReopen()) throw new Error("a batch was pumped while this tank was finished: it stays finished");
       if (!confirm(tr("Take the finish back? The tank dips again after the next batch."))) return;
-      s.reopen();
+      if (tank) act("reopen", [tank], tank); else act("reopen", []);
     } else {
       if (s.lastGood() < 0) throw new Error("no level to finish yet: dip one first");
       if (!confirm(tr("Finish this calibration? No more dips, pours or predictions for this tank."))) return;
-      s.finish(Date.now());
+      if (tank) act("finish", [Date.now(), tank], tank); else act("finish", [Date.now()]);
     }
-    save(); render();
+    render();
   }
   $("now-fin-a").addEventListener("click", guard("p-err", () => toggleFinish($("now-fin-a").dataset.tank)));
   $("now-fin-b").addEventListener("click", guard("p-err", () => toggleFinish($("now-fin-b").dataset.tank)));
@@ -8311,7 +8755,7 @@
     $("set-noise-msg").textContent = "";
     const o = readNoise();
     if (S) {
-      S.setCampaign(o); save();
+      act("setCampaign", [o]);
       P.noise = o;
       localStorage.setItem(PREFS, JSON.stringify(P));
       $("set-noise-msg").textContent = "Saved. The running shell is refitted and the noise scale restarts; new checks use the new noise.";
@@ -8325,13 +8769,13 @@
   $("set-save").addEventListener("click", guard("set-err", () => {
     $("set-msg").textContent = "";
     if (!S) throw new Error("Start a campaign first.");
-    S.setCampaign({
+    act("setCampaign", [{
       tank: $("set-tank").value.trim(),
       D: num("set-D"), Dpm: num("set-Dpm"),
       Lest: num("set-L"), Lpm: num("set-Lpm"), pourUnit: num("set-unit"),
       brim: brimField("set-brim"), brimPm: brimPmField("set-brimpm"),
-    });
-    save(); settingsSig = settingsSignature();
+    }]);
+    settingsSig = settingsSignature();
     $("set-msg").textContent = "Saved. The running shell is refitted from the accepted levels.";
   }));
 
@@ -8832,8 +9276,8 @@
     const o = {};
     if (sg.fill != null) o.fillSeconds = { [String(u)]: sg.fill };
     if (sg.drain != null) o.drainSeconds = { [String(u)]: sg.drain };
-    S.setTimers(o);
-    save(); timersSig = ""; render(); tickEta(Date.now());
+    act("setTimers", [o]);
+    timersSig = ""; render(); tickEta(Date.now());
   }
   $("tm-trend").addEventListener("click", (ev) => {
     const b = ev.target.closest("button[data-u]");
@@ -9002,7 +9446,7 @@
     if (!P.anim) { stopPourAnim(); resetPourDraw(); }
     localStorage.setItem(PREFS, JSON.stringify(P));
     if (!P.wake) releaseWake();
-    if (changed) save();
+    if (changed) save("setTimers");
     timersSig = "";
     $("tm-msg").textContent = "Saved." + (S.cfg.settleSeconds < 300
       ? ` The settle time ${fmtClock(S.cfg.settleSeconds)} is below the 5-minute minimum of §3.5: a level that still moves gives a bad dip.` : "");
@@ -9173,8 +9617,11 @@
     $("log-err").textContent = "";
     try {
       const i = $("note-edit");
-      S.editNote(row, i ? i.value : "");
-      save(); editRow = null; render(); focusEdit(row);
+      // A transfer's note is the note of the tank in view: the op names it,
+      // so the merge does not depend on the view of this device.
+      if (isTransfer()) act("editNote", [row, i ? i.value : "", S.active], S.active);
+      else act("editNote", [row, i ? i.value : ""]);
+      editRow = null; render(); focusEdit(row);
     } catch (e) { $("log-err").textContent = e.message; }
   }
 

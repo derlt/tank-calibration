@@ -566,6 +566,197 @@ class TestClient(unittest.TestCase):
 
 
 @unittest.skipUnless(SQLITE, "node with node:sqlite is not installed")
+class TestActionList(unittest.TestCase):
+    """The link's action list (site/cloud.js): what the merge replays."""
+    PRELUDE = TestClient.PRELUDE
+
+    def test_ops_base_and_reasons(self):
+        got = _run(
+            self.PRELUDE
+            + "const at = { row: 1, dips: 0, state: 'start', finished: false, levels: 1, tally: 0 };\n"
+            "let data = h.session('alpha', 2);\n"
+            "A.linkNew();\n"
+            "out.new = [A.actions().why, !!A.link().baseSig];\n"
+            "out.first = (await A.sync(() => data)).state;\n"
+            "out.base = [A.actions().why === undefined, !!A.link().baseSig, A.link().baseSig.rows.length];\n"
+            # an action joins the list; an untap right after its tap takes both out
+            "A.markDirty({ k: 'tap', a: [10, 200], t: 1, at });\n"
+            "A.markDirty({ cancel: 'tap' });\n"
+            "out.pair = [(A.link().ops || []).length, A.actions().why === undefined, A.link().rev];\n"
+            # an untap not right after its tap cannot be replayed
+            "A.markDirty({ k: 'tap', a: [11, 200], t: 3, at });\n"
+            "A.markDirty({ k: 'dip', a: [105, 4], t: 4, at });\n"
+            "A.markDirty({ cancel: 'tap' });\n"
+            "out.late = [A.actions().why, (A.link().ops || []).length];\n"
+            # a saved upload moves the base and empties the list
+            "out.saved = (await A.sync(() => data)).state;\n"
+            "out.clean = [A.actions().why === undefined, (A.link().ops || []).length, A.link().baseSig.all === cloud.sessionSig(data)];\n"
+            # a save with no action: not replayable until the next upload
+            "out.timers = (A.markDirty('setTimers'), A.actions().why);\n"
+            "await A.sync(() => data);\n"
+            "out.again = A.actions().why || 'none';\n"
+            # a poll and a take move the base too
+            "B.linkTo(await B.fetchCampaign(A.link().id));\n"
+            "A.markDirty({ k: 'tap', a: [12, 200], t: 5, at });\n"
+            "out.beforePoll = (A.link().ops || []).length;\n"
+            "const d2 = h.session('alpha', 3); data = d2;\n"
+            "await A.sync(() => data);\n"
+            "out.carried = [(A.link().ops || []).length, !!A.link().baseSig];\n"
+            # a closed copy carries the list in the outbox and back
+            "A.markDirty({ k: 'tap', a: [13, 200], t: 6, at });\n"
+            "const closed = A.detach(data);\n"
+            "out.box = [(A.outbox()[0].link.ops || []).length, !!A.outbox()[0].link.baseSig];\n"
+            "const back = A.attach(closed);\n"
+            "out.back = [(A.link().ops || []).length, A.link().baseSig.all === cloud.sessionSig(data)];\n"
+            # the list has a cap
+            "for (let i = 0; i < cloud.OPS_MAX + 1; i++) A.markDirty({ k: 'tap', a: [i, 200], t: i, at });\n"
+            "out.cap = [cloud.OPS_MAX, A.actions().why];\n"
+        )
+        self.assertEqual(got["new"], ["base", False], "no cloud copy yet: nothing to merge with")
+        self.assertEqual(got["first"], "saved")
+        self.assertEqual(got["base"], [True, True, 2])
+        self.assertEqual(got["pair"], [0, True, 3], "a wrong tap leaves no trace: rev moves, the list does not")
+        self.assertEqual(got["late"], ["untap", 0], "a change that cannot be replayed takes the list with it")
+        self.assertEqual(got["saved"], "saved")
+        self.assertEqual(got["clean"], [True, 0, True], "the base is the saved copy, to the byte")
+        self.assertEqual(got["timers"], "setTimers")
+        self.assertEqual(got["again"], "none", "the upload settles it")
+        self.assertEqual(got["carried"], [0, True], "the upload of the action empties the list")
+        self.assertEqual(got["box"], [1, True], "a closed copy keeps its list")
+        self.assertEqual(got["back"], [1, True], "and gets it back")
+        self.assertEqual(got["cap"], [500, "long"])
+
+    def test_fingerprint_and_canonical_json(self):
+        got = _run(
+            self.PRELUDE
+            + "const a = { b: 1, a: [2, { z: 3, y: 4 }] }, b = { a: [2, { y: 4, z: 3 }], b: 1 };\n"
+            "out.canon = cloud.canon(a) === cloud.canon(b);\n"
+            "out.sig = cloud.sessionSig(a) === cloud.sessionSig(b);\n"
+            "const s = h.session('alpha', 2), t = { version: 1, kind: 'transfer', active: 'out', lastDip: 'in', out: s, in: s };\n"
+            "out.active = cloud.sessionSig(t) === cloud.sessionSig(Object.assign({}, t, { active: 'in', lastDip: 'out' }));\n"
+            "const f = cloud.fingerprint(t);\n"
+            "out.print = [f.kind, f.out.rows.length, f.in.rows.length, !!f.rest, f.all === cloud.sessionSig(t)];\n"
+            "out.rows = f.out.rows[0] !== s.levels[0] && f.out.rows[0] === f.in.rows[0];\n"
+        )
+        self.assertTrue(got["canon"])
+        self.assertTrue(got["sig"])
+        self.assertTrue(got["active"], "the tank view and the last dip are per device")
+        self.assertEqual(got["print"], ["transfer", 2, 2, True, True])
+        self.assertTrue(got["rows"])
+
+
+@unittest.skipUnless(SQLITE, "node with node:sqlite is not installed")
+class TestMergeClient(unittest.TestCase):
+    """The merge loop (site/cloud.js): when it uploads, waits, or gives the choice."""
+    PRELUDE = TestClient.PRELUDE
+    AT = "{ row: 1, dips: 2, state: 'start', finished: false, levels: 1, tally: 0 }"
+
+    def test_a_merge_uploads_the_replayed_copy(self):
+        got = _run(
+            self.PRELUDE
+            + f"const at = {self.AT};\n"
+            "const calls = []; let data = h.session('alpha', 1);\n"
+            "const C = new cloud.Client({ storage: mem(), fetch: net('10.0.0.7'), origin: h.BASE,\n"
+            "  rebase: (c, x) => { calls.push([c.version, c.by, x.ops.length, !!x.baseSig, c.local.levels[0].note, !!c.local]);\n"
+            "    const m = h.session('alpha', 1); m.levels[0].note = 'mine'; data = m; return { ok: true }; } });\n"
+            "await C.login('', 'team-1', 'correct horse battery', 'Chi');\n"
+            "C.linkNew(); await C.sync(() => data);\n"
+            "const id = C.link().id;\n"
+            "const tb = h.session('alpha', 1); tb.levels[0].note = 'wet';\n"
+            "B.linkTo(await B.fetchCampaign(id)); B.markDirty(); await B.sync(() => tb);\n"
+            "C.markDirty({ k: 'dip', a: [105, 5], t: 1, at });\n"
+            "const r = await C.sync(() => data);\n"
+            "out.r = [r.state, r.merged && r.merged.by, r.merged && r.merged.n];\n"
+            "out.calls = calls;\n"
+            "out.link = [C.link().version, C.link().rev === C.link().synced, (C.link().ops || []).length, !!C.link().conflict];\n"
+            "out.cloud = (await C.fetchCampaign(id)).data.levels[0].note;\n"
+        )
+        self.assertEqual(got["r"], ["saved", "Binh", 1])
+        self.assertEqual(got["calls"], [[2, "Binh", 1, True, None, True]], "the cloud copy, a named user, my list and base")
+        self.assertEqual(got["link"], [3, True, 0, False], "one upload after the merge, the list empty")
+        self.assertEqual(got["cloud"], "mine")
+
+    def test_a_wait_and_a_refusal(self):
+        got = _run(
+            self.PRELUDE
+            + f"const at = {self.AT};\n"
+            "let how = 'wait'; let data = h.session('alpha', 1);\n"
+            "const C = new cloud.Client({ storage: mem(), fetch: net('10.0.0.7'), origin: h.BASE, rebase: () => (how === 'wait' ? { wait: 'note' } : { refused: how }) });\n"
+            "await C.login('', 'team-1', 'correct horse battery', 'Chi');\n"
+            "C.linkNew(); await C.sync(() => data);\n"
+            "const id = C.link().id;\n"
+            "const tb = h.session('alpha', 1); tb.levels[0].note = 'wet';\n"
+            "B.linkTo(await B.fetchCampaign(id)); B.markDirty(); await B.sync(() => tb);\n"
+            "C.markDirty({ k: 'dip', a: [105, 5], t: 1, at });\n"
+            "const w = await C.sync(() => data);\n"
+            "out.wait = [w.state, w.why, C.dirty(), !!C.link().conflict];\n"
+            "how = 'same';\n"
+            "const r = await C.sync(() => data);\n"
+            "out.refused = [r.state, r.why, C.link().conflict && C.link().conflict.why, C.link().conflict && C.link().conflict.updated_by];\n"
+        )
+        self.assertEqual(got["wait"], ["wait", "note", True, False], "a wait is not a conflict: the next tick tries again")
+        self.assertEqual(got["refused"], ["conflict", "same", "same", "Binh"])
+
+    def test_a_lost_answer_stops_the_merge(self):
+        got = _run(
+            self.PRELUDE
+            + f"const at = {self.AT};\n"
+            "let lose = false, calls = 0;\n"
+            "const f = h.fetchFor(env, '10.0.0.9');\n"
+            "const C = new cloud.Client({ storage: mem(), origin: h.BASE, rebase: () => { calls++; return { ok: true }; },\n"
+            "  fetch: async (u, i) => { const r = await f(u, i); if (lose && i.method === 'PUT') { lose = false; throw new TypeError('lost'); } return r; } });\n"
+            "await C.login('', 'team-1', 'correct horse battery', 'Chi');\n"
+            "let data = h.session('alpha', 1);\n"
+            "C.linkNew(); out.first = (await C.sync(() => data)).state;\n"
+            "lose = true; data = h.session('alpha', 2); C.markDirty({ k: 'tap', a: [1, 200], t: 1, at });\n"
+            "out.lost = (await C.sync(() => data)).state;\n"
+            # the lost save landed (v2); another device writes on top (v3)
+            "const tb = h.session('alpha', 3); tb.levels[0].note = 'wet';\n"
+            "B.linkTo(await B.fetchCampaign(C.link().id)); B.markDirty(); await B.sync(() => tb);\n"
+            "out.again = (await C.sync(() => data)).state;\n"
+            "out.why = [C.link().conflict && C.link().conflict.why, calls];\n"
+        )
+        self.assertEqual(got["first"], "saved")
+        self.assertEqual(got["lost"], "offline")
+        self.assertEqual(got["again"], "conflict", "the cloud may hold the actions: no replay")
+        self.assertEqual(got["why"], ["lost", 0], "the merge was never tried")
+
+    def test_a_third_writer_gets_one_more_replay(self):
+        got = _run(
+            self.PRELUDE
+            + f"const at = {self.AT};\n"
+            "const f = h.fetchFor(env, '10.0.0.7');\n"
+            "let inject = 0, calls = 0, tok = null, id = null;\n"
+            "const C = new cloud.Client({ storage: mem(), origin: h.BASE, rebase: () => { calls++; return { ok: true }; },\n"
+            "  fetch: async (u, i) => {\n"
+            "    if (i.method === 'PUT' && inject > 0) {\n"
+            "      inject--;\n"
+            "      const cur = (await h.call(env, 'GET', '/api/campaigns/' + id, null, tok)).body;\n"
+            "      await h.call(env, 'PUT', '/api/campaigns/' + id, { data: h.session('alpha', cur.version + 2), base_version: cur.version }, tok);\n"
+            "    }\n"
+            "    return f(u, i); } });\n"
+            "await C.login('', 'team-1', 'correct horse battery', 'Chi');\n"
+            "let data = h.session('alpha', 1);\n"
+            "C.linkNew(); await C.sync(() => data);\n"
+            "id = C.link().id; tok = C.auth().token;\n"
+            "B.linkTo(await B.fetchCampaign(id)); B.markDirty(); await B.sync(() => h.session('alpha', 1));\n"
+            "const one = (n) => { const s = h.session('alpha', 1); s.levels[0].note = 'n' + n; return s; };\n"
+            # two writers during the upload: two merges, then saved
+            "inject = 2; data = one(1); C.markDirty({ k: 'dip', a: [105, 5], t: 1, at });\n"
+            "const r = await C.sync(() => data);\n"
+            "out.two = [r.state, calls, C.link().version, !!C.link().conflict];\n"
+            "calls = 0;\n"
+            "B.markDirty(); await B.sync(() => one(9));\n"
+            # a writer at every try: the conflict choice, as before
+            "inject = 4; data = one(2); C.markDirty({ k: 'dip', a: [106, 6], t: 2, at });\n"
+            "const r2 = await C.sync(() => data);\n"
+            "out.many = [r2.state, r2.why, calls, !!C.link().conflict, C.link().conflict && C.link().conflict.why];\n"
+        )
+        self.assertEqual(got["two"], ["saved", 2, 5, False], "a third writer: one more 409, one more replay")
+        self.assertEqual(got["many"], ["conflict", "loop", 3, True, "loop"], "after 3 tries: the choice")
+
+
+@unittest.skipUnless(SQLITE, "node with node:sqlite is not installed")
 class TestPage(unittest.TestCase):
     def _devices(self):
         stub = (HERE / "page_stub.js").as_posix()
@@ -605,11 +796,13 @@ class TestPage(unittest.TestCase):
             "await login(a, 'An'); start(a); a('t-unit').value = '200'; a('c-sync').click(); await settled(s1);\n"
             "await login(b, 'Binh'); const id = link(s1).id;\n"
             "openCloud(b, id); await until(() => link(s2) && link(s2).id === id);\n"
+            "b('t-unit').value = '200';   // the can size on B's device too\n"
             "const note = (e, row, text) => { const click = (sel, data) => e('log-table')._listeners.click[0]({ target: { closest: (s) => (s === sel ? { dataset: data } : null) } });\n"
             "  click('button[data-note-edit]', { noteEdit: String(row) }); e('note-edit').value = text; click('button[data-note-save]', { noteSave: String(row) }); };\n"
             "const sync = async (e, st) => { e('c-sync').click(); await until(() => link(st).rev === link(st).synced || link(st).conflict); await new Promise((r) => setTimeout(r, 20)); };\n"
             "const follow = async (e, st, v) => { e('c-sync').click(); await until(() => link(st).version >= v); };\n"
             "const active = (st) => JSON.parse(st.get('calib-site:active'));\n"
+            "const dip = (e, ...vs) => { for (const v of vs) { e('d-val').value = String(v); e('d-go').click(); } };\n"
         )
 
     def test_case_a_dipper_writes_while_the_counter_counts(self):
@@ -620,10 +813,16 @@ class TestPage(unittest.TestCase):
             "note(b, 1, 'datum plate wet'); await sync(b, s2);\n"
             "await sync(a, s1);\n"
             "out.hdr = a('hdr-cloud').textContent;\n"
-            "out.cloud = [cloudData().levels[0].note, cloudData().batch];\n"
+            "out.msg = a('c-state').textContent;\n"
+            "out.cloud = [cloudData().levels[0].note, cloudData().batch.cans.length];\n"
+            "out.mine = active(s1).batch.cans.length;\n"
+            "out.clean = [link(s1).rev === link(s1).synced, !!link(s1).conflict, (link(s1).ops || []).length];\n"
         )
-        self.assertEqual(got["hdr"], "cloud: conflict")
-        self.assertEqual(got["cloud"], ["datum plate wet", None], "the cloud keeps B's note, not A's can")
+        self.assertEqual(got["hdr"], "cloud: saved", "a merge, not a conflict")
+        self.assertIn("Merged with Binh's changes", got["msg"])
+        self.assertEqual(got["cloud"], ["datum plate wet", 1], "both the note and the can are in the cloud")
+        self.assertEqual(got["mine"], 1, "this device shows both too")
+        self.assertEqual(got["clean"], [True, False, 0], "the upload settled and the list is empty")
 
     def test_case_b_edit_pour_against_the_dip_of_the_same_level(self):
         got = _run(
@@ -636,9 +835,11 @@ class TestPage(unittest.TestCase):
             "b('d-val').value = '130'; b('d-go').click(); await sync(b, s2);\n"
             "await sync(a, s1);\n"
             "out.hdr = a('hdr-cloud').textContent;\n"
+            "out.msg = a('c-state').textContent;\n"
             "out.cloud = [cloudData().levels[1].step.text, cloudData().levels[1].dips];\n"
         )
         self.assertEqual(got["hdr"], "cloud: conflict", "both changed row 2: no safe merge")
+        self.assertIn("Binh changed the same level or tally", got["msg"])
         self.assertEqual(got["cloud"], ["400", [130]])
 
     def test_case_c_timers_form_without_a_change(self):
@@ -669,9 +870,192 @@ class TestPage(unittest.TestCase):
             "note(b, 1, 'datum plate wet'); await sync(b, s2);\n"
             "out.hdr = b('hdr-cloud').textContent;\n"
             "out.cloud = [cloudData().levels[0].note, cloudData().batch.cans.length];\n"
+            "out.mine = [active(s2).levels[0].note, active(s2).batch.cans.length];\n"
+        )
+        self.assertEqual(got["hdr"], "cloud: saved", "a stale write merges")
+        self.assertEqual(got["cloud"], ["datum plate wet", 1], "B's note and A's can are both kept")
+        self.assertEqual(got["mine"], ["datum plate wet", 1])
+
+    def test_a_stale_dip_merges_with_their_note(self):
+        got = _run(
+            self._team()
+            # A closes a batch and follows: row 2 waits for its dip
+            + "a('t-plus').click(); a('t-plus').click(); a('p-go').click(); a('c-sync').click(); await settled(s1);\n"
+            "await follow(b, s2, link(s1).version);\n"
+            # B has not seen it and dips row 2 at once; A writes a note on row 1 meanwhile
+            "dip(b, 130, 130);\n"
+            "note(a, 1, 'datum plate wet'); await sync(a, s1);\n"
+            "await sync(b, s2);\n"
+            "out.hdr = b('hdr-cloud').textContent;\n"
+            "out.cloud = [cloudData().levels[0].note, cloudData().levels[1].dips, cloudData().levels[1].state];\n"
+            "out.mine = [active(s2).levels[0].note, active(s2).levels[1].dips];\n"
+            "out.state = active(s2).levels[1].state;\n"
+        )
+        self.assertEqual(got["hdr"], "cloud: saved", "the dip merges with the note")
+        self.assertEqual(got["cloud"][:2], ["datum plate wet", [130, 130]])
+        self.assertEqual(got["cloud"][2], got["state"], "the cloud keeps the verdict the dipper saw")
+        self.assertEqual(got["mine"], ["datum plate wet", [130, 130]], "the dipper sees the note too")
+
+    def test_a_finish_merges_with_a_count(self):
+        got = _run(
+            self._team()
+            # A counts a can (not sent); B finishes the tank
+            + "a('t-plus').click();\n"
+            "b('now-fin-a').click(); await sync(b, s2);\n"
+            "await sync(a, s1);\n"
+            "out.hdr = a('hdr-cloud').textContent;\n"
+            "out.cloud = [!!cloudData().finished, cloudData().batch.cans.length];\n"
+        )
+        self.assertEqual(got["hdr"], "cloud: saved", "a can counted, then the tank finished, is a state the page makes")
+        self.assertEqual(got["cloud"], [True, 1])
+
+    def test_a_tap_after_a_new_level_is_refused(self):
+        got = _run(
+            self._team()
+            # A closes a batch; B follows and dips row 2; A already poured row 3
+            + "a('t-plus').click(); a('t-plus').click(); a('p-go').click(); dip(a, 130, 130);\n"
+            "a('t-plus').click(); a('t-plus').click(); a('p-go').click(); a('c-sync').click(); await settled(s1);\n"
+            "out.aLevels = active(s1).levels.length;\n"
+            # B, stale at row 2 decided, counts a can: row 3 waits there on the cloud
+            "b('t-plus').click(); await sync(b, s2);\n"
+            "out.hdr = b('hdr-cloud').textContent;\n"
+            "out.msg = b('c-state').textContent;\n"
+            "out.cloud = cloudData().levels.length;\n"
         )
         self.assertEqual(got["hdr"], "cloud: conflict")
-        self.assertEqual(got["cloud"], ["", 1], "the cloud keeps A's can, not B's note")
+        self.assertIn("An changed the level this device used", got["msg"])
+        self.assertEqual(got["cloud"], 3, "no wrong row from the stale tap")
+
+    def test_undo_is_not_replayable(self):
+        got = _run(
+            self._team()
+            # A closes a batch, dips, then takes the last reading back (Undo); B writes a note first
+            + "a('t-plus').click(); a('t-plus').click(); a('p-go').click(); dip(a, 130, 130); a('a-undo').click();\n"
+            "note(b, 1, 'datum plate wet'); await sync(b, s2);\n"
+            "await sync(a, s1);\n"
+            "out.hdr = a('hdr-cloud').textContent;\n"
+            "out.msg = a('c-state').textContent;\n"
+            "out.cloud = [cloudData().levels.length, cloudData().levels[0].note];\n"
+        )
+        self.assertEqual(got["hdr"], "cloud: conflict")
+        self.assertIn("You removed an entry.", got["msg"])
+        self.assertEqual(got["cloud"], [1, "datum plate wet"], "the cloud keeps its own level")
+
+    def test_an_action_that_throws_stops_the_merge(self):
+        got = _run(
+            self._team()
+            # A counts a can; the list's can size turns bad (a bug on site)
+            + "a('t-plus').click();\n"
+            "const l = link(s1); l.ops[0].a[1] = -5; s1.set('calib-site:link', JSON.stringify(l));\n"
+            "note(b, 1, 'datum plate wet'); await sync(b, s2);\n"
+            "await sync(a, s1);\n"
+            "out.hdr = a('hdr-cloud').textContent;\n"
+            "out.msg = a('c-state').textContent;\n"
+            "out.cloud = [cloudData().levels[0].note, cloudData().batch];\n"
+        )
+        self.assertEqual(got["hdr"], "cloud: conflict")
+        self.assertIn("An action of this device does not apply", got["msg"])
+        self.assertEqual(got["cloud"], ["datum plate wet", None])
+
+    def test_a_missing_action_stops_the_merge(self):
+        got = _run(
+            self._team()
+            # A counts a can; its signature no longer explains the copy (a crash between two writes)
+            + "a('t-plus').click();\n"
+            "const l = link(s1); l.ops[l.ops.length - 1].after = '0:0'; s1.set('calib-site:link', JSON.stringify(l));\n"
+            "note(b, 1, 'datum plate wet'); await sync(b, s2);\n"
+            "await sync(a, s1);\n"
+            "out.hdr = a('hdr-cloud').textContent;\n"
+            "out.msg = a('c-state').textContent;\n"
+        )
+        self.assertEqual(got["hdr"], "cloud: conflict")
+        self.assertIn("missing from its action list", got["msg"])
+
+    def test_the_merge_waits_for_a_note_and_for_another_tab(self):
+        got = _run(
+            self._team()
+            # A counts a can; a note is open in the Log; B writes first
+            + "a('t-plus').click();\n"
+            "a('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'log' } }) } });\n"
+            "a('log-table')._listeners.click[0]({ target: { closest: (s) => (s === 'button[data-note-edit]' ? { dataset: { noteEdit: '1' } } : null) } });\n"
+            "note(b, 1, 'datum plate wet'); await sync(b, s2);\n"
+            "await sync(a, s1);\n"
+            "out.note = [a('hdr-cloud').textContent, !!(link(s1) && link(s1).conflict), link(s1).rev > link(s1).synced];\n"
+            # the note closes; the next sync merges
+            "a('note-edit').value = ''; a('log-table')._listeners.click[0]({ target: { closest: (s) => (s === 'button[data-note-cancel]' ? { dataset: { noteCancel: '1' } } : null) } });\n"
+            "await sync(a, s1);\n"
+            "out.after = [a('hdr-cloud').textContent, cloudData().batch.cans.length];\n"
+            # another tab wrote: the merge waits, no conflict
+            "a('t-plus').click();\n"
+            "note(b, 1, 'second row'); await sync(b, s2);\n"
+            "const st = JSON.parse(s1.get('calib-site:active')); st.levels[0].note = 'other tab'; s1.set('calib-site:active', JSON.stringify(st));\n"
+            "await sync(a, s1);\n"
+            "out.tab = [!!(link(s1) && link(s1).conflict), link(s1).rev > link(s1).synced];\n"
+        )
+        self.assertEqual(got["note"], ["cloud: waiting", False, True], "an open note holds the merge back: no conflict")
+        self.assertEqual(got["after"], ["cloud: saved", 1], "the next sync merges")
+        self.assertEqual(got["tab"], [False, True], "another tab holds it back too")
+
+    def test_every_session_button_makes_an_action_or_blocks_the_list(self):
+        # The page test of the action list: each button that changes the
+        # session makes an op, or marks the list not replayable.  A change
+        # outside the wrapper (a direct write to S) fails check 3 instead.
+        got = _run(
+            self._devices()
+            + "const s1 = new Map(); const a = boot(s1, '10.0.0.1').el;\n"
+            "const dip = (e, ...vs) => { for (const v of vs) { e('d-val').value = String(v); e('d-go').click(); } };\n"
+            "const log = (name) => { const l = link(s1) || {}; if (!l) { out[name] = ['no link']; return; } const ops = l.ops || [], last = ops[ops.length - 1];\n"
+            "  out[name] = l.noReplay ? ['no', l.noReplay.why] : [last && last.k, ops.length, last && last.a.length]; };\n"
+            "const sync = async () => { a('c-sync').click(); await settled(s1); };\n"
+            "await login(a, 'An'); start(a); a('t-unit').value = '200'; await sync();\n"
+            "a('t-plus').click(); log('tap');\n"
+            "a('t-plus').click(); a('t-undo').click(); log('cancel');\n"
+            # a batch with 3 cans, closed
+            "a('t-plus').click(); a('t-plus').click(); a('p-vol').value = '600'; a('p-go').click(); log('close');\n"
+            "dip(a, 130, 130); log('dip');\n"
+            "await sync();\n"
+            "a('a-redip').click(); log('redip');\n"
+            "a('d-val').value = '131'; a('d-go').click(); a('d-val').value = '131'; a('d-go').click();\n"
+            "dlg.prompt = '600'; a('a-edit').click(); dlg.prompt = null; log('editPour');\n"
+            "await sync();\n"
+            # two readings that disagree: Accept anyway
+            "a('a-redip').click(); a('d-val').value = '999'; a('d-go').click(); log('pending');\n"
+            "dlg.prompt = 'checked'; a('a-override').click(); dlg.prompt = null; log('override');\n"
+            "await sync();\n"
+            # the Log note, then the Settings and Timers forms
+            "a('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'log' } }) } });\n"
+            "a('log-table')._listeners.click[0]({ target: { closest: (s) => (s === 'button[data-note-edit]' ? { dataset: { noteEdit: '2' } } : null) } });\n"
+            "a('note-edit').value = 'slow pump';\n"
+            "a('log-table')._listeners.click[0]({ target: { closest: (s) => (s === 'button[data-note-save]' ? { dataset: { noteSave: '2' } } : null) } });\n"
+            "log('note');\n"
+            "await sync();\n"
+            "a('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'settings' } }) } });\n"
+            "a('set-tank').value = 'alpha'; a('set-D').value = '2400'; a('set-L').value = '5000'; a('set-save').click(); log('settings');\n"
+            "await sync();\n"
+            "a('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'live' } }) } });\n"
+            "a('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'settings' } }) } });\n"
+            "a('tm-settle').value = '6:00'; a('tm-save').click(); log('timers');\n"
+            "a('c-sync').click(); await until(() => link(s1).rev === link(s1).synced);\n"
+            "a('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'live' } }) } });\n"
+            "a('now-fin-a').click(); log('finish');\n"
+            "a('now-fin-a').click(); log('reopen');\n"
+            "a('a-undo').click(); log('undo');\n"
+            "a('f-new').click(); log('close campaign');\n"
+        )
+        self.assertEqual(got["tap"][0], "tap")
+        self.assertEqual(got["cancel"][:2], ["tap", 1], "a tap and its untap leave the list as it was")
+        self.assertEqual(got["close"][0], "closeBatch")
+        self.assertEqual(got["dip"][0], "dip")
+        self.assertEqual(got["redip"][0], "redip")
+        self.assertEqual(got["editPour"][0], "editPour")
+        self.assertEqual(got["pending"][0], "dip")
+        self.assertEqual(got["override"][0], "override")
+        self.assertEqual(got["note"][0], "editNote")
+        self.assertEqual(got["settings"], ["no", "setCampaign"])
+        self.assertEqual(got["timers"], ["no", "setTimers"])
+        self.assertEqual(got["finish"][0], "finish")
+        self.assertEqual(got["reopen"], ["no", "reopen"])
+        self.assertEqual(got["undo"], ["no", "undo"])
 
     def test_fast_follow_after_a_new_version(self):
         got = _run(
@@ -688,6 +1072,7 @@ class TestPage(unittest.TestCase):
             "await login(a, 'An'); start(a); a('c-sync').click(); await settled(s1);\n"
             "await login(b, 'Binh'); const id = link(s1).id;\n"
             "openCloud(b, id); await until(() => link(s2) && link(s2).id === id);\n"
+            "b('t-unit').value = '200';   // the can size on B's device too\n"
             "const dipA = async (v) => { a('d-val').value = String(v); a('d-go').click(); a('c-sync').click(); await settled(s1); };\n"
             "const seen = () => link(s2).version;\n"
             # nothing new came in yet: the 3 s timer does not ask
@@ -737,6 +1122,7 @@ class TestPage(unittest.TestCase):
             "await login(a, 'An'); start(a); a('c-sync').click(); await settled(s1);\n"
             "await login(b, 'Binh'); const id = link(s1).id;\n"
             "openCloud(b, id); await until(() => link(s2) && link(s2).id === id);\n"
+            "b('t-unit').value = '200';   // the can size on B's device too\n"
             # both write: A first, then B gets the conflict
             "a('d-val').value = '120'; a('d-go').click(); a('c-sync').click(); await settled(s1);\n"
             "b('d-val').value = '777'; b('d-go').click(); b('c-sync').click();\n"

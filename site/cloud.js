@@ -75,6 +75,11 @@
    * opts.fetch    the fetch function; none -> every call is offline
    * opts.origin   the page's own origin when it is served over http(s)
    * opts.now      a clock, for the tests
+   * opts.rebase   the page's merge (page.html, rebase()): replays this
+   *               device's actions on the cloud copy at a 409.  Without it,
+   *               every 409 is a conflict (an older page, the tests).
+   * opts.mergeOn  false: no merge, today's conflict choice (the page's
+   *               kill switch in Files → Cloud)
    */
   function Client(opts) {
     this.store = opts.storage;
@@ -82,6 +87,8 @@
     this.origin = opts.origin || "";
     this.now = opts.now || (() => Date.now());
     this.onClosed = opts.onClosed || null;
+    this.rebase = opts.rebase || null;
+    this.mergeOn = opts.mergeOn || null;
     this.busy = null;
   }
 
@@ -92,6 +99,9 @@
   Client.prototype.loggedIn = function () { const a = this.auth(); return !!(a.token && a.expires > this.now()); };
   Client.prototype.auto = function () { return this.auth().auto !== false; };
   Client.prototype.setAuto = function (on) { this._set(AUTH, Object.assign(this.auth(), { auto: !!on })); };
+  /** Merge two writers of one campaign (Files → Cloud, on by default); off: today's conflict choice. */
+  Client.prototype.merge = function () { return this.auth().merge !== false; };
+  Client.prototype.setMerge = function (on) { this._set(AUTH, Object.assign(this.auth(), { merge: !!on })); };
   /** The server: the saved address, else the page's own site. */
   Client.prototype.base = function () { return this.auth().base || this.origin; };
 
@@ -177,6 +187,9 @@
   //             a 409 checks them before it calls a conflict
   //   conflict  someone else saved first: the user chooses
   //   gone      the campaign was deleted in the cloud
+  //   ops, noReplay, baseSig
+  //             this device's actions since `version`, for the merge (see
+  //             "the action list" above)
   //
   // The open session has one link (LINK).  A closed session with changes
   // that the cloud does not have waits in the outbox (OUTBOX) with its data,
@@ -195,6 +208,80 @@
     h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
     h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
     return text.length.toString(36) + ":" + (h2 >>> 0).toString(36) + (h1 >>> 0).toString(36);
+  }
+
+  // ------------------------------------------------------- the action list
+  //
+  // Two people can write into one campaign: one counts the cans, the other
+  // dips.  When the second save gets a conflict (409), the page replays this
+  // device's own actions on the cloud copy (page.html, rebase()), instead of
+  // asking the user to choose.  For that the link keeps:
+  //   ops       this device's actions since `version`: [{k, a, t, at, after, rev}]
+  //             k the Session method, a its arguments, t the time, at what
+  //             the action stood on, after the session's signature just
+  //             after it, rev the local change it made
+  //   noReplay  {rev, why}: a change that is not in ops (a settings form, an
+  //             undo); the list cannot explain the copy until the cloud has it
+  //   baseSig   the fingerprint of the cloud copy at `version` (see
+  //             fingerprint()): the replay finds what the other person changed
+  // No base copy is kept: a fingerprint is about 20 bytes per row.
+
+  /** At most this many actions; more, and the list is not replayable until the next upload. */
+  const OPS_MAX = 500;
+
+  /** JSON text with sorted keys: two copies of one session compare equal. */
+  function canon(v) {
+    if (v === null || typeof v !== "object") { const s = JSON.stringify(v); return s === undefined ? "null" : s; }
+    if (Array.isArray(v)) return "[" + v.map((x) => (x === undefined || typeof x === "function" ? "null" : canon(x))).join(",") + "]";
+    return "{" + Object.keys(v).filter((k) => v[k] !== undefined && typeof v[k] !== "function").sort()
+      .map((k) => JSON.stringify(k) + ":" + canon(v[k])).join(",") + "}";
+  }
+  /**
+   * A session without the per-device fields of a transfer: `active` is the
+   * tank view of this device, `lastDip` the tank it dipped last (undo order).
+   */
+  function shared(data) {
+    if (!data || data.kind !== "transfer" || (!("active" in data) && !("lastDip" in data))) return data;
+    const o = Object.assign({}, data);
+    delete o.active;
+    delete o.lastDip;
+    return o;
+  }
+  /** The signature of a whole session, without the per-device fields. */
+  function sessionSig(data) { return sig(canon(shared(data))); }
+  /** The parts of one tank's session: one signature per row, the tally, the settings, the finish, the rest. */
+  function tankPrint(d) {
+    const rest = Object.assign({}, d);
+    for (const k of ["levels", "batch", "config", "finished"]) delete rest[k];
+    return {
+      rows: (d.levels || []).map((l) => sig(canon(l))),
+      batch: sig(canon(d.batch == null ? null : d.batch)),
+      config: sig(canon(d.config == null ? null : d.config)),
+      finished: sig(canon(d.finished == null ? null : d.finished)),
+      rest: sig(canon(rest)),
+    };
+  }
+  /**
+   * The fingerprint of a cloud copy: per part, a signature.  A transfer has
+   * one per tank.  all: the whole session (sessionSig).
+   */
+  function fingerprint(data) {
+    if (!data || typeof data !== "object") return null;
+    const all = sessionSig(data);
+    if (data.kind === "transfer") {
+      const rest = shared(data), r = Object.assign({}, rest);
+      delete r.out; delete r.in;
+      return { kind: "transfer", out: tankPrint(data.out || {}), in: tankPrint(data.in || {}), rest: sig(canon(r)), all };
+    }
+    return Object.assign(tankPrint(data), { all });
+  }
+  /** The link takes a new cloud version: its fingerprint, and the actions the cloud now has leave the list. */
+  function moveBase(x, data, rev) {
+    x.baseSig = fingerprint(data);
+    if (rev == null) { delete x.ops; delete x.noReplay; return; }
+    if (x.ops) x.ops = x.ops.filter((o) => o.rev > rev);
+    if (x.ops && !x.ops.length) delete x.ops;
+    if (x.noReplay && x.noReplay.rev <= rev) delete x.noReplay;
   }
 
   Client.prototype.link = function () { return this._get(LINK); };
@@ -233,13 +320,51 @@
   /** Link the open session to a new cloud campaign; the next sync uploads it. */
   Client.prototype.linkNew = function () { return this._make({ id: newId(), version: 0, rev: 1 }); };
   /** Link to a campaign just read from the cloud: clean. */
-  Client.prototype.linkTo = function (c) { return this._make({ id: c.id, version: c.version, by: c.updated_by, at: c.updated_at }); };
-  /** The page saved the session: the cloud copy is behind by one more change. */
-  Client.prototype.markDirty = function () {
+  Client.prototype.linkTo = function (c) {
+    return this._make({ id: c.id, version: c.version, by: c.updated_by, at: c.updated_at, baseSig: fingerprint(c.data) });
+  };
+  /**
+   * The page saved the session: the cloud copy is behind by one more change.
+   *   op          the action that made the change ({k, a, t, at, after}):
+   *               it joins the action list
+   *   {cancel: k} the change takes back the last action, of kind k, when it
+   *               was the last change (an untap right after its tap): both
+   *               leave the list; else as a reason
+   *   a text      the reason why the change has no action (a settings form,
+   *               an undo): the list is not replayable until the cloud has it
+   *   nothing     the same, with the reason "edit"
+   * One write: the change and its action never part.
+   */
+  Client.prototype.markDirty = function (op) {
     const l = this.link();
     if (!l) return;
+    const ops = l.ops || [];
     l.rev += 1;
+    const last = ops[ops.length - 1];
+    if (op && typeof op === "object" && op.cancel) {
+      if (last && last.k === op.cancel && last.rev === l.rev - 1) {
+        // The copy is again what the list explained before the action.  (When
+        // the upload of the action itself lands later, the next replay finds
+        // the copy unexplained, and refuses.)
+        ops.pop();
+        if (ops.length) l.ops = ops; else delete l.ops;
+      } else l.noReplay = { rev: l.rev, why: "un" + op.cancel };
+    } else if (op && typeof op === "object") {
+      l.ops = ops.concat([Object.assign({}, op, { rev: l.rev })]);
+      if (l.ops.length > OPS_MAX) l.noReplay = { rev: l.rev, why: "long" };
+    } else l.noReplay = { rev: l.rev, why: typeof op === "string" && op ? op : "edit" };
+    // A change that is not replayable makes the earlier actions useless: they
+    // leave the list at the next upload anyway.
+    if (l.noReplay && l.noReplay.rev === l.rev) delete l.ops;
     this._set(LINK, l);
+  };
+  /** The link's action list as the replay needs it, or {why} when it cannot explain the copy. */
+  Client.prototype.actions = function (l) {
+    if (l === undefined) l = this.link();
+    if (!l) return { why: "none" };
+    if (l.noReplay) return { why: l.noReplay.why };
+    if (!l.baseSig) return { why: "base" };
+    return { ops: l.ops || [], baseSig: l.baseSig };
   };
 
   /**
@@ -300,17 +425,53 @@
       this._update(l.copy, (x) => {
         x.version = r.version; x.synced = Math.max(x.synced, try1.rev); x.by = r.updated_by; x.at = r.updated_at;
         delete x.sent;
+        moveBase(x, data, try1.rev);
       });
       return { state: "saved" };
     } catch (e) {
-      if (e.status === 409) return this._conflict(l.copy, l.id, base, e);
+      if (e.status === 409) return this._conflict(l.copy, l.id, base, e, data, try1.rev);
       if (e.status === 0) return { state: "offline", message: e.message };
       if (e.status === 401) return { state: "login", message: e.message };
       return { state: "error", status: e.status, message: e.message };
     }
   };
-  /** A 409: our own save whose answer was lost, a deleted campaign, or a real conflict. */
-  Client.prototype._conflict = async function (copy, id, base, e) {
+  /**
+   * A 409 on the open session: the page replays this device's actions on the
+   * cloud copy (opts.rebase) and the result uploads.  -> {merged} to upload
+   * the merged copy, {wait: why} to try again at the next tick, or
+   * {why} when the merge is refused (the user then gets the conflict).
+   */
+  Client.prototype._merge = async function (copy, l, base, cur, data, rev) {
+    if (!this.rebase || (this.mergeOn && !this.mergeOn())) return { why: "off" };
+    // Only the open session: a closed copy keeps the conflict choice.
+    const open = this.link();
+    if (!open || open.copy !== copy) return { why: "closed" };
+    const a = this.actions(l);
+    if (a.why) return { why: a.why };
+    const c = await this.fetchCampaign(l.id);
+    if (!c || !c.data) return { why: "none" };
+    // An upload whose answer was lost may have landed, and the cloud may
+    // already hold its actions: a replay would add them twice.  With the
+    // cloud exactly one version on and that version not ours, the earlier
+    // try's base version is taken, so it cannot land any more: then safe.
+    if (l.sent && l.sent.length > 1) {
+      if (c.version > base + 1 || l.sent.some((t) => t.sig === sig(JSON.stringify(c.data)))) return { why: "lost" };
+    }
+    let r;
+    try { r = this.rebase({ data: c.data, local: data, version: c.version, by: c.updated_by, at: c.updated_at },
+      { ops: a.ops, baseSig: a.baseSig, copy, rev }); } catch (e) { return { why: "threw" }; }
+    if (r && r.wait) return { wait: r.wait };
+    if (!r || r.refused) return { why: (r && r.refused) || "none" };
+    // The cloud copy is the new base; the actions stay, the cloud does not
+    // have them until this upload is saved.  sent goes: its tries are behind.
+    this._update(copy, (x) => {
+      x.version = c.version; x.baseSig = fingerprint(c.data); x.by = c.updated_by; x.at = c.updated_at;
+      delete x.sent;
+    });
+    return { merged: { by: c.updated_by, at: c.updated_at, n: a.ops.length } };
+  };
+  /** A 409: our own save whose answer was lost, a deleted campaign, a merge, or a real conflict. */
+  Client.prototype._conflict = async function (copy, id, base, e, data, rev) {
     const cur = e.body.current || null;
     const l = this._find(copy);
     if (cur && cur.deleted_at == null && cur.version === base + 1 && l && l.sent && l.sent.length) {
@@ -322,6 +483,7 @@
         this._update(copy, (x) => {
           x.version = c.version; x.synced = Math.max(x.synced, hit.rev); x.by = c.updated_by; x.at = c.updated_at;
           delete x.sent;
+          moveBase(x, c.data, hit.rev);
         });
         return { state: "recovered" };
       }
@@ -330,19 +492,39 @@
       this._update(copy, (x) => { x.gone = true; delete x.sent; });
       return { state: "gone", message: GONE };
     }
-    this._update(copy, (x) => { x.conflict = cur; delete x.sent; });
-    return { state: "conflict", message: e.message };
+    let m = null;
+    try { m = await this._merge(copy, l, base, cur, data, rev); } catch (x) { m = null; }
+    if (m && m.merged) return { state: "merged", merged: m.merged, current: cur };
+    if (m && m.wait) return { state: "wait", why: m.wait };
+    this._update(copy, (x) => {
+      x.conflict = m && m.why ? Object.assign({}, cur, { why: m.why }) : cur;
+      delete x.sent;
+    });
+    return { state: "conflict", message: e.message, why: m ? m.why : undefined };
   };
-  /** Upload one copy until the cloud has it: after a lost answer, once more with the right version. */
+  /**
+   * Upload one copy until the cloud has it: after a lost answer or a merge,
+   * once more with the right version.
+   * -> {state: "saved", merged?} | {state: "wait", why} | another state
+   */
   Client.prototype._push = async function (copy, getData, keepalive) {
+    let merged = null, last = null;
     for (let i = 0; i < 3; i++) {
       const l = this._find(copy);
       if (!l) return { state: "moved" };   // the copy was closed or opened again meanwhile
-      if (l.rev <= l.synced) return { state: "saved" };
+      if (l.rev <= l.synced) return merged ? { state: "saved", merged } : { state: "saved" };
       const data = getData();
       if (data == null) return { state: "idle" };
       const r = await this._upload(l, data, keepalive);
+      if (r.state === "merged") { merged = r.merged; last = r.current || last; continue; }
+      if (r.state === "wait") return r;
+      if (r.state === "saved") return merged ? { state: "saved", merged } : r;
       if (r.state !== "recovered") return r;
+    }
+    // Another writer at every try: the user chooses, as before.
+    if (merged && last) {
+      this._update(copy, (x) => { x.conflict = Object.assign({}, last, { why: "loop" }); delete x.sent; });
+      return { state: "conflict", message: "Someone else saved this campaign first.", why: "loop" };
     }
     return { state: "error", message: "The upload did not settle. Try again." };
   };
@@ -389,7 +571,9 @@
     if (r.state === "moved") return { state: "idle" };
     if (r.state !== "saved") return r;
     const cur = this.link();
-    return { state: cur && cur.copy === l.copy && cur.rev > cur.synced ? "pending" : "saved" };
+    const out = { state: cur && cur.copy === l.copy && cur.rev > cur.synced ? "pending" : "saved" };
+    if (r.merged) out.merged = r.merged;
+    return out;
   };
 
   /**
@@ -409,7 +593,7 @@
     const cur = this.link();
     if (!cur || cur.copy !== l.copy || this.state(cur) !== "clean") return null;   // the user typed meanwhile
     if (apply) apply(r);
-    this._update(l.copy, (x) => { x.version = r.version; x.by = r.updated_by; x.at = r.updated_at; });
+    this._update(l.copy, (x) => { x.version = r.version; x.by = r.updated_by; x.at = r.updated_at; moveBase(x, r.data); });
     return r;
   };
 
@@ -435,7 +619,7 @@
   /** Conflict, choice 2 (also for a deleted campaign or another workspace): the browser copy becomes a new cloud campaign. */
   Client.prototype.fork = function () { return this.linkNew(); };
 
-  const api = { Client, CloudError, newId, normBase, sig, gzip, AUTH, LINK, OUTBOX };
+  const api = { Client, CloudError, newId, normBase, sig, gzip, canon, sessionSig, fingerprint, AUTH, LINK, OUTBOX, OPS_MAX };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.CalibCloud = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

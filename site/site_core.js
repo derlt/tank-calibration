@@ -2632,16 +2632,37 @@
     return this.current();
   };
 
-  /** Accept the pending level against the check (operator decision). */
-  TransferSession.prototype.override = function (why) {
-    // The current tank first: the header switch says which tank the level
-    // actions apply to.  A decided current tank leaves the only pending one.
-    // A finished tank is never the one (it has no level to decide).
-    const base = this[this.active].finished ? this.liveKey() : this.active;
-    const act = this[base].current();
-    const k = act && act.state === "pending" ? base : (this.pendingTank() || base);
-    const v = this[k].override(why);
+  /**
+   * Accept the pending level against the check (operator decision).
+   * k: the tank ("out" or "in"), else the page's own choice: the current
+   * tank first (the header switch says which tank the level actions apply
+   * to), then the only pending one.  A finished tank is never the one.
+   */
+  TransferSession.prototype.override = function (why, k) {
+    let key = k === "out" || k === "in" ? k : null;
+    if (!key) {
+      const base = this[this.active].finished ? this.liveKey() : this.active;
+      const cur = this[base].current();
+      key = cur && cur.state === "pending" ? base : (this.pendingTank() || base);
+    }
+    const v = this[key].override(why);
     this._pair();   // an override is not a prediction test: the pair leaves with it
+    return v;
+  };
+
+  /**
+   * Finish or reopen one tank (k: "out" or "in", else the tank in view).
+   * The page gives the tank, so the action replay (the cloud merge) does not
+   * depend on the view of the device.
+   */
+  TransferSession.prototype.finish = function (time, k) {
+    const v = this[k === "in" || k === "out" ? k : this.liveKey()].finish(time);
+    this._pair();
+    return v;
+  };
+  TransferSession.prototype.reopen = function (k) {
+    const v = this[k === "in" || k === "out" ? k : this.liveKey()].reopen();
+    this._pair();
     return v;
   };
 
@@ -2659,7 +2680,10 @@
     return Lo.verdict;
   };
 
-  TransferSession.prototype.editNote = function (row, text) { return this[this.active].editNote(row, text); };
+  /** A note on a row of one tank (k: "out" or "in", else the tank in view). */
+  TransferSession.prototype.editNote = function (row, text, k) {
+    return this[k === "in" || k === "out" ? k : this.active].editNote(row, text);
+  };
 
   /**
    * Campaign settings.  The tank record belongs to the active tank; the
