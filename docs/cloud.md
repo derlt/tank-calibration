@@ -127,10 +127,11 @@ the normal choice).
 For two tanks at once, use one transfer campaign on one device (§3.12), or one
 campaign per tank.
 
-The merge keeps only these storage keys in the browser: `calib-site:link`
-(the cloud link, with the action list and a fingerprint of the version it
-builds on), `calib-site:premerge` (one copy, from before the last merge) and
-`calib-site:merges` (the last 20 results).
+The merge adds these keys to the browser's storage: the action list and a
+fingerprint of the base version inside `calib-site:link` (about 20 bytes per
+row, tens of bytes per action, at most 500 actions), `calib-site:premerge`
+(one copy of the session, from before the last merge) and `calib-site:merges`
+(the last 20 results).
 
 ## Make a workspace
 
