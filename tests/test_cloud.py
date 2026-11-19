@@ -1057,6 +1057,54 @@ class TestPage(unittest.TestCase):
         self.assertEqual(got["reopen"], ["no", "reopen"])
         self.assertEqual(got["undo"], ["no", "undo"])
 
+    def test_the_switch_the_log_and_the_restore(self):
+        got = _run(
+            self._team()
+            # the switch is on by default; off: today's conflict choice
+            + "out.on = a('c-merge').checked;\n"
+            "a('c-merge').checked = false; a('c-merge')._listeners.change[0]();\n"
+            "out.off = [JSON.parse(s1.get('calib-site:cloud')).merge, a('c-merge').checked];\n"
+            "a('t-plus').click();\n"
+            "note(b, 1, 'datum plate wet'); await sync(b, s2);\n"
+            "await sync(a, s1);\n"
+            "out.offConflict = [a('hdr-cloud').textContent, (link(s1).ops || []).length];\n"
+            "out.offLog = JSON.parse(s1.get('calib-site:merges') || '[]').length;\n"
+            # on again, back on the cloud copy: the merge runs, the log says so
+            "a('c-take').click(); await until(() => !link(s1).conflict);\n"
+            "a('c-merge').checked = true; a('c-merge')._listeners.change[0]();\n"
+            "a('t-plus').click();\n"
+            "note(b, 1, 'dipped twice'); await sync(b, s2);\n"
+            "await sync(a, s1);\n"
+            "out.merged = a('hdr-cloud').textContent;\n"
+            "const log = JSON.parse(s1.get('calib-site:merges') || '[]');\n"
+            "out.log = [log[0].ok, log[0].by, log[0].n];\n"
+            "out.logLine = a('c-merges').innerHTML;\n"
+            "out.fold = !a('c-merges-box')._classes.has('hidden');\n"
+            "const pre = JSON.parse(s1.get('calib-site:premerge'));\n"
+            "out.pre = [pre.session.levels[0].note, !!pre.cloud];\n"
+            "out.restoreShown = !a('c-premerge')._classes.has('hidden');\n"
+            # restore: the copy from before the merge, then the usual choice
+            "a('c-restore').click();\n"
+            "await new Promise((r) => setTimeout(r, 30));\n"
+            "out.restored = [active(s1).levels[0].note, s1.get('calib-site:premerge'), link(s1).noReplay && link(s1).noReplay.why];\n"
+            "await sync(a, s1);\n"
+            "out.choice = [a('hdr-cloud').textContent, !!link(s1).conflict];\n"
+            "out.cloud = cloudData().levels[0].note;\n"
+        )
+        self.assertTrue(got["on"], "the merge is on by default")
+        self.assertEqual(got["off"], [False, False])
+        self.assertEqual(got["offConflict"], ["cloud: conflict", 1], "off: the conflict choice, the list kept")
+        self.assertEqual(got["offLog"], 0, "a switched-off merge is not a result")
+        self.assertEqual(got["merged"], "cloud: saved")
+        self.assertEqual(got["log"], [True, "Binh", 1])
+        self.assertIn("merged", got["logLine"])
+        self.assertTrue(got["fold"], "the log shows under its fold")
+        self.assertEqual(got["pre"], ["datum plate wet", True], "my copy from before the merge is kept")
+        self.assertTrue(got["restoreShown"])
+        self.assertEqual(got["restored"], ["datum plate wet", None, "restore"])
+        self.assertEqual(got["choice"], ["cloud: conflict", True], "a restored copy goes through the normal choice")
+        self.assertEqual(got["cloud"], "dipped twice", "the cloud copy stays")
+
     def test_fast_follow_after_a_new_version(self):
         got = _run(
             self._devices()

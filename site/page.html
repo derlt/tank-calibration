@@ -866,11 +866,20 @@
     <div id="c-in" class="hidden">
       <p>Logged in: <span id="c-who" translate="no"></span></p>
       <label class="check"><input type="checkbox" id="c-auto"> upload new campaigns to the cloud</label>
+      <label class="check"><input type="checkbox" id="c-merge"> merge two writers of one campaign</label>
       <div class="row" style="margin-top:0.6rem">
         <button id="c-up">Upload this campaign</button>
         <button class="secondary" id="c-sync">Sync now</button>
         <button class="secondary" id="c-logout">Log out</button>
       </div>
+      <div id="c-premerge" class="hidden">
+        <div class="row" style="margin-top:0.6rem"><button class="secondary" id="c-restore">Restore my copy from before the merge</button></div>
+      </div>
+      <details id="c-merges-box" class="hidden" style="margin-top:0.6rem">
+        <summary>Merge log</summary>
+        <p class="muted">The last merges and refusals on this device: what happened, and why a merge was refused.</p>
+        <div id="c-merges"></div>
+      </details>
       <div id="c-conflict" class="hidden">
         <p class="error">Someone else saved this campaign first. Nothing was overwritten. Choose one:</p>
         <div class="row">
@@ -1164,7 +1173,7 @@
       }
     }
     // Apply: my copy goes aside (one only), the merged one takes its place.
-    try { localStorage.setItem(PREMERGE, JSON.stringify({ when: new Date().toISOString(), session: mine })); } catch (e) { /* no space: the merge still goes on */ }
+    try { localStorage.setItem(PREMERGE, JSON.stringify({ when: new Date().toISOString(), session: mine, cloud: link })); } catch (e) { /* no space: the merge still goes on */ }
     S = merged;
     // A transfer keeps this device's tank view.
     if (S.isTransfer && mine.active) S.active = mine.active;
@@ -1315,6 +1324,13 @@
    * the merge log keeps the reason.  by: the other writer; the reasons about
    * this device say "you".
    */
+  /** The copy kept from before the last merge: {when, session, cloud}, or null. */
+  function premergeCopy() {
+    try {
+      const p = JSON.parse(localStorage.getItem(PREMERGE) || "null");
+      return p && p.session ? p : null;
+    } catch (e) { return null; }
+  }
   function whyText(why, by) {
     const who = by || "Someone";
     switch (why) {
@@ -1328,6 +1344,8 @@
       case "lost": return "An earlier upload may have landed: upload again.";
       case "loop": return "Another device saved again while this one uploaded.";
       case "undo": return "You removed an entry.";
+      case "untap": return "You removed a can that was not the last action.";
+      case "restore": return "You restored the copy from before a merge.";
       case "reopen": return "You took a finish back.";
       case "start": return "You started a campaign.";
       case "setCampaign": return "You changed the settings.";
@@ -1336,7 +1354,7 @@
       case "edit": return "A change on this device cannot be replayed.";
       case "long": return "Too many changes wait on this device to replay them.";
       case "base": return "This device has no copy of the version it built on.";
-      case "closed": return "This campaign was closed on this device.";
+      case "closed": return "Only the open campaign merges automatically.";
       case "none": return "The cloud copy is not there.";
       default: return "";
     }
@@ -1410,6 +1428,15 @@
     }
     $("c-who").innerHTML = on ? `<b>${esc(a.workspace)}</b> · ${esc(a.user)}` : "";
     $("c-auto").checked = CL.auto();
+    $("c-merge").checked = CL.merge();
+    $("c-premerge").classList.toggle("hidden", !premergeCopy());
+    const merges = CL.merges();
+    $("c-merges-box").classList.toggle("hidden", !merges.length);
+    $("c-merges").innerHTML = merges.map((m) => {
+      const who = m.by ? esc(m.by) : "—";
+      return `<div class="muted">${esc(stamp(m.when))} · v${m.version} · ${who} · ${m.n} action${m.n === 1 ? "" : "s"} · `
+        + (m.ok ? "merged" : esc(whyText(m.why, m.by) || m.why || "not merged")) + "</div>";
+    }).join("");
     $("c-up").disabled = !S || !(st === "none" || loose);
     $("c-up").textContent = loose ? "Upload as a new cloud campaign" : l ? "This campaign is in the cloud" : "Upload this campaign";
     $("c-sync").disabled = !l && !wait;
@@ -1450,6 +1477,25 @@
     }));
     $("c-logout").addEventListener("click", cloudDo(async () => { await CL.logout(); cloudList = null; cloudMsg = ""; }));
     $("c-auto").addEventListener("change", () => { CL.setAuto($("c-auto").checked); render(); });
+    $("c-merge").addEventListener("change", () => { CL.setMerge($("c-merge").checked); render(); });
+    // The copy from before the last merge, back in the page: it then meets
+    // the cloud copy as any other unsent copy does (the conflict choice).
+    $("c-restore").addEventListener("click", cloudDo(async () => {
+      const p = premergeCopy();
+      if (!p || !p.session) throw new Error("There is no copy from before a merge.");
+      if (S && !confirm(tr("Replace the open session? It goes to the archive."))) return;
+      if (S) pushArchive(cloudClose());
+      resetTallySize();
+      S = fromJSON(p.session);
+      const l = p.cloud ? CL.attach(p.cloud) : null;
+      // Its actions are already in the cloud: the merge must not add them again.
+      if (l) { l.noReplay = { rev: l.rev, why: "restore" }; CL.setLink(l); }
+      else cloudNew();
+      keepLocal();
+      localStorage.removeItem(PREMERGE);
+      cloudMsg = "Your copy from before the merge is open: sync it to choose which copy stays.";
+      tab = "live";
+    }));
     $("c-up").addEventListener("click", cloudDo(async () => {
       const st = CL.state();
       if (S && (st === "none" || st === "elsewhere" || st === "gone")) { CL.linkNew(); await cloudSync(); await refreshList(); }

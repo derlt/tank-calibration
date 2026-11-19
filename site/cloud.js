@@ -24,7 +24,8 @@
 (function (root) {
   "use strict";
 
-  const AUTH = "calib-site:cloud", LINK = "calib-site:link", OUTBOX = "calib-site:outbox";
+  const AUTH = "calib-site:cloud", LINK = "calib-site:link", OUTBOX = "calib-site:outbox", MERGES = "calib-site:merges";
+  const MERGES_KEEP = 20;
   const TIMEOUT = 15000;
   // An upload gets one more second per 4 KB of body: 4 KB/s is 32 kbit/s, a
   // weak site network.  Without it a large campaign could never finish.
@@ -284,6 +285,17 @@
     if (x.noReplay && x.noReplay.rev <= rev) delete x.noReplay;
   }
 
+  /**
+   * The last merges and refusals on this device, newest first:
+   * {when, version, by, n (actions), ok, why}.  A refusal keeps its reason
+   * ("same", "target", "lost"...): the log shows which rule refuses most on
+   * site, so a rule can be relaxed later, with a test.
+   */
+  Client.prototype.merges = function () { const m = this._get(MERGES); return Array.isArray(m) ? m : []; };
+  Client.prototype._mergelog = function (e) {
+    this._set(MERGES, [Object.assign({ when: this.now() }, e)].concat(this.merges()).slice(0, MERGES_KEEP));
+  };
+
   Client.prototype.link = function () { return this._get(LINK); };
   Client.prototype.setLink = function (l) { this._set(LINK, l); };
   Client.prototype.unlink = function () { this._set(LINK, null); };
@@ -443,25 +455,31 @@
    */
   Client.prototype._merge = async function (copy, l, base, cur, data, rev) {
     if (!this.rebase || (this.mergeOn && !this.mergeOn())) return { why: "off" };
+    const no = (why) => { this._mergelog({ version: cur.version, by: cur.updated_by, n: (this.actions(l).ops || []).length, ok: false, why }); return { why }; };
     // Only the open session: a closed copy keeps the conflict choice.
     const open = this.link();
-    if (!open || open.copy !== copy) return { why: "closed" };
+    if (!open || open.copy !== copy) return no("closed");
     const a = this.actions(l);
-    if (a.why) return { why: a.why };
+    if (a.why) return no(a.why);
     const c = await this.fetchCampaign(l.id);
-    if (!c || !c.data) return { why: "none" };
+    if (!c || !c.data) return no("none");
+    const refuse = (why) => {
+      this._mergelog({ version: c.version, by: c.updated_by, n: a.ops.length, ok: false, why });
+      return { why };
+    };
     // An upload whose answer was lost may have landed, and the cloud may
     // already hold its actions: a replay would add them twice.  With the
     // cloud exactly one version on and that version not ours, the earlier
     // try's base version is taken, so it cannot land any more: then safe.
     if (l.sent && l.sent.length > 1) {
-      if (c.version > base + 1 || l.sent.some((t) => t.sig === sig(JSON.stringify(c.data)))) return { why: "lost" };
+      if (c.version > base + 1 || l.sent.some((t) => t.sig === sig(JSON.stringify(c.data)))) return refuse("lost");
     }
     let r;
     try { r = this.rebase({ data: c.data, local: data, version: c.version, by: c.updated_by, at: c.updated_at },
-      { ops: a.ops, baseSig: a.baseSig, copy, rev }); } catch (e) { return { why: "threw" }; }
+      { ops: a.ops, baseSig: a.baseSig, copy, rev }); } catch (e) { return refuse("threw"); }
     if (r && r.wait) return { wait: r.wait };
-    if (!r || r.refused) return { why: (r && r.refused) || "none" };
+    if (!r || r.refused) return refuse((r && r.refused) || "none");
+    this._mergelog({ version: c.version, by: c.updated_by, n: a.ops.length, ok: true });
     // The cloud copy is the new base; the actions stay, the cloud does not
     // have them until this upload is saved.  sent goes: its tries are behind.
     this._update(copy, (x) => {
@@ -619,7 +637,7 @@
   /** Conflict, choice 2 (also for a deleted campaign or another workspace): the browser copy becomes a new cloud campaign. */
   Client.prototype.fork = function () { return this.linkNew(); };
 
-  const api = { Client, CloudError, newId, normBase, sig, gzip, canon, sessionSig, fingerprint, AUTH, LINK, OUTBOX, OPS_MAX };
+  const api = { Client, CloudError, newId, normBase, sig, gzip, canon, sessionSig, fingerprint, AUTH, LINK, OUTBOX, MERGES, OPS_MAX };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.CalibCloud = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

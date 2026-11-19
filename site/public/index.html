@@ -866,11 +866,20 @@
     <div id="c-in" class="hidden">
       <p>Logged in: <span id="c-who" translate="no"></span></p>
       <label class="check"><input type="checkbox" id="c-auto"> upload new campaigns to the cloud</label>
+      <label class="check"><input type="checkbox" id="c-merge"> merge two writers of one campaign</label>
       <div class="row" style="margin-top:0.6rem">
         <button id="c-up">Upload this campaign</button>
         <button class="secondary" id="c-sync">Sync now</button>
         <button class="secondary" id="c-logout">Log out</button>
       </div>
+      <div id="c-premerge" class="hidden">
+        <div class="row" style="margin-top:0.6rem"><button class="secondary" id="c-restore">Restore my copy from before the merge</button></div>
+      </div>
+      <details id="c-merges-box" class="hidden" style="margin-top:0.6rem">
+        <summary>Merge log</summary>
+        <p class="muted">The last merges and refusals on this device: what happened, and why a merge was refused.</p>
+        <div id="c-merges"></div>
+      </details>
       <div id="c-conflict" class="hidden">
         <p class="error">Someone else saved this campaign first. Nothing was overwritten. Choose one:</p>
         <div class="row">
@@ -2026,6 +2035,38 @@
     "Log in to upload the changes.": "Hãy đăng nhập để tải các thay đổi lên.",
     "They wait in this browser.": "Chúng chờ trong trình duyệt này.",
     "Saved in the cloud at {0}.": "Đã lưu lên đám mây lúc {0}.",
+    // The merge of two writers of one campaign
+    "merge two writers of one campaign": "gộp hai người cùng ghi vào một đợt đo",
+    "Merge log": "Nhật ký gộp",
+    "The last merges and refusals on this device: what happened, and why a merge was refused.": "Các lần gộp và lần từ chối gần nhất trên máy này: việc gì đã xảy ra, và vì sao một lần gộp bị từ chối.",
+    "Restore my copy from before the merge": "Khôi phục bản của tôi trước lần gộp",
+    "There is no copy from before a merge.": "Không có bản nào trước một lần gộp.",
+    "Your copy from before the merge is open: sync it to choose which copy stays.": "Bản của bạn trước lần gộp đang mở: hãy đồng bộ để chọn bản nào được giữ.",
+    "merged": "đã gộp",
+    "not merged": "không gộp",
+    "Merged with {name}'s changes at {0}.": "Đã gộp các thay đổi của {name} lúc {0}.",
+    "{name} changed the same level or tally.": "{name} đã thay đổi cùng một mức hoặc cùng số can.",
+    "{name} changed the level this device used.": "{name} đã thay đổi mức mà máy này đang dùng.",
+    "An action of this device does not apply to the cloud copy.": "Một thao tác của máy này không áp dụng được lên bản trên đám mây.",
+    "A change on this device is missing from its action list.": "Một thay đổi trên máy này không có trong danh sách thao tác.",
+    "This device's copy would change in the merge.": "Bản của máy này sẽ đổi nếu gộp.",
+    "The cloud copy would change in the merge.": "Bản trên đám mây sẽ đổi nếu gộp.",
+    "The two copies are different kinds of campaign.": "Hai bản là hai kiểu đợt đo khác nhau.",
+    "An earlier upload may have landed: upload again.": "Một lần tải lên trước có thể đã tới nơi: hãy tải lên lại.",
+    "Another device saved again while this one uploaded.": "Một máy khác lại vừa lưu trong lúc máy này đang tải lên.",
+    "You removed an entry.": "Bạn đã xoá một mục.",
+    "You removed a can that was not the last action.": "Bạn đã xoá một can không phải thao tác cuối.",
+    "You restored the copy from before a merge.": "Bạn đã khôi phục bản trước một lần gộp.",
+    "You took a finish back.": "Bạn đã bỏ đánh dấu kết thúc.",
+    "You started a campaign.": "Bạn đã bắt đầu một đợt đo.",
+    "You changed the settings.": "Bạn đã đổi cài đặt.",
+    "You changed the timers.": "Bạn đã đổi bộ đếm giờ.",
+    "You started a new campaign.": "Bạn đã bắt đầu một đợt đo mới.",
+    "A change on this device cannot be replayed.": "Một thay đổi trên máy này không thể phát lại.",
+    "Too many changes wait on this device to replay them.": "Máy này đang chờ quá nhiều thay đổi để phát lại.",
+    "This device has no copy of the version it built on.": "Máy này không có bản của phiên bản mà nó dựa vào.",
+    "Only the open campaign merges automatically.": "Chỉ đợt đo đang mở mới tự động gộp.",
+    "The cloud copy is not there.": "Bản trên đám mây không có ở đó.",
     "Updated from the cloud at {0}.": "Đã cập nhật từ đám mây lúc {0}.",
     "The cloud copy is open.": "Bản trên đám mây đang mở.",
     "Your copy is in the archive.": "Bản của bạn ở trong kho lưu.",
@@ -5600,7 +5641,8 @@
 (function (root) {
   "use strict";
 
-  const AUTH = "calib-site:cloud", LINK = "calib-site:link", OUTBOX = "calib-site:outbox";
+  const AUTH = "calib-site:cloud", LINK = "calib-site:link", OUTBOX = "calib-site:outbox", MERGES = "calib-site:merges";
+  const MERGES_KEEP = 20;
   const TIMEOUT = 15000;
   // An upload gets one more second per 4 KB of body: 4 KB/s is 32 kbit/s, a
   // weak site network.  Without it a large campaign could never finish.
@@ -5860,6 +5902,17 @@
     if (x.noReplay && x.noReplay.rev <= rev) delete x.noReplay;
   }
 
+  /**
+   * The last merges and refusals on this device, newest first:
+   * {when, version, by, n (actions), ok, why}.  A refusal keeps its reason
+   * ("same", "target", "lost"...): the log shows which rule refuses most on
+   * site, so a rule can be relaxed later, with a test.
+   */
+  Client.prototype.merges = function () { const m = this._get(MERGES); return Array.isArray(m) ? m : []; };
+  Client.prototype._mergelog = function (e) {
+    this._set(MERGES, [Object.assign({ when: this.now() }, e)].concat(this.merges()).slice(0, MERGES_KEEP));
+  };
+
   Client.prototype.link = function () { return this._get(LINK); };
   Client.prototype.setLink = function (l) { this._set(LINK, l); };
   Client.prototype.unlink = function () { this._set(LINK, null); };
@@ -6019,25 +6072,31 @@
    */
   Client.prototype._merge = async function (copy, l, base, cur, data, rev) {
     if (!this.rebase || (this.mergeOn && !this.mergeOn())) return { why: "off" };
+    const no = (why) => { this._mergelog({ version: cur.version, by: cur.updated_by, n: (this.actions(l).ops || []).length, ok: false, why }); return { why }; };
     // Only the open session: a closed copy keeps the conflict choice.
     const open = this.link();
-    if (!open || open.copy !== copy) return { why: "closed" };
+    if (!open || open.copy !== copy) return no("closed");
     const a = this.actions(l);
-    if (a.why) return { why: a.why };
+    if (a.why) return no(a.why);
     const c = await this.fetchCampaign(l.id);
-    if (!c || !c.data) return { why: "none" };
+    if (!c || !c.data) return no("none");
+    const refuse = (why) => {
+      this._mergelog({ version: c.version, by: c.updated_by, n: a.ops.length, ok: false, why });
+      return { why };
+    };
     // An upload whose answer was lost may have landed, and the cloud may
     // already hold its actions: a replay would add them twice.  With the
     // cloud exactly one version on and that version not ours, the earlier
     // try's base version is taken, so it cannot land any more: then safe.
     if (l.sent && l.sent.length > 1) {
-      if (c.version > base + 1 || l.sent.some((t) => t.sig === sig(JSON.stringify(c.data)))) return { why: "lost" };
+      if (c.version > base + 1 || l.sent.some((t) => t.sig === sig(JSON.stringify(c.data)))) return refuse("lost");
     }
     let r;
     try { r = this.rebase({ data: c.data, local: data, version: c.version, by: c.updated_by, at: c.updated_at },
-      { ops: a.ops, baseSig: a.baseSig, copy, rev }); } catch (e) { return { why: "threw" }; }
+      { ops: a.ops, baseSig: a.baseSig, copy, rev }); } catch (e) { return refuse("threw"); }
     if (r && r.wait) return { wait: r.wait };
-    if (!r || r.refused) return { why: (r && r.refused) || "none" };
+    if (!r || r.refused) return refuse((r && r.refused) || "none");
+    this._mergelog({ version: c.version, by: c.updated_by, n: a.ops.length, ok: true });
     // The cloud copy is the new base; the actions stay, the cloud does not
     // have them until this upload is saved.  sent goes: its tries are behind.
     this._update(copy, (x) => {
@@ -6195,7 +6254,7 @@
   /** Conflict, choice 2 (also for a deleted campaign or another workspace): the browser copy becomes a new cloud campaign. */
   Client.prototype.fork = function () { return this.linkNew(); };
 
-  const api = { Client, CloudError, newId, normBase, sig, gzip, canon, sessionSig, fingerprint, AUTH, LINK, OUTBOX, OPS_MAX };
+  const api = { Client, CloudError, newId, normBase, sig, gzip, canon, sessionSig, fingerprint, AUTH, LINK, OUTBOX, MERGES, OPS_MAX };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.CalibCloud = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);
@@ -6417,7 +6476,7 @@
       }
     }
     // Apply: my copy goes aside (one only), the merged one takes its place.
-    try { localStorage.setItem(PREMERGE, JSON.stringify({ when: new Date().toISOString(), session: mine })); } catch (e) { /* no space: the merge still goes on */ }
+    try { localStorage.setItem(PREMERGE, JSON.stringify({ when: new Date().toISOString(), session: mine, cloud: link })); } catch (e) { /* no space: the merge still goes on */ }
     S = merged;
     // A transfer keeps this device's tank view.
     if (S.isTransfer && mine.active) S.active = mine.active;
@@ -6568,6 +6627,13 @@
    * the merge log keeps the reason.  by: the other writer; the reasons about
    * this device say "you".
    */
+  /** The copy kept from before the last merge: {when, session, cloud}, or null. */
+  function premergeCopy() {
+    try {
+      const p = JSON.parse(localStorage.getItem(PREMERGE) || "null");
+      return p && p.session ? p : null;
+    } catch (e) { return null; }
+  }
   function whyText(why, by) {
     const who = by || "Someone";
     switch (why) {
@@ -6581,6 +6647,8 @@
       case "lost": return "An earlier upload may have landed: upload again.";
       case "loop": return "Another device saved again while this one uploaded.";
       case "undo": return "You removed an entry.";
+      case "untap": return "You removed a can that was not the last action.";
+      case "restore": return "You restored the copy from before a merge.";
       case "reopen": return "You took a finish back.";
       case "start": return "You started a campaign.";
       case "setCampaign": return "You changed the settings.";
@@ -6589,7 +6657,7 @@
       case "edit": return "A change on this device cannot be replayed.";
       case "long": return "Too many changes wait on this device to replay them.";
       case "base": return "This device has no copy of the version it built on.";
-      case "closed": return "This campaign was closed on this device.";
+      case "closed": return "Only the open campaign merges automatically.";
       case "none": return "The cloud copy is not there.";
       default: return "";
     }
@@ -6663,6 +6731,15 @@
     }
     $("c-who").innerHTML = on ? `<b>${esc(a.workspace)}</b> · ${esc(a.user)}` : "";
     $("c-auto").checked = CL.auto();
+    $("c-merge").checked = CL.merge();
+    $("c-premerge").classList.toggle("hidden", !premergeCopy());
+    const merges = CL.merges();
+    $("c-merges-box").classList.toggle("hidden", !merges.length);
+    $("c-merges").innerHTML = merges.map((m) => {
+      const who = m.by ? esc(m.by) : "—";
+      return `<div class="muted">${esc(stamp(m.when))} · v${m.version} · ${who} · ${m.n} action${m.n === 1 ? "" : "s"} · `
+        + (m.ok ? "merged" : esc(whyText(m.why, m.by) || m.why || "not merged")) + "</div>";
+    }).join("");
     $("c-up").disabled = !S || !(st === "none" || loose);
     $("c-up").textContent = loose ? "Upload as a new cloud campaign" : l ? "This campaign is in the cloud" : "Upload this campaign";
     $("c-sync").disabled = !l && !wait;
@@ -6703,6 +6780,25 @@
     }));
     $("c-logout").addEventListener("click", cloudDo(async () => { await CL.logout(); cloudList = null; cloudMsg = ""; }));
     $("c-auto").addEventListener("change", () => { CL.setAuto($("c-auto").checked); render(); });
+    $("c-merge").addEventListener("change", () => { CL.setMerge($("c-merge").checked); render(); });
+    // The copy from before the last merge, back in the page: it then meets
+    // the cloud copy as any other unsent copy does (the conflict choice).
+    $("c-restore").addEventListener("click", cloudDo(async () => {
+      const p = premergeCopy();
+      if (!p || !p.session) throw new Error("There is no copy from before a merge.");
+      if (S && !confirm(tr("Replace the open session? It goes to the archive."))) return;
+      if (S) pushArchive(cloudClose());
+      resetTallySize();
+      S = fromJSON(p.session);
+      const l = p.cloud ? CL.attach(p.cloud) : null;
+      // Its actions are already in the cloud: the merge must not add them again.
+      if (l) { l.noReplay = { rev: l.rev, why: "restore" }; CL.setLink(l); }
+      else cloudNew();
+      keepLocal();
+      localStorage.removeItem(PREMERGE);
+      cloudMsg = "Your copy from before the merge is open: sync it to choose which copy stays.";
+      tab = "live";
+    }));
     $("c-up").addEventListener("click", cloudDo(async () => {
       const st = CL.state();
       if (S && (st === "none" || st === "elsewhere" || st === "gone")) { CL.linkNew(); await cloudSync(); await refreshList(); }
