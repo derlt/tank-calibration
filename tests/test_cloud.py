@@ -1441,6 +1441,64 @@ class TestPage(unittest.TestCase):
         self.assertEqual(got["active"], "in", "the view is kept in this browser")
         self.assertTrue(got["same"], "switching the tank view is not a cloud change")
 
+    def _transfer(self):
+        """Two devices on one transfer campaign: A counts, B dips both tanks."""
+        return (
+            self._devices()
+            + "const s1 = new Map(), s2 = new Map(); const a = boot(s1, '10.0.0.1').el, b = boot(s2, '10.0.0.2').el;\n"
+            "await login(a, 'An');\n"
+            "a('s-dir-transfer').click();\n"
+            "a('s-tank').value = 'alpha'; a('s-D').value = '1800'; a('s-L').value = '3000';\n"
+            "a('sB-tank').value = 'beta'; a('sB-D').value = '2480'; a('sB-L').value = '5200';\n"
+            "a('s-dip').value = '1800'; a('sB-dip').value = '400'; a('s-unit').value = '200';\n"
+            "a('s-go').click();\n"
+            "a('d-val').value = '1800'; a('d-val-b').value = '400'; a('d-go-a').click(); a('d-go-b').click();\n"
+            "a('c-sync').click(); await settled(s1);\n"
+            "await login(b, 'Binh'); const id = link(s1).id;\n"
+            "openCloud(b, id); await until(() => link(s2) && link(s2).id === id);\n"
+            "b('t-unit').value = '200';\n"
+            "const sync = async (e, st) => { e('c-sync').click(); await until(() => link(st).rev === link(st).synced || link(st).conflict); await new Promise((r) => setTimeout(r, 20)); };\n"
+            "const follow = async (e, st, v) => { e('c-sync').click(); await until(() => link(st).version >= v); };\n"
+            "const active = (st) => JSON.parse(st.get('calib-site:active'));\n"
+            "const both = (e, o, i) => { e('d-val').value = String(o); e('d-go-a').click(); e('d-val-b').value = String(i); e('d-go-b').click(); };\n"
+        )
+
+    def test_a_transfer_merges_a_count_and_a_dip(self):
+        got = _run(
+            self._transfer()
+            # A counts 2 cans (not sent); B pours into both tanks and dips them: no, B only dips
+            + "a('t-plus').click(); a('t-plus').click();\n"
+            "both(b, 1800, 400); await sync(b, s2);\n"
+            "await sync(a, s1);\n"
+            "out.hdr = a('hdr-cloud').textContent;\n"
+            "const c = cloudData();\n"
+            "out.cloud = [c.out.levels.length, c.out.batch && c.out.batch.cans.length, c.out.levels[0].dips.length];\n"
+            "out.mine = [active(s1).out.batch.cans.length, active(s1).out.levels[0].dips.length];\n"
+            "out.view = active(s2).active;\n"
+        )
+        self.assertEqual(got["hdr"], "cloud: saved", "a transfer merges through the same path")
+        self.assertEqual(got["cloud"], [1, 2, 2], "the count and B's reading are both in the cloud")
+        self.assertEqual(got["mine"], [2, 2], "the counter sees the dip too")
+
+    def test_a_transfer_refuses_the_same_tank_row(self):
+        got = _run(
+            self._transfer()
+            # A pours a batch and B follows; B dips tank A, then A pours again and edits the same row
+            + "a('t-plus').click(); a('t-plus').click(); a('p-go').click(); await sync(a, s1);\n"
+            "await follow(b, s2, link(s1).version);\n"
+            "a('d-val').value = '1800'; a('d-go-a').click(); a('d-val-b').value = '400'; a('d-go-b').click();\n"
+            "dlg.prompt = '400'; a('a-edit').click(); dlg.prompt = null;\n"
+            "await sync(a, s1);\n"
+            # B, stale, dips tank A's waiting row: the same row A edited
+            "b('d-val').value = '1800'; b('d-go-a').click(); await sync(b, s2);\n"
+            "out.hdr = b('hdr-cloud').textContent;\n"
+            "out.msg = b('c-state').textContent;\n"
+            "out.cloud = [cloudData().out.levels[0].step.text, cloudData().out.levels[0].dips];\n"
+        )
+        self.assertEqual(got["hdr"], "cloud: conflict", "both changed tank A's row: no safe merge")
+        self.assertIn("changed the same level or tally", got["msg"])
+        self.assertEqual(got["cloud"], ["?", [1800, 1800]], "the cloud keeps B's reading and A's old step")
+
     def test_two_devices_follow_one_campaign(self):
         stub = (HERE / "page_stub.js").as_posix()
         page = (ROOT / "site" / "page.html").as_posix()
