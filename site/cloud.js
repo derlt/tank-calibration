@@ -442,7 +442,15 @@
       return { state: "saved" };
     } catch (e) {
       if (e.status === 409) return this._conflict(l.copy, l.id, base, e, data, try1.rev);
-      if (e.status === 0) return { state: "offline", message: e.message };
+      if (e.status === 0) {
+        // The answer was lost, so the server may have taken it: the try is
+        // marked, and a later 409 does not replay our actions over it.
+        this._update(l.copy, (x) => {
+          const t = (x.sent || []).find((y) => y.rev === try1.rev && y.sig === try1.sig);
+          if (t) t.lost = true;
+        });
+        return { state: "offline", message: e.message };
+      }
       if (e.status === 401) return { state: "login", message: e.message };
       return { state: "error", status: e.status, message: e.message };
     }
@@ -469,9 +477,9 @@
     };
     // An upload whose answer was lost may have landed, and the cloud may
     // already hold its actions: a replay would add them twice.  With the
-    // cloud exactly one version on and that version not ours, the earlier
+    // cloud exactly one version on and that version not ours, the lost
     // try's base version is taken, so it cannot land any more: then safe.
-    if (l.sent && l.sent.length > 1) {
+    if (l.sent && l.sent.some((t) => t.lost)) {
       if (c.version > base + 1 || l.sent.some((t) => t.sig === sig(JSON.stringify(c.data)))) return refuse("lost");
     }
     let r;

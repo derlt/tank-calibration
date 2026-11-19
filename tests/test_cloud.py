@@ -757,6 +757,210 @@ class TestMergeClient(unittest.TestCase):
 
 
 @unittest.skipUnless(SQLITE, "node with node:sqlite is not installed")
+class TestStress(unittest.TestCase):
+    """Two writers, one campaign, a few hundred seeded steps: the merge keeps both.
+
+    The counter taps cans and closes batches; the dipper dips, re-dips,
+    overrides and writes notes; either phone hides, shows, goes offline and
+    back, and syncs.  After each sync:
+      - a device that ends in step with the cloud shows the cloud copy;
+      - a row in the cloud changes only by its own writer (the pour and its
+        cans by the counter, the readings and the verdict by the dipper);
+      - the cloud never holds more taps or dips than the two people made
+        (no doubled action), and never fewer than before (no lost one,
+        except through a conflict choice the test makes);
+      - every 409 ends merged or in the choice, and every refusal in the
+        merge log names its reason.
+    """
+
+    STEPS = 200
+    SEEDS = (11, 12, 13)
+
+    def _run_one(self, seed: int):
+        page = (ROOT / "site" / "page.html").as_posix()
+        core = (ROOT / "site" / "site_core.js").as_posix()
+        stub = (HERE / "page_stub.js").as_posix()
+        body = (
+            f"const stub = require({json.dumps(stub)});\n"
+            "const env = h.makeEnv();\n"
+            "await h.call(env, 'POST', '/api/workspaces', { workspace: 'team-1', keyword: 'correct horse battery', user: 'An', signup_code: 'test-signup-code' });\n"
+            "const slow = [];\n"
+            "const until = async (ok, tag, tries) => { const n = tries || 400; let i = 0; for (; i < n && !ok(); i++) await new Promise((r) => setTimeout(r, 5)); if (i > 40) slow.push([tag || '?', i]); return ok(); };\n"
+            "const link = (st) => JSON.parse(st.get('calib-site:link') || 'null');\n"
+            "const active = (st) => JSON.parse(st.get('calib-site:active') || 'null');\n"
+            "const cloudData = () => { const r = env.DB.raw.prepare('SELECT data FROM campaigns').get(); return r ? JSON.parse(r.data) : { levels: [] }; };\n"
+            "const dlg = { prompt: null };\n"
+            "const mk = (ip) => {\n"
+            "  const st = new Map(), f = h.fetchFor(env, ip);\n"
+            "  const d = { st, on: true, iv: [], ip };\n"
+            "  d.fetch = (u, i) => d.on ? f(u, i) : Promise.reject(new TypeError('offline'));\n"
+            "  const p = stub.boot(PAGE, CORE, st, Object.assign(d, { location: { protocol: 'https:', origin: h.BASE }, prompt: () => dlg.prompt,\n"
+            "    setInterval: (fn, ms) => { d.iv.push({ fn, ms }); return d.iv.length; } }));\n"
+            "  d.el = p.el; d.doc = p.document;\n"
+            "  return d;\n"
+            "};\n"
+            f"const PAGE = {json.dumps(page)}, CORE = {json.dumps(core)};\n"
+            "let rs = {};\n"
+            "const rnd = (() => { let a = SEED >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; })();\n"
+            "const pick = (n) => Math.floor(rnd() * n);\n"
+            "const A = mk('10.1.0.1'), B = mk('10.1.0.2'), D = [A, B];\n"
+            "const NAME = ['An', 'Binh'];\n"
+            "const err = (d) => (d.el('p-err').textContent || d.el('d-err').textContent || d.el('log-err').textContent || '');\n"
+            "const login = async (d, user) => { d.el('c-ws').value = 'team-1'; d.el('c-key').value = 'correct horse battery'; d.el('c-user').value = user; d.el('c-login').click(); await until(() => !d.el('c-in')._classes.has('hidden'), 'login'); };\n"
+            "const start = (d) => { d.el('s-tank').value = 'alpha'; d.el('s-D').value = '2400'; d.el('s-L').value = '5000'; d.el('s-dip').value = '100'; d.el('s-step').value = '?';\n"
+            "  d.el('s-unit').value = '200'; d.el('s-go').click(); d.el('d-val').value = '100'; d.el('d-go').click(); };\n"
+            # one sync; -> what the cloud rows were before, the actions this device held
+            "const snap = () => { const c = cloudData(); return JSON.stringify({ levels: c.levels || [], batch: c.batch || null }); };\n"
+            "const lv = (s) => JSON.parse(s || '{\"levels\":[]}').levels;\n"
+            "const bt = (s) => JSON.parse(s || '{}').batch || null;\n"
+            "const sync = async (d) => {\n"
+            "  const l0 = link(d.st); if (!l0) return null;\n"
+            "  const before = snap(), kinds = (l0.ops || []).map((o) => o.k);\n"
+            "  d.el('c-sync').click();\n"
+            "  await until(() => { const l = link(d.st); return l && (l.rev === l.synced || l.conflict); }, 'sync', d.on ? 400 : 8);\n"
+            "  await new Promise((r) => setTimeout(r, 20));\n"
+            "  await settle(d);\n"
+            "  return { before, kinds, conflict: !!link(d.st).conflict, after: snap(), state: d.el('hdr-cloud').textContent };\n"
+            "};\n"
+            "const POUR = ['step', 'cans', 'plan', 'from', 'pourTime', 'overflow', 'neck', 'transfer'];\n"
+            "const settle = async (d) => { if (!d.on || !link(d.st)) return; for (let i = 0; i < 80; i++) { const x = link(d.st); if (x && (x.rev === x.synced || x.conflict)) return; await new Promise((r) => setTimeout(r, 5)); } slow.push('settle'); };\n"
+            # a note and a tag: either writer may add one
+            "const EITHER = ['note', 'tags', 'row'];\n"
+            "const part = (r) => { const o = Object.assign({}, r || {}); for (const k of POUR.concat(EITHER)) delete o[k]; return JSON.stringify(o); };\n"
+            "const pour = (r) => JSON.stringify(POUR.map((k) => (r || {})[k]));\n"
+            "const note = (r) => (r || {}).note;\n"
+            "const rows = (s) => JSON.parse(s || '{\"levels\":[]}').levels;\n"
+            "const tapsIn = (levels, batch) => levels.reduce((a, L) => a + (L.cans ? (L.cans.tapped || 0) : 0), 0) + (batch ? batch.cans.length : 0);\n"
+            "const dipsIn = (levels) => levels.reduce((a, L) => a + (L.dips || []).length, 0);\n"
+            "const bad = [], log = [];\n"
+            "const check = (d, i, s) => {\n"
+            "  if (!s) return;\n"
+            "  const a = rows(s.before), b = rows(s.after), n = Math.max(a.length, b.length);\n"
+
+            "  const has = (...k) => k.some((x) => s.kinds.indexOf(x) >= 0);\n"
+            "  for (let r = 0; r < n; r++) {\n"
+            "    if (JSON.stringify(a[r]) === JSON.stringify(b[r])) continue;\n"
+            "    if (!a[r]) { if (!has('pour', 'closeBatch')) bad.push(['new row', wish, r, s.kinds.join(','), a.length, b.length]); continue; }\n"
+            "    if (pour(a[r]) !== pour(b[r]) && !has('pour', 'closeBatch', 'editPour')) bad.push(['pour part', wish, r, s.kinds.join(',')]);\n"
+            "    if (part(a[r]) !== part(b[r]) && !has('dip', 'redip', 'override', 'editPour')) bad.push(['dip part', wish, r, s.kinds.join(',')]);\n"
+
+            "  }\n"
+            "  const m = JSON.parse(d.st.get('calib-site:merges') || '[]');\n"
+            "  for (const x of m) log.push([x.ok, x.why || null]);\n"
+            "  if (s.conflict && !d.el('c-conflict')._classes.has('hidden') === false) bad.push(['conflict hidden', wish]);\n"
+            "};\n"
+            "let wish = 0;\n"
+            "const attempts = { taps: 0, dips: 0 };\n"
+            "const conflicts = [];\n"
+            "const lost = { taps: 0, dips: 0 };\n"
+            "const take = async (d) => {\n"
+            "  const l = link(d.st), kinds = (l.ops || []).map((o) => o.k);\n"
+            "  lost.taps += kinds.filter((k) => k === 'tap').length;\n"
+            "  lost.dips += kinds.filter((k) => k === 'dip' || k === 'dipBoth').length;\n"
+            "  d.el('c-take').click(); await until(() => !link(d.st).conflict, 'take');\n"
+
+            "};\n"
+
+            "const guess = (levels) => 100 + 30 * Math.max(0, levels.length - 1) + (rnd() * 4 - 2);\n"
+            "const dipNow = (d, n) => { for (let k = 0; k < n; k++) { const v = guess(active(d.st).levels); d.el('d-val').value = String(v); d.el('d-go').click(); if (err(d)) break; attempts.dips++; } };\n"
+            "const misc = async (d, i) => {\n"
+            "  const q = pick(4);\n"
+            "  if (q === 0) { d.doc.hidden = true; d.doc.fire('visibilitychange'); await settle(d); d.doc.hidden = false; d.doc.fire('visibilitychange'); await settle(d); }\n"
+            "  else if (q === 1) d.on = !d.on;\n"
+            "  else if (q === 2) { const t = d.iv.find((x) => x.ms === 10000); if (t) t.fn(); await new Promise((r) => setTimeout(r, 10)); await settle(d); }\n"
+            "  else { const s2 = await sync(d); check(d, i, s2); if (s2 && s2.conflict) { conflicts.push(['sync', link(d.st).conflict.why || 'none']); await take(d); } }\n"
+            "};\n"
+            "const counter = async (d) => {\n"                            # taps, Batch done, a recount
+            "  const s = active(d.st), L = s.levels[s.levels.length - 1];\n"
+            "  if (!s || s.finished || !L) return;\n"
+            "  const r = pick(10);\n"
+            "  if (r < 6 && L.state !== 'pending') { d.el('t-unit').value = '200'; d.el('t-plus').click(); if (!err(d)) attempts.taps++; }\n"
+            "  else if (r < 8 && s.batch && s.batch.cans.length) { d.el('p-vol').value = ''; d.el('p-go').click(); }\n"
+            "  else if (r < 9 && !L.start) { dlg.prompt = String(400 + 200 * pick(3)); d.el('a-edit').click(); dlg.prompt = null; }\n"
+            "  else await misc(d, 0);\n"
+            "};\n"
+            "const dipper = async (d) => {\n"                             # dips, Dip again, Accept anyway, notes
+            "  const s = active(d.st), L = s.levels[s.levels.length - 1];\n"
+            "  if (!s || !L) return;\n"
+            "  const r = pick(10);\n"
+            "  if (r < 5 && L.state === 'pending') dipNow(d, 1 + pick(2));\n"
+            "  else if (r < 7 && L.state !== 'pending') { d.el('a-redip').click(); dipNow(d, 1 + pick(2)); }\n"
+            "  else if (r < 8 && L.state !== 'pending') { d.el('a-redip').click(); d.el('d-val').value = String(guess(s.levels) + 40); d.el('d-go').click(); if (!err(d)) attempts.dips++; dlg.prompt = 'stress'; d.el('a-override').click(); dlg.prompt = null; }\n"
+            "  else if (r < 9 && s.levels.length > 1) {\n"                # a note on an earlier row
+            "    const row = 1 + pick(s.levels.length - 1);\n"
+            "    d.el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'log' } }) } });\n"
+            "    d.el('log-table')._listeners.click[0]({ target: { closest: (x) => (x === 'button[data-note-edit]' ? { dataset: { noteEdit: String(row) } } : null) } });\n"
+            "    d.el('note-edit').value = 'dip note ' + wish;\n"
+            "    d.el('log-table')._listeners.click[0]({ target: { closest: (x) => (x === 'button[data-note-save]' ? { dataset: { noteSave: String(row) } } : null) } });\n"
+            "    d.el('tabs')._listeners.click[0]({ target: { closest: () => ({ dataset: { tab: 'live' } }) } });\n"
+            "  } else await misc(d, 1);\n"
+            "};\n"
+            "const act = async (i) => {\n"
+            "  const d = D[i];\n"
+            "  if (i === 0) await counter(d); else await dipper(d);\n"
+            "  if (i === 0 && rnd() < 0.35 || i === 1 && rnd() < 0.35) {\n"
+            "    const s2 = await sync(d); check(d, i, s2);\n"
+            "    if (s2 && s2.conflict) { conflicts.push([['counter', 'dipper'][i], link(d.st).conflict.why || 'none']); await take(d); }\n"
+            "  }\n"
+            "};\n"
+            "const totals = [];\n"
+            "const mark = () => { const c = cloudData(); totals.push([tapsIn(c.levels, c.batch), dipsIn(c.levels)]); };\n"
+            "await login(A, 'An'); start(A); attempts.dips += 2;\n"
+            "const sA = await sync(A);\n"
+            "await login(B, 'Binh');\n"
+            "B.el('c-list')._listeners.click[0]({ target: { closest: () => ({ dataset: { cid: link(A.st).id, act: 'open' } }) } });\n"
+            "await until(() => link(B.st) && link(B.st).id === link(A.st).id);\n"
+            "mark();\n"
+            f"for (let k = 0; k < {self.STEPS}; k++) {{ wish = k; await act(pick(2)); mark(); }}\n"
+            # settle: both online, both synced, until quiet
+            "A.on = true; B.on = true;\n"
+            "const ok = [false, false];\n"
+            "for (let k = 0; k < 6; k++) {\n"
+            "  for (let i = 0; i < 2; i++) {\n"
+            "    const s2 = await sync(D[i]); check(D[i], i, s2);\n"
+            "    if (s2 && s2.conflict) { conflicts.push([['counter', 'dipper'][i], link(D[i].st).conflict.why || 'none']); await take(D[i]); }\n"
+            "    const l = link(D[i].st);\n"
+            "    ok[i] = l.rev === l.synced && !l.conflict && cloud.sessionSig(active(D[i].st)) === cloud.sessionSig(cloudData());\n"
+
+            "  }\n"
+            "}\n"
+            "const c = cloudData();\n"
+            "Object.assign(out, {\n"
+            "  bad, attempts, conflicts, log: log.slice(-3), merges: log.filter((x) => x[0]).length, refusals: log.filter((x) => !x[0]).map((x) => x[1]),\n"
+            "  cloud: [tapsIn(c.levels, c.batch), dipsIn(c.levels), c.levels.length],\n"
+            "  monotone: totals.every((t, i) => i === 0 || (t[0] >= totals[i - 1][0] && t[1] >= totals[i - 1][1])),\n"
+            "  over: totals.some((t) => t[0] > attempts.taps || t[1] > attempts.dips),\n"
+            "  settled: ok,\n"
+            "  lost,\n"
+            "  exact: [tapsIn(c.levels, c.batch) + lost.taps, dipsIn(c.levels) + lost.dips],\n"
+
+            "  states: [A.el('hdr-cloud').textContent, B.el('hdr-cloud').textContent],\n"
+            "  dbg: slow.slice(0, 8),\n"
+
+            "});\n"
+        )
+        return _run(f"const SEED = {seed};\n" + body)
+
+    def test_two_writers_of_one_campaign(self):
+        merges = 0
+        for seed in self.SEEDS:
+            with self.subTest(seed=seed):
+                got = self._run_one(seed)
+                self.assertEqual(got["bad"], [], "a row changed by the wrong writer, a doubled action, or a hidden conflict")
+                self.assertEqual(got["dbg"], [], "no upload stalled: every sync settled at once")
+                self.assertFalse(got["over"], "the cloud holds more taps or dips than were made")
+                self.assertTrue(got["monotone"], "the cloud lost a tap or a dip outside a conflict choice")
+                self.assertEqual(got["settled"], [True, True], "both devices end in step with the cloud")
+                self.assertEqual(got["states"], ["cloud: saved", "cloud: saved"])
+                self.assertEqual(got["exact"], [got["attempts"]["taps"], got["attempts"]["dips"]],
+                                 "every tap and dip is in the cloud, or was lost by a conflict choice")
+                for why in got["refusals"]:
+                    self.assertTrue(why and why != "off", "a refusal names its reason")
+                merges += got["merges"]
+        self.assertGreater(merges, 0, "at least one merge ran: the test has teeth")
+
+
+@unittest.skipUnless(SQLITE, "node with node:sqlite is not installed")
 class TestPage(unittest.TestCase):
     def _devices(self):
         stub = (HERE / "page_stub.js").as_posix()

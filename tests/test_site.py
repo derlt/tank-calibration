@@ -2255,6 +2255,10 @@ class TestSiteRoundTrip(unittest.TestCase):
         "}\n"
         "s.editNote(3, 'wet plate'); s.override('checked'); s.tap(9000, 200);\n"
         "S.fill = s;\n"
+        # a level poured and not yet dipped, and one with a reading: both must survive the round trip
+        "const open = new core.Session({tank: 'o', D: 2400, Lest: 5000, pourUnit: 200});\n"
+        "open.start('?', 100, '', 1000); settle(open, 100); open.pour('400', { pourTime: 2000 });\n"
+        "S.pending = open;\n"
         "const fin = core.Session.fromJSON(JSON.parse(JSON.stringify(s.toJSON()))); fin.untap(); fin.finish(10000); S.finished = fin;\n"
         # a drain by hand, from the brim
         "const d = new core.Session({tank: 'd', D: 2400, Lest: 5000, pourUnit: 200, direction: 'drain'});\n"
@@ -2279,7 +2283,7 @@ class TestSiteRoundTrip(unittest.TestCase):
             "for (const k of Object.keys(S)) { const a = JSON.stringify(S[k].toJSON()); out[k] = [a === JSON.stringify(read(S[k]).toJSON()), a.length]; }\n"
             "console.log(JSON.stringify(out));"
         )
-        self.assertEqual(set(got), {"demo", "demoDrain", "fill", "finished", "drain", "transfer"})
+        self.assertEqual(set(got), {"demo", "demoDrain", "fill", "finished", "drain", "transfer", "pending"})
         for k, (same, size) in got.items():
             self.assertTrue(same, k)
             self.assertGreater(size, 1000, k)

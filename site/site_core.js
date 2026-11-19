@@ -603,7 +603,12 @@
     if (saved && saved.finished) this.finished = Object.assign({}, saved.finished);
     if (saved) {
       this.levels = saved.levels.map((l) => {
-        const L = Object.assign({}, l, { dips: l.dips.slice(), times: (l.times || []).slice(), tags: (l.tags || []).slice() });
+        // A reading and a tag list stay absent when the saved row has none:
+        // the round trip toJSON(fromJSON(x)) then gives the same text, which
+        // the cloud merge compares byte by byte (page.html, rebase()).
+        const L = Object.assign({}, l, { dips: l.dips.slice() });
+        if (l.times) L.times = l.times.slice();
+        if (l.tags) L.tags = l.tags.slice();
         // Older pages saved a closed batch with one unit and no per-can sizes.
         if (L.cans && !L.cans.units) L.cans.units = (L.cans.taps || []).map(() => L.cans.unit);
         return L;

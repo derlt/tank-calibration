@@ -3133,7 +3133,12 @@
     if (saved && saved.finished) this.finished = Object.assign({}, saved.finished);
     if (saved) {
       this.levels = saved.levels.map((l) => {
-        const L = Object.assign({}, l, { dips: l.dips.slice(), times: (l.times || []).slice(), tags: (l.tags || []).slice() });
+        // A reading and a tag list stay absent when the saved row has none:
+        // the round trip toJSON(fromJSON(x)) then gives the same text, which
+        // the cloud merge compares byte by byte (page.html, rebase()).
+        const L = Object.assign({}, l, { dips: l.dips.slice() });
+        if (l.times) L.times = l.times.slice();
+        if (l.tags) L.tags = l.tags.slice();
         // Older pages saved a closed batch with one unit and no per-can sizes.
         if (L.cans && !L.cans.units) L.cans.units = (L.cans.taps || []).map(() => L.cans.unit);
         return L;
@@ -6059,7 +6064,15 @@
       return { state: "saved" };
     } catch (e) {
       if (e.status === 409) return this._conflict(l.copy, l.id, base, e, data, try1.rev);
-      if (e.status === 0) return { state: "offline", message: e.message };
+      if (e.status === 0) {
+        // The answer was lost, so the server may have taken it: the try is
+        // marked, and a later 409 does not replay our actions over it.
+        this._update(l.copy, (x) => {
+          const t = (x.sent || []).find((y) => y.rev === try1.rev && y.sig === try1.sig);
+          if (t) t.lost = true;
+        });
+        return { state: "offline", message: e.message };
+      }
       if (e.status === 401) return { state: "login", message: e.message };
       return { state: "error", status: e.status, message: e.message };
     }
@@ -6086,9 +6099,9 @@
     };
     // An upload whose answer was lost may have landed, and the cloud may
     // already hold its actions: a replay would add them twice.  With the
-    // cloud exactly one version on and that version not ours, the earlier
+    // cloud exactly one version on and that version not ours, the lost
     // try's base version is taken, so it cannot land any more: then safe.
-    if (l.sent && l.sent.length > 1) {
+    if (l.sent && l.sent.some((t) => t.lost)) {
       if (c.version > base + 1 || l.sent.some((t) => t.sig === sig(JSON.stringify(c.data)))) return refuse("lost");
     }
     let r;
