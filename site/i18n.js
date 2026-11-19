@@ -1035,6 +1035,10 @@
     "The closed session stays in this browser's archive.": "Phiên đã đóng được giữ trong kho lưu của trình duyệt này.",
     "Export it first.": "Hãy xuất trước.",
     "Archive": "Kho lưu",
+    "This browser keeps the saved campaign and archive: it does not delete them to free space.": "Trình duyệt này giữ đợt đo đã lưu và kho lưu: nó không xoá chúng để giải phóng dung lượng.",
+    "Opened from the Home Screen: Safari keeps the saved campaign and archive.": "Mở từ Màn hình chính: Safari giữ đợt đo đã lưu và kho lưu.",
+    "Safari deletes this page's saved data (the open campaign and the archive) after 7 days without a visit. To keep it, add the page to the Home Screen (Share → Add to Home Screen), log in to the cloud, or download the session JSON after each campaign.": "Safari xoá dữ liệu đã lưu của trang này (đợt đo đang mở và kho lưu) sau 7 ngày không mở trang. Để giữ lại, hãy thêm trang vào Màn hình chính (Chia sẻ → Thêm vào MH chính), đăng nhập đám mây, hoặc tải JSON của phiên sau mỗi đợt đo.",
+    "The browser may delete this page's saved data (the open campaign and the archive) when the device runs low on space. Download the session JSON after each campaign, or log in to the cloud.": "Trình duyệt có thể xoá dữ liệu đã lưu của trang này (đợt đo đang mở và kho lưu) khi thiết bị sắp hết dung lượng. Hãy tải JSON của phiên sau mỗi đợt đo, hoặc đăng nhập đám mây.",
     "Open": "Mở",
     // Cloud
     "Cloud": "Đám mây",

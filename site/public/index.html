@@ -841,6 +841,7 @@
       <button class="secondary" id="f-show">Show CSV</button>
     </div>
     <p class="muted">The raw CSV has one row per level with the adopted reading (the mean of the two readings that agree). Every reading is in the note and in the session JSON. Use the CSV with <span class="mono">calib init</span>.</p>
+    <p class="muted" id="f-keep"></p>
     <textarea id="f-text" class="hidden" readonly></textarea>
     <h2 style="margin-top:0.9rem">Import</h2>
     <label>Session JSON<input type="file" id="f-import" accept=".json,application/json"></label>
@@ -1975,6 +1976,10 @@
     "The closed session stays in this browser's archive.": "Phiên đã đóng được giữ trong kho lưu của trình duyệt này.",
     "Export it first.": "Hãy xuất trước.",
     "Archive": "Kho lưu",
+    "This browser keeps the saved campaign and archive: it does not delete them to free space.": "Trình duyệt này giữ đợt đo đã lưu và kho lưu: nó không xoá chúng để giải phóng dung lượng.",
+    "Opened from the Home Screen: Safari keeps the saved campaign and archive.": "Mở từ Màn hình chính: Safari giữ đợt đo đã lưu và kho lưu.",
+    "Safari deletes this page's saved data (the open campaign and the archive) after 7 days without a visit. To keep it, add the page to the Home Screen (Share → Add to Home Screen), log in to the cloud, or download the session JSON after each campaign.": "Safari xoá dữ liệu đã lưu của trang này (đợt đo đang mở và kho lưu) sau 7 ngày không mở trang. Để giữ lại, hãy thêm trang vào Màn hình chính (Chia sẻ → Thêm vào MH chính), đăng nhập đám mây, hoặc tải JSON của phiên sau mỗi đợt đo.",
+    "The browser may delete this page's saved data (the open campaign and the archive) when the device runs low on space. Download the session JSON after each campaign, or log in to the cloud.": "Trình duyệt có thể xoá dữ liệu đã lưu của trang này (đợt đo đang mở và kho lưu) khi thiết bị sắp hết dung lượng. Hãy tải JSON của phiên sau mỗi đợt đo, hoặc đăng nhập đám mây.",
     "Open": "Mở",
     // Cloud
     "Cloud": "Đám mây",
@@ -5944,7 +5949,49 @@
   }
   /** Before a write: a newer session from another tab wins, and the write stops. */
   function guardStale() { if (changedElsewhere()) { adoptStored(); throw new Error(STALE); } }
-  function save() { if (S) { guardStale(); writeActive(JSON.stringify(S.toJSON())); cloudChanged(); } }
+  function save() { if (S) { guardStale(); writeActive(JSON.stringify(S.toJSON())); cloudChanged(); askKeep(); } }
+
+  // The browser can delete a site's saved data: Safari after 7 days without
+  // a visit (not from the Home Screen), other browsers when space runs low.
+  // The open campaign and the archive live there.  At the first save of a
+  // page load the page asks the browser to keep them (persist(): Chrome
+  // decides alone, Firefox may ask once); the Files tab says which case
+  // holds and how to keep the data.
+  let keepState = null;   // null: not known; true: the browser keeps the data; false: it may delete it
+  let keepAsked = false;
+  function storageApi() {
+    const st = typeof navigator !== "undefined" ? navigator.storage : null;
+    return st && typeof st.persist === "function" && typeof st.persisted === "function" ? st : null;
+  }
+  function askKeep() {
+    if (keepAsked) return;
+    keepAsked = true;
+    const st = storageApi();
+    if (!st) return;
+    st.persisted().then((on) => (on ? true : st.persist())).then((on) => {
+      keepState = !!on;
+      if (tab === "files") renderKeep();
+    }).catch(() => {});
+  }
+  function readKeep() {
+    const st = storageApi();
+    if (!st) return;
+    st.persisted().then((on) => { keepState = !!on; if (tab === "files") renderKeep(); }).catch(() => {});
+  }
+  function isSafari() {
+    const ua = typeof navigator !== "undefined" ? navigator.userAgent || "" : "";
+    return isIOS() || (/Safari\//.test(ua) && !/Chrome|Chromium|CriOS|FxiOS|Edg|OPR|Android/.test(ua));
+  }
+  function renderKeep() {
+    const standalone = typeof navigator !== "undefined" && navigator.standalone === true;
+    $("f-keep").textContent = keepState === true
+      ? "This browser keeps the saved campaign and archive: it does not delete them to free space."
+      : standalone
+        ? "Opened from the Home Screen: Safari keeps the saved campaign and archive."
+        : isSafari()
+          ? "Safari deletes this page's saved data (the open campaign and the archive) after 7 days without a visit. To keep it, add the page to the Home Screen (Share → Add to Home Screen), log in to the cloud, or download the session JSON after each campaign."
+          : "The browser may delete this page's saved data (the open campaign and the archive) when the device runs low on space. Download the session JSON after each campaign, or log in to the cloud.";
+  }
   function fromJSON(obj) {
     return obj && obj.kind === "transfer" ? C.TransferSession.fromJSON(obj) : C.Session.fromJSON(obj);
   }
@@ -6975,7 +7022,7 @@
     for (const id of ["f-csv", "f-csv-b", "f-json", "f-show", "f-new"]) $(id).disabled = !has;
     // The archive list shows in the Files tab only; it parses every archived
     // campaign, the largest part of a redraw on the other tabs.
-    if (tab === "files") renderArchive();
+    if (tab === "files") { renderArchive(); renderKeep(); }
     renderCloud();
     renderSetup();
     renderSetupNoise();
@@ -9424,6 +9471,7 @@
   }
 
   S = load();
+  readKeep();
   startLang();
   applyTheme();
   render();

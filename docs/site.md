@@ -9,6 +9,14 @@ The page is one file. It runs offline in the browser of a phone, a tablet or a
 laptop. It needs no network and no install. It saves the session in the
 browser after every entry.
 
+**Keep the saved data.** The browser can delete a site's saved data, and the
+open campaign and the archive live there. Safari deletes it after 7 days
+without a visit, unless the page is opened from the Home Screen; other
+browsers delete it when the device runs low on space. At the first save the
+page asks the browser to keep the data. *Files* says whether it does, and
+if not, how to keep it: add the page to the Home Screen, log in to the
+cloud, or download the session JSON after each campaign.
+
 **Two tabs of the page.** Two tabs or windows of the page share one saved
 session. A tab that shows an older state (left open behind a newer one, for
 example after the return from the Shortcuts timer) takes the newer session as

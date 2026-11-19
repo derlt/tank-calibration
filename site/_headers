@@ -3,11 +3,13 @@
 # The page is one file with inline script and style; it calls only its own
 # site (/api/*).  connect-src 'self' stops fetch and XHR to other sites; it
 # does not stop a navigation away from the page.  worker-src 'self' lets the
-# page run its offline copy (sw.js, from this site only).  'unsafe-inline'
-# scripts are allowed, so the real guard against script injection is that
-# the page puts no user text into HTML without escaping it.
+# page run its offline copy (sw.js, from this site only).  script-src holds
+# the SHA-256 hash of each inline script of the page, written by
+# `calib site-page` (make site): only those scripts run, so an injected
+# script does not.  Do not edit the hashes by hand.  The page also puts no
+# user text into HTML without escaping it.
 /*
-  Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'none'; script-src 'sha256-uO/+Psctv+bCBKW13kOHDga4uEN0LJlPM9BWXSJZR3I=' 'sha256-LdSw6VE5HcdTTsUju0yCiMpYGPb6Aho66VhV1pXKJEk=' 'sha256-eklHLcSW6DSjBuJp+dUTnFcwVTFwHKNnLJsZDVkdIRQ=' 'sha256-+bejoqSxY44NdEO0tp60BMmrpIiXIf8WmGZuTOZ4Crc=' 'sha256-gcdJpj02XEWRSo5p+sUAwzBPC82Iju/hzPC4gv2RyYY='; style-src 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   X-Frame-Options: DENY

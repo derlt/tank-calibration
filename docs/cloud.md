@@ -92,7 +92,7 @@ make a new workspace.
 | Isolation | Every query is scoped to the workspace of the token. |
 | Overwrites | None: a save with an old version gets a conflict (409). |
 | CSRF | No cookies. The token goes in the `Authorization` header only. |
-| Page headers | `site/_headers`: CSP with `connect-src 'self'` and `worker-src 'self'` (the offline copy), no framing, no referrer. |
+| Page headers | `site/_headers`: CSP with `script-src` set to the SHA-256 hash of each inline script of the page (no `'unsafe-inline'`: an injected script does not run), `connect-src 'self'` and `worker-src 'self'` (the offline copy), no framing, no referrer. `calib site-page` (`make site`) writes the hashes; `--check` and the tests fail when they are stale. |
 | Delete | Soft: the row stays in D1 with `deleted_at`, so an operator can restore it. A save never brings it back: it gets 409. |
 
 ## Flood and abuse limits
@@ -185,8 +185,8 @@ so the build finds the assets directory. It is a copy of the built page:
     site/public/sw.js         the offline copy of the page (site/sw.js)
 
 A test fails when the copy is stale. After a change to the page, run
-`make site`: it builds `site/calib_site.html` and copies it into
-`site/public/`. Commit both.
+`make site`: it builds `site/calib_site.html`, writes the script hashes into
+`site/_headers`, and copies both into `site/public/`. Commit them all.
 
 The deploy still needs the D1 id, which stays out of git: the committed
 `wrangler.jsonc` keeps the placeholder `D1_DATABASE_ID`, and a deploy with it

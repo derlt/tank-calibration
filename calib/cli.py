@@ -343,7 +343,8 @@ def _cmd_site_page(args) -> int:
             print(f"{SITE / 'calib_site.html'} is current")
             return 0
         print(
-            f"{SITE / 'calib_site.html'} is stale: run `calib site-page`",
+            f"{SITE / 'calib_site.html'} or the script hashes in {SITE / '_headers'} "
+            "are stale: run `calib site-page`",
             file=sys.stderr,
         )
         return 1

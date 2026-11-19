@@ -20,7 +20,7 @@ from pathlib import Path
 
 from calib.data import read_raw
 from calib.geometry import Shell
-from calib.site_page import SITE, build_page, page_is_current
+from calib.site_page import SITE, build_page, headers_are_current, page_is_current, script_hashes
 
 HERE = Path(__file__).resolve().parent.parent
 NODE = shutil.which("node")
@@ -124,6 +124,18 @@ class TestSitePage(unittest.TestCase):
                 (run / "wrangler.deploy.jsonc").exists(),
                 "no D1 id in the environment: no deploy config, and none with a placeholder",
             )
+
+    def test_csp_allows_only_the_pages_own_scripts(self):
+        """script-src holds the hash of each inline script of the current page, not 'unsafe-inline'."""
+        headers = (SITE / "_headers").read_text(encoding="utf-8")
+        csp = re.search(r"Content-Security-Policy: (.*)", headers).group(1)
+        src = re.search(r"script-src ([^;]*);", csp).group(1).split()
+        page = build_page()
+        self.assertNotIn("'unsafe-inline'", src, "an injected inline script would run")
+        self.assertEqual(src, script_hashes(page), "the hashes of the page's scripts, in order")
+        self.assertEqual(len(src), page.count("<script"), "one hash per inline script")
+        self.assertTrue(headers_are_current(), "site/_headers is stale: run `calib site-page`")
+        self.assertNotRegex(page, r"\son[a-z]+=", "an inline event handler cannot run under script hashes")
 
     def test_csp_lets_the_offline_worker_run(self):
         csp = re.search(r"Content-Security-Policy: (.*)", (SITE / "_headers").read_text(encoding="utf-8")).group(1)
@@ -774,6 +786,46 @@ class TestSitePage(unittest.TestCase):
         self.assertEqual(got["msg2"], "")
         self.assertEqual(got["back"], 4, "the first tab is now the older one: same rule")
         self.assertIn("changed in another tab", got["msgA"])
+
+    @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_asks_the_browser_to_keep_the_data(self):
+        """The first save asks persist() once; the Files tab says whether the data is kept, and how to keep it."""
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';\n"
+            "const CHROME = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36';\n"
+            "const tick = () => new Promise((r) => setImmediate(r));\n"
+            "async function run(ua, grant, standalone) {\n"
+            "  const asks = [];\n"
+            "  const storage = { persisted: async () => false, persist: async () => { asks.push(1); return grant; } };\n"
+            "  const nav = { userAgent: ua, storage, standalone };\n"
+            "  const p = stub.boot(page, corePath, new Map(), { navigator: nav }), el = p.el;\n"
+            "  el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "  el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "  el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "  await tick(); await tick();\n"
+            "  const files = p.tabs.find((b) => b.dataset.tab === 'files'); files.closest = () => files;\n"
+            "  for (const fn of el('tabs')._listeners.click) fn({ target: files });\n"
+            "  return { asks: asks.length, text: el('f-keep').textContent };\n"
+            "}\n"
+            "(async () => {\n"
+            "  const out = {};\n"
+            "  out.kept = await run(CHROME, true);\n"
+            "  out.safari = await run(IPHONE, false);\n"
+            "  out.home = await run(IPHONE, false, true);\n"
+            "  out.other = await run(CHROME, false);\n"
+            "  console.log(JSON.stringify(out));\n"
+            "})();"
+        )
+        self.assertEqual(got["kept"]["asks"], 1, "asked once, at the first save, not at every save")
+        self.assertIn("keeps the saved campaign", got["kept"]["text"])
+        self.assertIn("after 7 days", got["safari"]["text"], "Safari in a tab: the 7-day rule and the ways out")
+        self.assertIn("Home Screen", got["safari"]["text"])
+        self.assertIn("Opened from the Home Screen", got["home"]["text"])
+        self.assertIn("low on space", got["other"]["text"])
 
     @unittest.skipUnless(NODE, "node is not installed")
     def test_page_archive_list_draws_in_the_files_tab(self):

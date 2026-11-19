@@ -8,6 +8,19 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **On-site page: the browser is asked to keep the saved data.** Safari
+  deletes a site's saved data after 7 days without a visit (not from the
+  Home Screen); other browsers delete it when space runs low. The open
+  campaign and the archive live there. At the first save the page asks the
+  browser to keep them (`navigator.storage.persist()`), and *Files* says
+  whether it does and how to keep the data otherwise.
+
+- **Hosted page: only its own scripts run.** The security header's
+  `script-src` now lists the SHA-256 hash of each inline script of the
+  page, written by `calib site-page`, instead of `'unsafe-inline'`. A
+  script injected into the page does not run. `--check` and the tests fail
+  when the hashes are stale.
+
 - **On-site page: the hosted page opens without a network.** A small service
   worker (`site/sw.js`) keeps the last page the browser got. A load asks the
   network first and waits up to 3 s; with no answer, the kept page opens. A
