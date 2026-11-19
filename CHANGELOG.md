@@ -8,6 +8,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Cloud: two writers of one campaign merge instead of a conflict.** One
+  person counts the cans while another dips, on two phones: when the second
+  save finds that the first device saved before it, the page replays its own
+  actions on the cloud copy and uploads the result, so both people's work
+  stays. It is accepted only when neither person's work changes (byte for
+  byte), and otherwise the usual choice stays, with a short reason. The merge
+  waits rather than interrupt a note being typed. *Files → Cloud* has the
+  switch (on by default), the merge log (the last 20 results and why a merge
+  was refused) and *Restore my copy from before the merge*.
+
 - **On-site page: the browser is asked to keep the saved data.** Safari
   deletes a site's saved data after 7 days without a visit (not from the
   Home Screen); other browsers delete it when space runs low. The open
@@ -210,6 +220,10 @@ All notable changes to this project are documented here. The format follows
 ### Changed
 
 - **Cloud sync: faster, and it works on a weak network.**
+  - After a newer version from another device comes in, a following device
+    asks every 3 s for 2 minutes, then every 10 s again: the two people take
+    turns, and the next one starts from the newest copy, so a conflict is
+    rarer.
   - An upload goes gzipped, about a fifth of the size, and a large one gets
     more time (15 s plus 1 s per 4 KB). Before, 100 levels over 64 kbit/s
     took longer than the 15 s timeout and never uploaded. The Worker reads a
@@ -221,6 +235,18 @@ All notable changes to this project are documented here. The format follows
   - When the page goes out of view (the phone locks, Shortcuts opens), a
     change uploads at once, with `keepalive`, instead of after the 1.5 s
     wait or at the next open.
+
+- **On-site page: Save timers and device saves the campaign only when its
+  timers changed.** Sound, vibration, wake lock, animation and Shortcuts stay
+  on the device (`calib-site:prefs`). A save with nothing in it marked the
+  campaign changed, gave another writer a needless conflict, and uploaded a
+  campaign that did not change.
+
+- **On-site page: the shell fit starts from the prior only.** The fit also
+  started from the last fit (a warm start) which the session JSON does not
+  hold, so a copy read back from JSON judged the next dip with different low
+  digits. A session read on another device is now the same session, to the
+  last digit (the warm start never won by more than 1e-8 of the cost).
 
 - **On-site page: the Vietnamese page is as fast as the English one.** The
   translator looked up every text again on each redraw and each heartbeat,

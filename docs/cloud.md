@@ -18,7 +18,7 @@ browser first, and it works without a network.
 | Workspace | A team space. Its name and its **secret keyword** are the login. |
 | Campaign | One session of the page (one tank, or a transfer of two tanks). |
 | Version | Goes up by one on each save. A save names the version it started from. |
-| Conflict | Someone else saved first. Nothing is overwritten. You choose what to do. |
+| Conflict | Someone else saved first (409). The page merges both people's work when that is safe; otherwise nothing is overwritten and you choose. |
 
 ## Use it on site
 
@@ -66,19 +66,71 @@ page knows its own save at the next try. That is not a conflict.
 Switching between tank A and tank B of a transfer is a view on one device. It
 is not a change to the campaign, and other devices keep their own view.
 
-### One writer at a time
+### Two writers of one campaign
 
-Many people can each run their own campaign at the same time. Many people can
-also watch one campaign. But two people who **write** into one campaign at the
-same moment get a conflict. The second save stops, and the page offers:
+Many people can each run their own campaign at the same time, and many can
+watch one campaign. Two people can also **write** into one campaign: on site,
+one person counts the cans on a phone while another dips and enters the
+readings on a second phone. The two roles take turns, so only one device writes
+at a time in the normal flow.
+
+When the second save finds that another device saved first (409), the page
+**merges**: it takes the cloud copy and replays this device's own actions on
+it (each tap, dip, note, recount, Dip again, finish), through the same code
+that made them. The result goes up as the next version, and both people's work
+stays. The page says `Merged with Binh's changes at 10:42.`
+
+The replay is accepted only when neither person's work changes:
+
+1. every part of the cloud copy that this device's actions did not touch is
+   byte-identical in the merged copy;
+2. every row and the can tally that this device's actions made or changed is
+   byte-identical to this device's copy;
+3. the link's list of actions explains this device's copy.
+
+Otherwise the user gets the conflict choice, as before, with a short reason:
 
 - **Take the cloud copy.** Your copy goes to the archive (Files), so nothing
   is lost. Opened from the archive again, it still shows the conflict: it
   never overwrites the cloud copy.
 - **Keep mine as a new cloud campaign.** The cloud then holds both.
 
+The merge is refused, for example, when both people changed the same level
+(one edits the pour after a recount while the other dips that level), when both
+count cans in one tally, or when the other person removed a row. It also waits,
+with no conflict shown, while a note is being typed, while another tab of the
+page changed the session, or when a change lands during the sync; the next
+10 s tick tries again.
+
+What the merge keeps:
+
+- Only the open campaign merges. A closed campaign whose changes wait in the
+  outbox keeps the choice.
+- A transfer merges by the same path, one tank at a time; each device keeps
+  its own tank view.
+- An action that cannot be replayed (Undo, Reopen, a new campaign, the Settings
+  and Timers forms) makes the list not replayable until the next saved
+  upload: such a save keeps the choice.
+- An upload whose answer was lost may have reached the cloud. If the cloud has
+  moved on in a way the page cannot tell apart, it keeps the choice, so no tap
+  or dip goes in twice.
+- A third device that saves during the upload gives one more 409 and one more
+  replay, up to three tries; after that the choice stays.
+
+**Files → Cloud** has the merge switch (`merge two writers of one campaign`,
+on by default: off gives the choice every time, with no deploy needed), the
+**Merge log** (the last 20 merges and refusals with their reason, which shows
+which rule refuses most on site), and **Restore my copy from before the
+merge** (the copy this device held before its last merge; it then goes through
+the normal choice).
+
 For two tanks at once, use one transfer campaign on one device (§3.12), or one
 campaign per tank.
+
+The merge keeps only these storage keys in the browser: `calib-site:link`
+(the cloud link, with the action list and a fingerprint of the version it
+builds on), `calib-site:premerge` (one copy, from before the last merge) and
+`calib-site:merges` (the last 20 results).
 
 ## Make a workspace
 
@@ -129,7 +181,8 @@ enough for about 30 devices.
 
 Free plan limits (2026): Workers 100 000 requests per day; D1 5 GB, 5 million
 row reads and 100 000 row writes per day. One device that follows a campaign
-makes about 2 requests per minute.
+makes about 2 requests per minute, and every 3 s for 2 minutes after a newer
+version from another device came in (about 20 per minute in that window).
 
 ## Firewall (Cloudflare zone)
 
@@ -240,9 +293,9 @@ All bodies are JSON. Send `Authorization: Bearer <token>` after the login.
 |---|---|
 | `worker/index.js` | The Worker: routes, auth, limits |
 | `worker/schema.sql` | The D1 tables |
-| `site/cloud.js` | The page's client: login, link, sync, conflict, poll (inlined in the page) |
+| `site/cloud.js` | The page's client: login, link, the action list, sync, the merge, conflict, poll (inlined in the page) |
 | `site/_headers` | Security headers for the hosted page |
 | `site/sw.js` | The hosted page's offline copy (service worker, copied to `site/public/`) |
-| `tests/test_cloud.py` | Tests: the Worker on an in-memory SQLite D1, the client, two page devices |
+| `tests/test_cloud.py` | Tests: the Worker on an in-memory SQLite D1, the client, two page devices, the merge and a seeded two-writer stress run |
 | `tests/test_secrets.py` | No `.env` value or server code in the page or in git |
 | `tests/cloud_harness.mjs` | Runs the Worker under Node (`node:sqlite`, Node 22.5 or newer) |
