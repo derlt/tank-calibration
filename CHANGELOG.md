@@ -186,6 +186,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **On-site page: fewer forced layouts in a redraw.** The redraw read sizes
+  (the frozen stack's height, the window and chart widths, the tab label
+  line) after it changed the page, so the browser laid out the page more
+  than once per tap. The stack's height now comes from a ResizeObserver, the
+  widths are kept from the last resize, and the tab label line is measured
+  before the redraw.
+
 - Batch plan: past the mid-dip, the litres over or under the plan go to
   the open group whose batch size is nearest to them, not always to the
   middle group. A tank 600 L larger than the nominal takes one 600 L batch

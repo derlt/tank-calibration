@@ -959,6 +959,9 @@
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   let S = null;           // the session
   let tab = "live";
+  // The window width, kept by the resize handler: a read of innerWidth after
+  // a change of the page makes the browser lay it out at once.
+  let lastWidth = window.innerWidth || 0;
   let editRow = null;     // the row whose note is open for editing
   let sel = null;         // the selected level in Log & charts: { tank, row }, shared by the table and the chart
 
@@ -1225,16 +1228,19 @@
   // ------------------------------------------------------------ tabs
   const TABS = ["live", "log", "shell", "settings", "files", "replay", "help"];
   function goTab(name) {
-    tab = name; editRow = null; render();
     // On a phone the tabs are one sideways-scrolling line: show the chosen
-    // tab whole, and move only that line, never the page.
+    // tab whole, and move only that line, never the page.  The line is
+    // measured before the redraw: after it, the read lays out the page again.
     const bar = $("tabs");
     const b = Array.from(bar.querySelectorAll("button")).find((x) => x.dataset.tab === name);
+    let to = null;
     if (b && bar.scrollWidth > bar.clientWidth) {
       const left = b.offsetLeft - bar.offsetLeft, right = left + b.offsetWidth;
-      if (left < bar.scrollLeft) bar.scrollLeft = left - 8;
-      else if (right > bar.scrollLeft + bar.clientWidth) bar.scrollLeft = right - bar.clientWidth + 8;
+      if (left < bar.scrollLeft) to = left - 8;
+      else if (right > bar.scrollLeft + bar.clientWidth) to = right - bar.clientWidth + 8;
     }
+    tab = name; editRow = null; render();
+    if (to != null) bar.scrollLeft = to;
   }
   // A touch on a tab label switches the tab when the finger lifts, not on the
   // click.  iPhone Safari sends the click only when it sees no content change
@@ -1386,6 +1392,7 @@
   function showVerdict() {
     const box = $("verdict");
     if (box.classList.contains("hidden") || !box.scrollIntoView) return;
+    chromePad();   // a redraw just now can change the stack's height
     box.scrollIntoView({ block: "start", behavior: "smooth" });
   }
 
@@ -1994,7 +2001,7 @@
       $("hdr-phase").textContent = ""; $("hdr-count").textContent = "";
       $("hdr-title").textContent = "calib site";
       $("tiles").classList.add("hidden"); $("tiles").innerHTML = "";
-      chromePad();
+      chromePadSoon();
       return;
     }
     const st = S.status();
@@ -2110,7 +2117,7 @@
       box.innerHTML = tileHtml(S.tileView(panelInput()), "one", true, true, tileMark(S));
     }
     tileLive(liveState(Date.now()));
-    chromePad();
+    chromePadSoon();
   }
 
   /**
@@ -2120,8 +2127,25 @@
   function chromePad() {
     const el = $("chrome"), root = document.documentElement;
     const h = el && el.offsetHeight;
-    if (h && root && root.style && root.style.setProperty) root.style.setProperty("scroll-padding-top", `${h + 8}px`);
+    padTo(h);
   }
+  let padH = 0;
+  function padTo(h) {
+    const root = document.documentElement;
+    if (!h || h === padH || !root || !root.style || !root.style.setProperty) return;
+    padH = h;
+    root.style.setProperty("scroll-padding-top", `${h + 8}px`);
+  }
+  // Reading the stack's height right after a redraw makes the browser lay
+  // out the page at once, and once more for its frame.  A ResizeObserver
+  // gets the height after the browser's own layout.  Without one, the
+  // redraw reads it (chromePad).
+  const chromeSize = typeof ResizeObserver === "function"
+    ? new ResizeObserver((es) => { const e = es[es.length - 1]; padTo(Math.round(e.target.offsetHeight)); })
+    : null;
+  if (chromeSize) chromeSize.observe($("chrome"));
+  /** After a redraw: the observer does it, else read the height now. */
+  function chromePadSoon() { if (!chromeSize) chromePad(); }
 
   /** The arrow bobs only while the live can state moves that tank's water. */
   function tileLive(ls) {
@@ -2830,7 +2854,7 @@
     // the cans of the tally, so it shows before the can that passes the limit.
     const vw = volumeWarn(adv, vol, Math.max(litres, adv && adv.target > 0 ? adv.target : 0));
     const limit = vw && vw.limit != null && total > 0 && vw.limit < litres ? vw.limit : null;
-    const room = Math.min(window.innerWidth || 360, 760) - 56 - 3 * Math.max(total - 1, 0);
+    const room = Math.min(lastWidth || 360, 760) - 56 - 3 * Math.max(total - 1, 0);
     let cells = "", times = "", hidden = false, lastT = null, from = 0, at = null;
     for (let i = 0; i < total; i++) {
       const over = cans > 0 && i >= cans;
@@ -4075,12 +4099,11 @@
   // cells: a new width draws the page again.  A change of the height only
   // (the browser's toolbar shows or hides during a scroll, the keyboard
   // opens) draws nothing; the stack's height does not depend on it.
-  let lastWidth = window.innerWidth || 0;
   window.addEventListener("resize", () => {
     const w = window.innerWidth || 0;
     if (w === lastWidth) return;
     lastWidth = w;
-    if (S) render(); else chromePad();
+    if (S) render(); else chromePadSoon();
   });
 
   function renderChart() {
@@ -4107,8 +4130,16 @@
 
   /* One frame for every chart: drawn at the real width of the card, so the
      text stays readable on a phone.  Level in mm on x. */
+  // The chart's width, read once per window width: a read after the redraw's
+  // writes makes the browser lay out the page at once.  Hidden, it reads 0
+  // and is not kept.
+  let chartW = { at: -1, w: 0 };
+  function chartWidth() {
+    if (chartW.at !== lastWidth || !chartW.w) chartW = { at: lastWidth, w: $("chart").clientWidth || 0 };
+    return chartW.w;
+  }
   function frame(label, ylo, yhi, unit) {
-    const W = Math.max(280, Math.min(720, Math.round($("chart").clientWidth || 700)));
+    const W = Math.max(280, Math.min(720, Math.round(chartWidth() || 700)));
     const H = 260, l = 44, r = 10, t = 16, b = 28;
     plotY = [t, H - b];
     const top = Math.max(C.brim(S.fit.p), ...S.levels.filter((L) => L.H != null).map((L) => L.H));
