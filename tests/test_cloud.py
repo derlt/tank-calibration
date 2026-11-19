@@ -576,7 +576,9 @@ class TestPage(unittest.TestCase):
             "const env = h.makeEnv();\n"
             "await h.call(env, 'POST', '/api/workspaces', { workspace: 'team-1', keyword: 'correct horse battery', user: 'An', signup_code: 'test-signup-code' });\n"
             "const net = { on: true };\n"
-            "const dev = (ip) => { const f = h.fetchFor(env, ip); return { fetch: (u, i) => net.on ? f(u, i) : Promise.reject(new TypeError('offline')), location: { protocol: 'https:', origin: h.BASE } }; };\n"
+            # dlg.prompt: the answer of the next prompt() (Edit pour, override)
+            "const dlg = { prompt: null };\n"
+            "const dev = (ip) => { const f = h.fetchFor(env, ip); return { fetch: (u, i) => net.on ? f(u, i) : Promise.reject(new TypeError('offline')), location: { protocol: 'https:', origin: h.BASE }, prompt: () => dlg.prompt }; };\n"
             "const until = async (ok) => { for (let i = 0; i < 300 && !ok(); i++) await new Promise((r) => setTimeout(r, 10)); return ok(); };\n"
             "const link = (st) => JSON.parse(st.get('calib-site:link') || 'null');\n"
             "const box = (st) => JSON.parse(st.get('calib-site:outbox') || '[]');\n"
@@ -589,6 +591,78 @@ class TestPage(unittest.TestCase):
             "const openCloud = (e, id) => e('c-list')._listeners.click[0]({ target: { closest: () => ({ dataset: { cid: id, act: 'open' } }) } });\n"
             "const openArchive = (e, i) => e('f-archive')._listeners.click[0]({ target: { closest: () => ({ dataset: { i: String(i), act: 'open' } }) } });\n"
         )
+
+    def _team(self):
+        """Two devices on one campaign: A (An) counts the cans, B (Binh) dips.
+
+        Both hold version 1: row 1 is the start level, decided.  A's can size
+        is 200 L.  note(e, row, text) saves a note from the Log table;
+        sync(e, st) waits until the upload ends (saved or conflict).
+        """
+        return (
+            self._devices()
+            + "const s1 = new Map(), s2 = new Map(); const pa = boot(s1, '10.0.0.1'), pb = boot(s2, '10.0.0.2'), a = pa.el, b = pb.el;\n"
+            "await login(a, 'An'); start(a); a('t-unit').value = '200'; a('c-sync').click(); await settled(s1);\n"
+            "await login(b, 'Binh'); const id = link(s1).id;\n"
+            "openCloud(b, id); await until(() => link(s2) && link(s2).id === id);\n"
+            "const note = (e, row, text) => { const click = (sel, data) => e('log-table')._listeners.click[0]({ target: { closest: (s) => (s === sel ? { dataset: data } : null) } });\n"
+            "  click('button[data-note-edit]', { noteEdit: String(row) }); e('note-edit').value = text; click('button[data-note-save]', { noteSave: String(row) }); };\n"
+            "const sync = async (e, st) => { e('c-sync').click(); await until(() => link(st).rev === link(st).synced || link(st).conflict); await new Promise((r) => setTimeout(r, 20)); };\n"
+            "const follow = async (e, st, v) => { e('c-sync').click(); await until(() => link(st).version >= v); };\n"
+            "const active = (st) => JSON.parse(st.get('calib-site:active'));\n"
+        )
+
+    def test_case_a_dipper_writes_while_the_counter_counts(self):
+        got = _run(
+            self._team()
+            # A counts a can (not sent yet); B writes a note and saves first
+            + "a('t-plus').click();\n"
+            "note(b, 1, 'datum plate wet'); await sync(b, s2);\n"
+            "await sync(a, s1);\n"
+            "out.hdr = a('hdr-cloud').textContent;\n"
+            "out.cloud = [cloudData().levels[0].note, cloudData().batch];\n"
+        )
+        self.assertEqual(got["hdr"], "cloud: conflict")
+        self.assertEqual(got["cloud"], ["datum plate wet", None], "the cloud keeps B's note, not A's can")
+
+    def test_case_b_edit_pour_against_the_dip_of_the_same_level(self):
+        got = _run(
+            self._team()
+            # A closes a batch of 2 cans; B follows: row 2 waits for its dip
+            + "a('t-plus').click(); a('t-plus').click(); a('p-go').click(); await sync(a, s1);\n"
+            "await follow(b, s2, link(s1).version);\n"
+            # A recounts (Edit pour) while B dips the same row
+            "dlg.prompt = '600'; a('a-edit').click(); dlg.prompt = null;\n"
+            "b('d-val').value = '130'; b('d-go').click(); await sync(b, s2);\n"
+            "await sync(a, s1);\n"
+            "out.hdr = a('hdr-cloud').textContent;\n"
+            "out.cloud = [cloudData().levels[1].step.text, cloudData().levels[1].dips];\n"
+        )
+        self.assertEqual(got["hdr"], "cloud: conflict", "both changed row 2: no safe merge")
+        self.assertEqual(got["cloud"], ["400", [130]])
+
+    def test_case_c_timers_form_without_a_change(self):
+        got = _run(
+            self._team()
+            # A presses Save timers and device with nothing changed; B writes a note first
+            + "a('tm-save').click();\n"
+            "note(b, 1, 'datum plate wet'); await sync(b, s2);\n"
+            "await sync(a, s1);\n"
+            "out.hdr = a('hdr-cloud').textContent;\n"
+        )
+        self.assertEqual(got["hdr"], "cloud: conflict")
+
+    def test_case_d_write_on_a_stale_copy(self):
+        got = _run(
+            self._team()
+            # A counts a can and saves; B has not seen it, and writes a note
+            + "a('t-plus').click(); await sync(a, s1);\n"
+            "note(b, 1, 'datum plate wet'); await sync(b, s2);\n"
+            "out.hdr = b('hdr-cloud').textContent;\n"
+            "out.cloud = [cloudData().levels[0].note, cloudData().batch.cans.length];\n"
+        )
+        self.assertEqual(got["hdr"], "cloud: conflict")
+        self.assertEqual(got["cloud"], ["", 1], "the cloud keeps A's can, not B's note")
 
     def test_hidden_page_uploads_at_once(self):
         page = (ROOT / "site" / "page.html").as_posix()
