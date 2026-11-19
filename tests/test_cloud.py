@@ -1113,6 +1113,51 @@ class TestPage(unittest.TestCase):
         self.assertEqual(got["hdr"], "cloud: saved", "a can counted, then the tank finished, is a state the page makes")
         self.assertEqual(got["cloud"], [True, 1])
 
+    def test_a_third_writer_between_the_merge_and_its_upload(self):
+        # A counts a can (not sent); B notes row 1 (v2); A merges, and B writes
+        # again just before A's merged copy goes up: a second merge.
+        got = _run(
+            self._devices()
+            + "const s1 = new Map(), s2 = new Map();\n"
+            "let puts = 0, tokB = null, id = null;\n"
+            "const d1 = dev('10.0.0.1'), f1 = d1.fetch;\n"
+            "d1.fetch = async (u, i) => {\n"
+            "  if (i && i.method === 'PUT' && ++puts === 3) {\n"
+            "    const cur = (await h.call(env, 'GET', '/api/campaigns/' + id, null, tokB)).body;\n"
+            "    const d = JSON.parse(env.DB.raw.prepare('SELECT data FROM campaigns').get().data);\n"
+            "    d.levels[0].note = 'second note';\n"
+            "    await h.call(env, 'PUT', '/api/campaigns/' + id, { data: d, base_version: cur.version }, tokB);\n"
+            "  }\n"
+            "  return f1(u, i);\n"
+            "};\n"
+            f"const a = stub.boot({json.dumps((ROOT / 'site' / 'page.html').as_posix())}, {json.dumps((ROOT / 'site' / 'site_core.js').as_posix())}, s1, d1).el;\n"
+            "const b = boot(s2, '10.0.0.2').el;\n"
+            "const active = (st) => JSON.parse(st.get('calib-site:active'));\n"
+            "await login(a, 'An'); start(a); a('t-unit').value = '200'; a('c-sync').click(); await settled(s1);\n"
+            "id = link(s1).id;\n"
+            "await login(b, 'Binh'); openCloud(b, id); await until(() => link(s2) && link(s2).id === id);\n"
+            "tokB = JSON.parse(s2.get('calib-site:cloud')).token;\n"
+            "b('t-unit').value = '200';\n"
+            "const note = (e, row, text) => { const click = (sel, data) => e('log-table')._listeners.click[0]({ target: { closest: (x) => (x === sel ? { dataset: data } : null) } });\n"
+            "  click('button[data-note-edit]', { noteEdit: String(row) }); e('note-edit').value = text; click('button[data-note-save]', { noteSave: String(row) }); };\n"
+            "a('t-plus').click();\n"
+            "note(b, 1, 'first note'); b('c-sync').click(); await until(() => link(s2).rev === link(s2).synced);\n"
+            "a('c-sync').click(); await until(() => link(s1).rev === link(s1).synced || link(s1).conflict);\n"
+            "await new Promise((r) => setTimeout(r, 30));\n"
+            "out.hdr = a('hdr-cloud').textContent;\n"
+            "out.puts = puts;\n"
+            "out.cloud = [cloudData().levels[0].note, cloudData().batch.cans.length];\n"
+            "out.mine = [active(s1).levels[0].note, active(s1).batch.cans.length];\n"
+            "out.ops = (link(s1).ops || []).length;\n"
+            "out.log = JSON.parse(s1.get('calib-site:merges') || '[]');\n"
+        )
+        self.assertEqual(got["hdr"], "cloud: saved")
+        self.assertEqual(got["puts"], 4, "the campaign, the tap, the merged copy, then the second merge's copy")
+        self.assertEqual(got["cloud"], ["second note", 1], "the third writer's note and A's can both stay")
+        self.assertEqual(got["mine"], ["second note", 1])
+        self.assertEqual(got["ops"], 0)
+        self.assertEqual([x["version"] for x in got["log"]], [3, 2], "two merges, each one in the log")
+
     def test_a_tap_after_a_new_level_is_refused(self):
         got = _run(
             self._team()

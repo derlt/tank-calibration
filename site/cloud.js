@@ -490,9 +490,11 @@
     this._mergelog({ version: c.version, by: c.updated_by, n: a.ops.length, ok: true });
     // The cloud copy is the new base; the actions stay, the cloud does not
     // have them until this upload is saved.  sent goes: its tries are behind.
+    // The last action's signature is the merged copy's: the list explains it.
     this._update(copy, (x) => {
       x.version = c.version; x.baseSig = fingerprint(c.data); x.by = c.updated_by; x.at = c.updated_at;
       delete x.sent;
+      if (r.after && x.ops && x.ops.length) x.ops[x.ops.length - 1].after = r.after;
     });
     return { merged: { by: c.updated_by, at: c.updated_at, n: a.ops.length } };
   };

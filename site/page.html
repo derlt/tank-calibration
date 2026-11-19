@@ -1157,6 +1157,9 @@
     const m = CC.fingerprint(merged.toJSON());
     const tallyOn = ops.some((o) => OPS_TALLY[o.k]), finOn = ops.some((o) => o.k === "finish");
     const tallyTank = tanks[0] === null ? null : "out";
+    // A transfer's own fields (its kind and version): a newer page's field
+    // that this one does not know leaves with toJSON(), so it is caught here.
+    if (tanks[0] !== null && m.rest !== now.rest) return { refused: "their" };
     for (const k of tanks) {
       const mm = printOf(m, k), nn = printOf(now, k), ll = printOf(myp, k);
       if (mm.config !== nn.config || mm.rest !== nn.rest) return { refused: "their" };
@@ -1178,7 +1181,9 @@
     // A transfer keeps this device's tank view.
     if (S.isTransfer && mine.active) S.active = mine.active;
     keepLocal();
-    return { ok: true };
+    // The list now explains the merged copy, not my copy before the merge:
+    // a later 409 (a third writer) can replay it again.
+    return { ok: true, after: CC.sessionSig(S.toJSON()) };
   }
 
   // The browser can delete a site's saved data: Safari after 7 days without
