@@ -15,7 +15,8 @@ All notable changes to this project are documented here. The format follows
   works at a tank with no signal. Only the page itself: `/api/*` goes to the
   network as before. The security headers allow the worker
   (`worker-src 'self'`). The one file on a phone (`calib_site.html`) is not
-  affected.
+  affected. The zone's firewall rule *calib: serve only the page and the
+  API* now lets `/sw.js` through too.
 
 - **On-site page: an F(H) calculator in the Shell tab.** Type a dip
   reading to get litres, or litres to get a dip reading. The other field

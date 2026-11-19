@@ -128,9 +128,13 @@ of the page. Each rule applies only to the page's host name, so other sites in
 the zone do not change. They run before the Worker, so a blocked request costs
 no Worker request and no D1 read.
 
+A new static file in `site/public/` needs its path in the first rule, or the
+custom domain answers 403 for it (the workers.dev address has no such rule).
+`/sw.js`, the offline copy, was added for that reason.
+
 | Rule | Phase | Expression (`<HOST>` = the page's host name) | Action |
 |---|---|---|---|
-| calib: serve only the page and the API | custom | `http.host eq "<HOST>" and not (http.request.uri.path in {"/" "/index.html"} or starts_with(http.request.uri.path, "/api/"))` | block |
+| calib: serve only the page and the API | custom | `http.host eq "<HOST>" and not (http.request.uri.path in {"/" "/index.html" "/sw.js"} or starts_with(http.request.uri.path, "/api/"))` | block |
 | calib: API methods | custom | `http.host eq "<HOST>" and starts_with(http.request.uri.path, "/api/") and not http.request.method in {"GET" "POST" "PUT" "DELETE" "OPTIONS"}` | block |
 | calib: no crawlers on the API | custom | `http.host eq "<HOST>" and starts_with(http.request.uri.path, "/api/") and cf.client.bot` | block |
 | calib: API flood limit per IP | rate limit | `http.host eq "<HOST>" and starts_with(http.request.uri.path, "/api/")`, 50 per 10 s per IP and data center, blocked for 10 s | block |
