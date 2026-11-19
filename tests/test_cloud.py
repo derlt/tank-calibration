@@ -294,6 +294,31 @@ class TestCampaigns(unittest.TestCase):
 
 
 @unittest.skipUnless(SQLITE, "node with node:sqlite is not installed")
+class TestGzipBody(unittest.TestCase):
+    def test_worker_reads_a_gzip_body_within_the_limit(self):
+        got = _run(
+            SIGNUP
+            + "const zlib = require('node:zlib');\n"
+            "const put = async (bytes) => { const r = await h.fetchFor(env)(h.BASE + '/api/campaigns/camp-0001', { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tok }, body: bytes }); return [r.status, await r.json()]; };\n"
+            "const body = JSON.stringify({ data: h.session('alpha', 3), base_version: 0 });\n"
+            "out.gz = await put(zlib.gzipSync(body));\n"
+            "out.stored = (await h.call(env, 'GET', '/api/campaigns/camp-0001', null, tok)).body.data.levels.length;\n"
+            # a small body that unpacks past the limit
+            "const bomb = zlib.gzipSync('{\"data\":\"' + ' '.repeat(h.LIMITS.body + 10) + '\"}');\n"
+            "out.bombSize = bomb.length;\n"
+            "out.bomb = (await put(bomb))[0];\n"
+            "out.bad = (await put(new Uint8Array([0x1f, 0x8b, 8, 0, 1, 2, 3])))[0];\n"
+            "out.plain = (await put(JSON.stringify({ data: h.session('alpha', 4), base_version: 1 })))[0];\n"
+        )
+        self.assertEqual(got["gz"][0], 201)
+        self.assertEqual(got["stored"], 3, "the gzip body is the campaign")
+        self.assertLess(got["bombSize"], 10_000)
+        self.assertEqual(got["bomb"], 413, "the limit holds for the unpacked size")
+        self.assertEqual(got["bad"], 400)
+        self.assertEqual(got["plain"], 200, "a plain JSON body still works")
+
+
+@unittest.skipUnless(SQLITE, "node with node:sqlite is not installed")
 class TestClient(unittest.TestCase):
     PRELUDE = (
         "const env = h.makeEnv();\n"
@@ -343,6 +368,31 @@ class TestClient(unittest.TestCase):
         self.assertTrue(got["stillIn"], "a failed second login keeps the first one")
         self.assertIn("https://", got["badBase"])
         self.assertIn("server address", got["file"], "a local file needs an address")
+
+    def test_upload_goes_gzipped_and_small_ones_keepalive(self):
+        got = _run(
+            self.PRELUDE
+            + "const seen = [];\n"
+            "const spy = (ip) => { const f = net(ip); return (u, i) => { if (i && i.method === 'PUT') seen.push({ gz: i.body instanceof Uint8Array && i.body[0] === 0x1f && i.body[1] === 0x8b, size: i.body.length, keep: !!i.keepalive }); return f(u, i); }; };\n"
+            "const C = new cloud.Client({ storage: mem(), fetch: spy('10.0.0.5'), origin: h.BASE });\n"
+            "await C.login('', 'team-1', 'correct horse battery', 'Cam');\n"
+            "let data = h.session('alpha', 40); C.linkNew();\n"
+            "out.first = (await C.sync(() => data)).state;\n"
+            "data = h.session('alpha', 41); C.markDirty();\n"
+            "out.hidden = (await C.sync(() => data, { keepalive: true })).state;\n"
+            # a body past the keepalive limit even packed: random text does not pack
+            "const big = h.session('alpha', 42); big.config.note = Array.from({ length: 150000 }, () => Math.random().toString(36)[2]).join('');\n"
+            "C.markDirty(); out.big = (await C.sync(() => big, { keepalive: true })).state;\n"
+            "out.plain = JSON.stringify(h.session('alpha', 40)).length;\n"
+            "out.seen = seen;\n"
+            "out.cloud = (await B.fetchCampaign(C.link().id)).data.levels.length;\n"
+        )
+        self.assertEqual([got["first"], got["hidden"], got["big"]], ["saved"] * 3)
+        self.assertTrue(all(x["gz"] for x in got["seen"]), "every upload goes gzipped")
+        self.assertLess(got["seen"][0]["size"], got["plain"] / 3, "packed to well under a third")
+        self.assertEqual([x["keep"] for x in got["seen"]], [False, True, False],
+                         "keepalive only when asked, and only for a body within its limit")
+        self.assertEqual(got["cloud"], 42)
 
     def test_two_users_one_campaign(self):
         got = _run(
@@ -539,6 +589,29 @@ class TestPage(unittest.TestCase):
             "const openCloud = (e, id) => e('c-list')._listeners.click[0]({ target: { closest: () => ({ dataset: { cid: id, act: 'open' } }) } });\n"
             "const openArchive = (e, i) => e('f-archive')._listeners.click[0]({ target: { closest: () => ({ dataset: { i: String(i), act: 'open' } }) } });\n"
         )
+
+    def test_hidden_page_uploads_at_once(self):
+        page = (ROOT / "site" / "page.html").as_posix()
+        core = (ROOT / "site" / "site_core.js").as_posix()
+        got = _run(
+            self._devices()
+            + "const s1 = new Map(), d = dev('10.0.0.1'), f0 = d.fetch, puts = [];\n"
+            "d.fetch = (u, i) => { if (i && i.method === 'PUT') puts.push(!!i.keepalive); return f0(u, i); };\n"
+            f"const p = stub.boot({json.dumps(page)}, {json.dumps(core)}, s1, d), a = p.el;\n"
+            "await login(a, 'An'); start(a); a('c-sync').click(); await settled(s1);\n"
+            "const v = link(s1).version; puts.length = 0;\n"
+            # a new dip: the 1.5 s upload timer is a stub that never fires here
+            "a('d-val').value = '101'; a('d-go').click();\n"
+            "out.dirty = link(s1).rev > link(s1).synced;\n"
+            "p.document.hidden = true; p.document.fire('visibilitychange');\n"
+            "out.uploaded = await until(() => link(s1).version === v + 1 && link(s1).rev === link(s1).synced);\n"
+            "out.puts = puts;\n"
+            "out.cloudDips = cloudData().levels[0].dips;\n"
+        )
+        self.assertTrue(got["dirty"])
+        self.assertTrue(got["uploaded"], "out of view: the change uploads now, not at the next open")
+        self.assertEqual(got["puts"], [True], "one upload, with keepalive")
+        self.assertEqual(got["cloudDips"], [100, 100, 101], "the start reading twice, then the new dip")
 
     def test_take_cloud_then_reopen_never_overwrites(self):
         got = _run(

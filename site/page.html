@@ -1109,10 +1109,10 @@
     conflict: "Someone else saved this campaign first. Choose below.",
     login: "Log in to upload the changes. They wait in this browser.",
   };
-  function cloudSync() {
+  function cloudSync(opts) {
     if (!CL) return Promise.resolve(null);
     const before = cloudMsg;
-    return CL.sync(() => (S ? S.toJSON() : null)).then((r) => {
+    return CL.sync(() => (S ? S.toJSON() : null), opts).then((r) => {
       // A message from a closed copy (closedDone) wins over "saved".
       if (cloudMsg !== before) { /* keep it */ }
       else if (r.state === "saved") cloudMsg = `Saved in the cloud at ${C.clock(Date.now())}.`;
@@ -1141,12 +1141,15 @@
     // Follow the cloud only while nothing is half typed: an open note edit stays.
     if (!S || !CL.link() || editRow != null) return;
     if (typeof document !== "undefined" && document.hidden) return;
+    if (polling) return;   // focus and visibilitychange often come together: one poll
+    polling = true;
     CL.poll(applyCloud).then((c) => {
       if (!c) return;
       if (!c.gone) cloudMsg = `Updated from the cloud at ${C.clock(Date.now())}.`;
       render();
-    }).catch((e) => console.error(e));
+    }).catch((e) => console.error(e)).then(() => { polling = false; });
   }
+  let polling = false;
   function stamp(ms) { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${C.clock(ms)}`; }
   function renderCloud() {
     if (!CL) { $("hdr-cloud").textContent = ""; return; }
@@ -1240,7 +1243,24 @@
         cloudMsg = ""; tab = "live";
       })();
     });
-    if (window.addEventListener) window.addEventListener("online", () => { cloudSync(); });
+    if (window.addEventListener) window.addEventListener("online", () => { cloudTick(); });
+    // The page goes out of view (the phone locks, Shortcuts opens, another
+    // app): upload now, not after the 1.5 s wait, or the change waits until
+    // the page is open again.  keepalive lets the upload finish after the
+    // page is hidden.  Back in view: catch up at once (upload, or take the
+    // newer cloud version), not at the next tick.
+    const flush = () => {
+      if (!CL.loggedIn() || !(CL.dirty() || CL.waiting().length)) return;
+      if (syncTimer != null) { clearTimeout(syncTimer); syncTimer = null; }
+      cloudSync({ keepalive: true });
+    };
+    if (document.addEventListener) {
+      document.addEventListener("visibilitychange", () => { if (document.hidden) flush(); else cloudTick(); });
+    }
+    if (window.addEventListener) {
+      window.addEventListener("pagehide", flush);
+      window.addEventListener("focus", () => cloudTick());
+    }
   }
 
   // ------------------------------------------------------------ helpers
@@ -4510,7 +4530,10 @@
   applyTheme();
   render();
   // Upload what waits from an earlier visit; then look for newer versions.
-  if (CL) { setInterval(cloudTick, 30000); cloudTick(); }
+  // Every 10 s: upload what waits, or (in view, nothing to upload) ask for a
+  // newer version, so a device that follows a campaign shows a new dip
+  // within about 10 s.  A poll that finds nothing sends no campaign data.
+  if (CL) { setInterval(cloudTick, 10000); cloudTick(); }
 })();
 </script>
 </body>

@@ -105,16 +105,51 @@ async function rateLimit(env, name, key) {
   if (!success) throw new HttpError(429, "Too many requests. Wait one minute.", { "Retry-After": "60" });
 }
 
+/**
+ * A request body as text.  The page sends a large body gzipped (a campaign
+ * is mostly repeated JSON keys: about a fifth of the size), so an upload
+ * over a weak site network finishes in time.  A gzip body is known by its
+ * first two bytes (1f 8b; JSON text never starts so), not by a header, so
+ * it works whatever the network does with the headers.  The limit holds
+ * for the unpacked text too: a small body that unpacks to much more stops
+ * at LIMITS.body.
+ */
 async function readBody(request) {
   const n = Number(request.headers.get("content-length") || 0);
   if (n > LIMITS.body) throw new HttpError(413, "The request is too large.");
-  const text = await request.text();
-  if (enc.encode(text).length > LIMITS.body) throw new HttpError(413, "The request is too large.");
+  const raw = new Uint8Array(await request.arrayBuffer());
+  if (raw.length > LIMITS.body) throw new HttpError(413, "The request is too large.");
+  const text = raw.length >= 2 && raw[0] === 0x1f && raw[1] === 0x8b
+    ? await gunzip(raw, LIMITS.body)
+    : new TextDecoder().decode(raw);
   try {
     const v = JSON.parse(text || "{}");
     if (!v || typeof v !== "object" || Array.isArray(v)) throw new Error();
     return v;
   } catch (e) { throw new HttpError(400, "The request body is not a JSON object."); }
+}
+
+/** Unpack a gzip body to text, at most max bytes; more is 413, a bad stream 400. */
+async function gunzip(bytes, max) {
+  const reader = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip")).getReader();
+  const parts = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > max) { await reader.cancel().catch(() => {}); throw new HttpError(413, "The request is too large."); }
+      parts.push(value);
+    }
+  } catch (e) {
+    if (e instanceof HttpError) throw e;
+    throw new HttpError(400, "The request body is not valid gzip.");
+  }
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const p of parts) { out.set(p, at); at += p.length; }
+  return new TextDecoder().decode(out);
 }
 
 // ------------------------------------------------------------------ validation

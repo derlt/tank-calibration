@@ -209,6 +209,19 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **Cloud sync: faster, and it works on a weak network.**
+  - An upload goes gzipped, about a fifth of the size, and a large one gets
+    more time (15 s plus 1 s per 4 KB). Before, 100 levels over 64 kbit/s
+    took longer than the 15 s timeout and never uploaded. The Worker reads a
+    gzip body (by its first two bytes) and checks its limit on the unpacked
+    size.
+  - A device that follows a campaign asks every 10 s while in view (was
+    30 s), and at once when the page comes back into view, gets the focus
+    or comes back online.
+  - When the page goes out of view (the phone locks, Shortcuts opens), a
+    change uploads at once, with `keepalive`, instead of after the 1.5 s
+    wait or at the next open.
+
 - **On-site page: the Vietnamese page is as fast as the English one.** The
   translator looked up every text again on each redraw and each heartbeat,
   and it also looked up its own translations (the slowest case: no key

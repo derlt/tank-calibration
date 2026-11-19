@@ -5529,6 +5529,24 @@
 
   const AUTH = "calib-site:cloud", LINK = "calib-site:link", OUTBOX = "calib-site:outbox";
   const TIMEOUT = 15000;
+  // An upload gets one more second per 4 KB of body: 4 KB/s is 32 kbit/s, a
+  // weak site network.  Without it a large campaign could never finish.
+  const PER_4KB = 1000;
+  // A body this large or more goes gzipped (CompressionStream), when the
+  // browser can: a campaign packs to about a fifth.
+  const GZIP_FROM = 1024;
+  // keepalive (the upload may finish after the page is hidden) allows at
+  // most 64 KB of body in flight.
+  const KEEPALIVE_MAX = 60000;
+
+  /** text -> gzip bytes, or null when the browser cannot pack. */
+  async function gzip(text) {
+    if (typeof CompressionStream === "undefined" || typeof Blob === "undefined" || typeof Response === "undefined") return null;
+    try {
+      const stream = new Blob([text]).stream().pipeThrough(new CompressionStream("gzip"));
+      return new Uint8Array(await new Response(stream).arrayBuffer());
+    } catch (e) { return null; }
+  }
 
   /** An error with the HTTP status; status 0 = no network. */
   class CloudError extends Error {
@@ -5580,22 +5598,33 @@
   /** The server: the saved address, else the page's own site. */
   Client.prototype.base = function () { return this.auth().base || this.origin; };
 
-  /** base != null: a login or signup call, sent without the token. */
-  Client.prototype.request = async function (method, path, body, base) {
+  /**
+   * base != null: a login or signup call, sent without the token.
+   * opts.gzip: pack a large body; opts.keepalive: the request may outlive
+   * the page (a small body only).
+   */
+  Client.prototype.request = async function (method, path, body, base, opts) {
+    opts = opts || {};
     const b = base != null ? base : this.base();
     if (!b) throw new CloudError(-1, "Enter the server address: this page is a local file.");
     if (!this.fetchFn) throw new CloudError(0, "No network.");
     const headers = { "Content-Type": "application/json" };
     const tok = base == null ? this.auth().token : null;
     if (tok) headers.Authorization = "Bearer " + tok;
+    let payload = body == null ? undefined : JSON.stringify(body);
+    if (payload && opts.gzip && payload.length >= GZIP_FROM) payload = (await gzip(payload)) || payload;
+    const size = payload == null ? 0 : payload.length;
     const ctl = typeof AbortController !== "undefined" ? new AbortController() : null;
-    const timer = ctl && typeof setTimeout !== "undefined" ? setTimeout(() => ctl.abort(), TIMEOUT) : null;
+    const wait = TIMEOUT + Math.ceil(size / 4096) * PER_4KB;
+    const timer = ctl && typeof setTimeout !== "undefined" ? setTimeout(() => ctl.abort(), wait) : null;
     let res;
     try {
-      res = await this.fetchFn(b + path, {
-        method, headers, body: body == null ? undefined : JSON.stringify(body),
+      const init = {
+        method, headers, body: payload,
         signal: ctl ? ctl.signal : undefined, cache: "no-store", credentials: "omit",
-      });
+      };
+      if (opts.keepalive && size <= KEEPALIVE_MAX) init.keepalive = true;
+      res = await this.fetchFn(b + path, init);
     } catch (e) {
       throw new CloudError(0, "No network: the change waits in this browser.");
     } finally { if (timer != null) clearTimeout(timer); }
@@ -5762,14 +5791,15 @@
   };
 
   /** One PUT.  -> {state: "saved" | "recovered" | "conflict" | "gone" | "offline" | "login" | "error", message} */
-  Client.prototype._upload = async function (l, data) {
+  Client.prototype._upload = async function (l, data, keepalive) {
     const try1 = { rev: l.rev, sig: sig(JSON.stringify(data)) };
     const base = l.version;
     // Keep the try before the request: when the answer is lost, the next
     // 409 finds it.
     this._update(l.copy, (x) => { x.sent = (x.sent || []).concat([try1]).slice(-5); });
     try {
-      const r = await this.request("PUT", `/api/campaigns/${encodeURIComponent(l.id)}`, { data, base_version: base });
+      const r = await this.request("PUT", `/api/campaigns/${encodeURIComponent(l.id)}`, { data, base_version: base }, null,
+        { gzip: true, keepalive });
       this._update(l.copy, (x) => {
         x.version = r.version; x.synced = Math.max(x.synced, try1.rev); x.by = r.updated_by; x.at = r.updated_at;
         delete x.sent;
@@ -5807,14 +5837,14 @@
     return { state: "conflict", message: e.message };
   };
   /** Upload one copy until the cloud has it: after a lost answer, once more with the right version. */
-  Client.prototype._push = async function (copy, getData) {
+  Client.prototype._push = async function (copy, getData, keepalive) {
     for (let i = 0; i < 3; i++) {
       const l = this._find(copy);
       if (!l) return { state: "moved" };   // the copy was closed or opened again meanwhile
       if (l.rev <= l.synced) return { state: "saved" };
       const data = getData();
       if (data == null) return { state: "idle" };
-      const r = await this._upload(l, data);
+      const r = await this._upload(l, data, keepalive);
       if (r.state !== "recovered") return r;
     }
     return { state: "error", message: "The upload did not settle. Try again." };
@@ -5830,12 +5860,12 @@
    * -> {state: "idle" | "saved" | "pending" | "offline" | "conflict" | "gone"
    *            | "elsewhere" | "login" | "error", message}
    */
-  Client.prototype.sync = function (getData) {
-    if (this.busy) return this.busy.then(() => this.sync(getData));
-    this.busy = this._sync(getData).finally(() => { this.busy = null; });
+  Client.prototype.sync = function (getData, opts) {
+    if (this.busy) return this.busy.then(() => this.sync(getData, opts));
+    this.busy = this._sync(getData, (opts && opts.keepalive) || false).finally(() => { this.busy = null; });
     return this.busy;
   };
-  Client.prototype._sync = async function (getData) {
+  Client.prototype._sync = async function (getData, keepalive) {
     const box = this.waiting();
     const open = this.state();
     if (!box.length && open !== "dirty") {
@@ -5858,7 +5888,7 @@
       const st = this.state(l);
       return { state: st === "conflict" || st === "gone" ? st : "saved", message: st === "gone" ? GONE : undefined };
     }
-    const r = await this._push(l.copy, getData);
+    const r = await this._push(l.copy, getData, keepalive);
     if (r.state === "moved") return { state: "idle" };
     if (r.state !== "saved") return r;
     const cur = this.link();
@@ -5908,7 +5938,7 @@
   /** Conflict, choice 2 (also for a deleted campaign or another workspace): the browser copy becomes a new cloud campaign. */
   Client.prototype.fork = function () { return this.linkNew(); };
 
-  const api = { Client, CloudError, newId, normBase, sig, AUTH, LINK, OUTBOX };
+  const api = { Client, CloudError, newId, normBase, sig, gzip, AUTH, LINK, OUTBOX };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.CalibCloud = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);
@@ -6075,10 +6105,10 @@
     conflict: "Someone else saved this campaign first. Choose below.",
     login: "Log in to upload the changes. They wait in this browser.",
   };
-  function cloudSync() {
+  function cloudSync(opts) {
     if (!CL) return Promise.resolve(null);
     const before = cloudMsg;
-    return CL.sync(() => (S ? S.toJSON() : null)).then((r) => {
+    return CL.sync(() => (S ? S.toJSON() : null), opts).then((r) => {
       // A message from a closed copy (closedDone) wins over "saved".
       if (cloudMsg !== before) { /* keep it */ }
       else if (r.state === "saved") cloudMsg = `Saved in the cloud at ${C.clock(Date.now())}.`;
@@ -6107,12 +6137,15 @@
     // Follow the cloud only while nothing is half typed: an open note edit stays.
     if (!S || !CL.link() || editRow != null) return;
     if (typeof document !== "undefined" && document.hidden) return;
+    if (polling) return;   // focus and visibilitychange often come together: one poll
+    polling = true;
     CL.poll(applyCloud).then((c) => {
       if (!c) return;
       if (!c.gone) cloudMsg = `Updated from the cloud at ${C.clock(Date.now())}.`;
       render();
-    }).catch((e) => console.error(e));
+    }).catch((e) => console.error(e)).then(() => { polling = false; });
   }
+  let polling = false;
   function stamp(ms) { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${C.clock(ms)}`; }
   function renderCloud() {
     if (!CL) { $("hdr-cloud").textContent = ""; return; }
@@ -6206,7 +6239,24 @@
         cloudMsg = ""; tab = "live";
       })();
     });
-    if (window.addEventListener) window.addEventListener("online", () => { cloudSync(); });
+    if (window.addEventListener) window.addEventListener("online", () => { cloudTick(); });
+    // The page goes out of view (the phone locks, Shortcuts opens, another
+    // app): upload now, not after the 1.5 s wait, or the change waits until
+    // the page is open again.  keepalive lets the upload finish after the
+    // page is hidden.  Back in view: catch up at once (upload, or take the
+    // newer cloud version), not at the next tick.
+    const flush = () => {
+      if (!CL.loggedIn() || !(CL.dirty() || CL.waiting().length)) return;
+      if (syncTimer != null) { clearTimeout(syncTimer); syncTimer = null; }
+      cloudSync({ keepalive: true });
+    };
+    if (document.addEventListener) {
+      document.addEventListener("visibilitychange", () => { if (document.hidden) flush(); else cloudTick(); });
+    }
+    if (window.addEventListener) {
+      window.addEventListener("pagehide", flush);
+      window.addEventListener("focus", () => cloudTick());
+    }
   }
 
   // ------------------------------------------------------------ helpers
@@ -9476,7 +9526,10 @@
   applyTheme();
   render();
   // Upload what waits from an earlier visit; then look for newer versions.
-  if (CL) { setInterval(cloudTick, 30000); cloudTick(); }
+  // Every 10 s: upload what waits, or (in view, nothing to upload) ask for a
+  // newer version, so a device that follows a campaign shows a new dip
+  // within about 10 s.  A poll that finds nothing sends no campaign data.
+  if (CL) { setInterval(cloudTick, 10000); cloudTick(); }
 })();
 </script>
 </body>

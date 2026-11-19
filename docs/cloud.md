@@ -29,20 +29,30 @@ browser first, and it works without a network.
 3. With **upload new campaigns to the cloud** on, each new campaign goes to
    the cloud. **Upload this campaign** sends the one that is open now.
 4. Work as usual. Each entry saves in the browser. About 1.5 s later it
-   uploads. The header shows `cloud: saved`, `cloud: waiting` (offline),
+   uploads; when the page goes out of view first (the phone locks, the
+   Shortcuts timer opens), it uploads at once. The header shows `cloud: saved`, `cloud: waiting` (offline),
    `cloud: log in`, `cloud: conflict`, `cloud: deleted` (someone deleted the
    campaign; your copy stays) or `cloud: other workspace` (you are logged in
    to a workspace that does not hold this campaign). For the last two,
    **Upload as a new cloud campaign** puts your copy in this workspace.
 5. On another device, log in to the same workspace, press **Sync now**, and
-   **Open** the campaign. That device follows the campaign: every 30 s it gets
-   the newer version, while it has no changes of its own.
+   **Open** the campaign. That device follows the campaign: while the page is
+   in view, it asks every 10 s, and at once when it comes back into view, and
+   gets the newer version while it has no changes of its own. A question that
+   finds nothing new sends no campaign data.
 
 ### Offline
 
 No network: every entry stays in the browser, and the header shows
 `cloud: waiting`. When the network is back, the page uploads the changes as
-one save. The page also tries again every 30 s.
+one save. The page also tries again every 10 s.
+
+**A weak network.** An upload is the whole campaign, about 1.5 KB per level
+as text. The page sends it gzipped, about a fifth of that (a browser without
+`CompressionStream` sends the text), and gives a large upload more time: 15 s
+plus 1 s per 4 KB. At 64 kbit/s, 100 levels upload in about 4 s instead of
+20 s. The server knows a gzip body by its first two bytes, and its size limit
+holds for the unpacked text too.
 
 You can close the campaign or open another one while changes wait. The
 closed campaign goes to the archive as usual, and its changes wait in an
