@@ -186,6 +186,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **On-site page: the Vietnamese page is as fast as the English one.** The
+  translator looked up every text again on each redraw and each heartbeat,
+  and it also looked up its own translations (the slowest case: no key
+  matches, so it tries every pattern). It now keeps each answer, and a
+  translated text stays as it is. A tab switch in Vietnamese spent about ten
+  times more time translating than drawing; now it is a small part.
+
 - **On-site page: a faster redraw on every tab.** The archive list (it reads
   every archived campaign) was drawn again on every tap and every cloud
   sync, on every tab. Now only the Files tab draws it. With 8 archived

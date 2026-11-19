@@ -132,6 +132,25 @@ class TestI18nEngine(unittest.TestCase):
         self.assertEqual(got["names"], ["alpha"], "a named capture with no key counts as missing")
         self.assertEqual(got["langs"], ["en", "vi"])
 
+    def test_memo_keeps_answers_and_translations(self):
+        """The page's observer asks again for each text it wrote: the memo answers at once."""
+        got = _node(
+            "const t = (s) => I.translate(s, 'vi');\n"
+            "const first = t('Dip again. Do not look at the first reading.');\n"
+            "const ms = (f) => { const a = process.hrtime.bigint(); for (let i = 0; i < 200; i++) f(); "
+            "return Number(process.hrtime.bigint() - a) / 200 / 1e6; };\n"
+            "console.log(JSON.stringify({\n"
+            "  first, again: t('Dip again. Do not look at the first reading.'), own: t(first),\n"
+            "  en: I.translate('Start campaign', 'en'),\n"
+            "  ownMs: ms(() => t(first)),\n"
+            "}));"
+        )
+        self.assertEqual(got["first"], "Đo lại. Đừng nhìn số đo đầu tiên.")
+        self.assertEqual(got["again"], got["first"], "the same text gets the same answer")
+        self.assertEqual(got["own"], got["first"], "a translation stays as it is")
+        self.assertEqual(got["en"], "Start campaign")
+        self.assertLess(got["ownMs"], 0.05, "a translated text is not matched against every pattern again")
+
     def test_a_capture_stays_in_one_sentence(self):
         got = _node(
             "console.log(JSON.stringify(I.translate('Dip again. Do not look at the earlier readings.', 'vi')));"

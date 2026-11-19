@@ -1506,7 +1506,26 @@
     return lead + r + trail;
   }
 
-  function translate(text, lang) { return run(text, lang, null); }
+  // The page asks for the same strings again and again (every redraw, every
+  // heartbeat), and its observer sees each translation it writes as a new
+  // change and asks for that text too.  A text with no exact entry tries
+  // every pattern, the slowest case.  The memo keeps each answer, and keeps
+  // each translation as its own answer: a translated text stays as it is.
+  // It starts again past MEMO_MAX texts, so it does not grow without end.
+  const MEMO_MAX = 20000;
+  const memo = {};
+  function translate(text, lang) {
+    if (!lang || lang === "en" || !DICTS[lang]) return String(text);
+    const m = memo[lang] || (memo[lang] = new Map());
+    const s = String(text);
+    const hit = m.get(s);
+    if (hit !== undefined) return hit;
+    const out = run(s, lang, null);
+    if (m.size >= MEMO_MAX) m.clear();
+    m.set(s, out);
+    if (out !== s) m.set(out, out);
+    return out;
+  }
   function report(text, lang) { const m = []; run(text, lang, m); return m; }
   function entries(lang) { return Object.entries(DICTS[lang] || {}); }
 
