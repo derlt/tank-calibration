@@ -286,6 +286,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **On-site page: no redraw while you scroll.** Safari and Chrome on a phone
+  send a resize event when their toolbar shows or hides during a scroll; the
+  page drew all of itself again each time. Now only a new width (a turn of
+  the phone) draws the page again.
+
 - **On-site page: one tap on a tab label is enough on an iPhone.** After a
   tap in the content, Safari showed the label as pressed but did not switch
   the tab until a second tap. The label now switches when the finger lifts.
