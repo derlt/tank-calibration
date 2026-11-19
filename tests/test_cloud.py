@@ -645,12 +645,21 @@ class TestPage(unittest.TestCase):
         got = _run(
             self._team()
             # A presses Save timers and device with nothing changed; B writes a note first
-            + "a('tm-save').click();\n"
+            + "const rev = link(s1).rev;\n"
+            "a('tm-sound').checked = false; a('tm-save').click();\n"
+            "out.same = [link(s1).rev === rev, JSON.parse(s1.get('calib-site:prefs')).sound];\n"
             "note(b, 1, 'datum plate wet'); await sync(b, s2);\n"
-            "await sync(a, s1);\n"
+            "await follow(a, s1, link(s2).version);\n"
             "out.hdr = a('hdr-cloud').textContent;\n"
+            "out.followed = active(s1).levels[0].note;\n"
+            # a real change of the campaign's timers is a cloud change
+            "a('tm-settle').value = '6:00'; a('tm-save').click(); await sync(a, s1);\n"
+            "out.settle = [link(s1).rev > rev, cloudData().config.settleSeconds];\n"
         )
-        self.assertEqual(got["hdr"], "cloud: conflict")
+        self.assertEqual(got["same"], [True, False], "a device setting stays on the device: no cloud change")
+        self.assertEqual(got["hdr"], "cloud: saved", "no conflict")
+        self.assertEqual(got["followed"], "datum plate wet")
+        self.assertEqual(got["settle"], [True, 360])
 
     def test_case_d_write_on_a_stale_copy(self):
         got = _run(

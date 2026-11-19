@@ -3936,14 +3936,21 @@
       o.fillSeconds[String(u)] = parseDur($(sizeId(u)).value);
       o.drainSeconds[String(u)] = parseDur($(drainId(u)).value);
     }
+    // The durations belong to the campaign; sound, vibration, wake lock,
+    // animation and Shortcuts belong to this device (calib-site:prefs).
+    // Only a change of the campaign saves it: a save is a cloud change, and
+    // a save with nothing in it gives another writer a needless conflict.
+    const was = JSON.stringify(S.toJSON());
     S.setTimers(o);
+    const changed = JSON.stringify(S.toJSON()) !== was;
     P.anim = !!$("tm-anim").checked;
     P.sound = !!$("tm-sound").checked; P.vibrate = !!$("tm-vib").checked; P.wake = !!$("tm-wake").checked;
     P.iosTimer = !!$("tm-ios-on").checked; P.iosShortcut = $("tm-ios-name").value.trim();
     if (!P.anim) { stopPourAnim(); resetPourDraw(); }
     localStorage.setItem(PREFS, JSON.stringify(P));
     if (!P.wake) releaseWake();
-    save(); timersSig = "";
+    if (changed) save();
+    timersSig = "";
     $("tm-msg").textContent = "Saved." + (S.cfg.settleSeconds < 300
       ? ` The settle time ${fmtClock(S.cfg.settleSeconds)} is below the 5-minute minimum of §3.5: a level that still moves gives a bad dip.` : "");
     unlockAudio();
