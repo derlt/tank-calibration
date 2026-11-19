@@ -676,6 +676,28 @@ class TestSitePage(unittest.TestCase):
         self.assertEqual(got["first"], ["live"], "the first tab is the end: no wrap")
 
     @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_archive_list_draws_in_the_files_tab(self):
+        """The archive parses every archived campaign: only the Files tab draws it."""
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "store.set('calib-site:archive', JSON.stringify([{ when: '2026-01-02T03:04:05Z', tank: 'old', session: { levels: [1, 2] } }]));\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "out.live = el('f-archive').innerHTML;\n"
+            "const files = p.tabs.find((b) => b.dataset.tab === 'files');\n"
+            "files.closest = () => files;\n"
+            "for (const fn of el('tabs')._listeners.click) fn({ target: files });\n"
+            "out.files = el('f-archive').innerHTML;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["live"], "", "another tab does not draw the archive")
+        self.assertIn("old", got["files"])
+        self.assertIn("2 levels", got["files"])
+
+    @unittest.skipUnless(NODE, "node is not installed")
     def test_page_tab_label_switches_on_the_touch(self):
         """iPhone Safari can hold back the click of a tap: the lift of the finger switches."""
         stub = (HERE / "tests" / "page_stub.js").as_posix()

@@ -5990,7 +5990,7 @@
       else if (r.state === "saved") cloudMsg = `Saved in the cloud at ${C.clock(Date.now())}.`;
       else if (r.state === "error") cloudMsg = r.message;
       else if (SYNC_TEXT[r.state]) cloudMsg = SYNC_TEXT[r.state];
-      renderArchive();
+      if (tab === "files") renderArchive();
       renderCloud();
       return r;
     });
@@ -6925,7 +6925,9 @@
       $(id).classList.toggle("hidden", tab !== id || !need);
     }
     for (const id of ["f-csv", "f-csv-b", "f-json", "f-show", "f-new"]) $(id).disabled = !has;
-    renderArchive();
+    // The archive list shows in the Files tab only; it parses every archived
+    // campaign, the largest part of a redraw on the other tabs.
+    if (tab === "files") renderArchive();
     renderCloud();
     renderSetup();
     renderSetupNoise();

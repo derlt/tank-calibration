@@ -186,6 +186,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **On-site page: a faster redraw on every tab.** The archive list (it reads
+  every archived campaign) was drawn again on every tap and every cloud
+  sync, on every tab. Now only the Files tab draws it. With 8 archived
+  campaigns a Live redraw takes about half the time.
+
 - **On-site page: fewer forced layouts in a redraw.** The redraw read sizes
   (the frozen stack's height, the window and chart widths, the tab label
   line) after it changed the page, so the browser laid out the page more
