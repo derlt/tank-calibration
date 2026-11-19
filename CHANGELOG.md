@@ -286,6 +286,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **On-site page: one tap on a tab label is enough on an iPhone.** After a
+  tap in the content, Safari showed the label as pressed but did not switch
+  the tab until a second tap. The label now switches when the finger lifts.
+
 - Can size: a size typed or tapped before the first can of a batch was lost
   on a reload, and on the return from Shortcuts (which reloads the page); the
   field went back to the campaign's default. The chosen size is now kept on

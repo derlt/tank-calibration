@@ -676,6 +676,42 @@ class TestSitePage(unittest.TestCase):
         self.assertEqual(got["first"], ["live"], "the first tab is the end: no wrap")
 
     @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_tab_label_switches_on_the_touch(self):
+        """iPhone Safari can hold back the click of a tap: the lift of the finger switches."""
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "const label = (t) => p.tabs.find((b) => b.dataset.tab === t);\n"
+            "for (const b of p.tabs) b.closest = () => b;\n"
+            "const fire = (type, ev) => { for (const fn of el('tabs')._listeners[type] || []) fn(ev); };\n"
+            "const tap = (t, x1, how) => {\n"
+            "  const b = label(t), ev = (x) => ({ target: b, pointerId: 1, pointerType: how || 'touch', isPrimary: true, clientX: x, clientY: 20 });\n"
+            "  fire('pointerdown', ev(100)); fire('pointerup', ev(x1));\n"
+            "};\n"
+            "const click = (t) => fire('click', { target: label(t) });\n"
+            "const shown = () => ['live', 'log', 'shell', 'settings', 'files', 'replay', 'help']"
+            ".filter((id) => !el(id)._classes.has('hidden'));\n"
+            "tap('log', 102); out.touch = shown();\n"
+            "el('log-title').textContent = 'mark'; click('log'); out.clickAfter = el('log-title').textContent;\n"
+            "tap('shell', 160); out.drag = shown();\n"
+            "tap('shell', 100, 'mouse'); out.mouseDown = shown();\n"
+            "click('shell'); out.mouse = shown();\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["touch"], ["log"], "the lift of the finger switches, without a click")
+        self.assertEqual(got["clickAfter"], "mark", "the click after the touch does not draw the tab again")
+        self.assertEqual(got["drag"], ["log"], "a touch that moves (the label line scrolls) does not switch")
+        self.assertEqual(got["mouseDown"], ["log"], "a mouse waits for its click")
+        self.assertEqual(got["mouse"], ["shell"], "a click still switches")
+
+    @unittest.skipUnless(NODE, "node is not installed")
     def test_page_can_size_steps_by_the_pour_unit(self):
         stub = (HERE / "tests" / "page_stub.js").as_posix()
         got = _node(

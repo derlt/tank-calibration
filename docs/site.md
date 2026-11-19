@@ -671,6 +671,12 @@ the phone has its own back gesture. A drag that starts up or down stays a
 page scroll. With *Reduce Motion* on in the phone's settings, the tab does
 not move: the new tab fades in.
 
+A touch on a tab label switches the tab when the finger lifts. A touch that
+moves (the label line scrolls sideways) does not switch. iPhone Safari can
+keep back the click of a tap when the page changes at that moment, and the
+page changes every half second; so the page does not wait for the click.
+Double-tap zoom is off on the page (pinch zoom still works).
+
 **Settle timer.** *Batch done* starts the settle timer from the last can.
 The dip card counts down and rings once when the level is ready to dip.
 

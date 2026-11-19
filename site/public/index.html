@@ -58,7 +58,9 @@
     --model: #6fb0ea; --chart-warn: #ffb54d; --shadow: rgba(0, 0, 0, 0.6);
   }
   * { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; }
+  /* manipulation: no double-tap zoom, so a tap is never held back as the
+     first half of a double tap.  A pinch zoom still works. */
+  html { -webkit-text-size-adjust: 100%; touch-action: manipulation; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   /* One slim line: the tank (or the tank switch), then the status in small text. */
   header { background: var(--hdr); color: #fff; padding: 0.35rem 0.8rem; position: relative; display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; min-height: 2.6rem; }
@@ -6170,9 +6172,37 @@
       else if (right > bar.scrollLeft + bar.clientWidth) bar.scrollLeft = right - bar.clientWidth + 8;
     }
   }
+  // A touch on a tab label switches the tab when the finger lifts, not on the
+  // click.  iPhone Safari sends the click only when it sees no content change
+  // after its mouseover; the page changes the DOM every 500 ms (heartbeat), so
+  // after a tap elsewhere the first tap on a label could only "hover" it.  A
+  // touch that moves (the label line scrolls sideways) or is cancelled does
+  // nothing.  The click that follows the touch is skipped; a mouse or the
+  // keyboard still uses the click.
+  const TAP_SLOP = 10;
+  let tabTouch = null, tabTap = null;   // tabTap: { tab, at } of the last touch that switched
+  $("tabs").addEventListener("pointerdown", (ev) => {
+    tabTouch = null;
+    if (ev.pointerType === "mouse" || !ev.isPrimary) return;
+    const b = ev.target.closest && ev.target.closest("button[data-tab]");
+    if (b) tabTouch = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, tab: b.dataset.tab };
+  });
+  $("tabs").addEventListener("pointercancel", () => { tabTouch = null; });
+  $("tabs").addEventListener("pointerup", (ev) => {
+    const t = tabTouch; tabTouch = null;
+    if (!t || ev.pointerId !== t.id) return;
+    if (Math.abs(ev.clientX - t.x) > TAP_SLOP || Math.abs(ev.clientY - t.y) > TAP_SLOP) return;
+    const b = ev.target.closest && ev.target.closest("button[data-tab]");
+    if (!b || b.dataset.tab !== t.tab) return;
+    tabTap = { tab: t.tab, at: Date.now() };
+    goTab(t.tab);
+  });
   $("tabs").addEventListener("click", (ev) => {
     const b = ev.target.closest("button[data-tab]");
-    if (b) goTab(b.dataset.tab);
+    if (!b) return;
+    const done = tabTap; tabTap = null;
+    if (done && done.tab === b.dataset.tab && Date.now() - done.at < 1000) return;   // the touch did it
+    goTab(b.dataset.tab);
   });
 
   // A swipe left or right in the middle of the screen goes to the next or the
