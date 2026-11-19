@@ -3183,7 +3183,14 @@
   Session.prototype._refit = function () {
     this._syncBrim();
     const ivs = this._fitIntervals();
-    this.fit = fitShell(ivs, this.cfg.prior, this.cfg, this.fit && this.fit.p);
+    // Always from the prior, never from the last fit: the fit then depends
+    // only on the saved session, so a copy read back from JSON (a reload,
+    // the cloud copy of another device) judges the next dip with the same
+    // numbers, to the last digit.  The cloud merge (page.html, rebase())
+    // compares a replayed dip with the one the user saw byte by byte.  On
+    // the demo and site campaigns the warm start never won by more than
+    // 1e-8 of the cost.
+    this.fit = fitShell(ivs, this.cfg.prior, this.cfg);
     // Noise scale from the earlier one-step-ahead misses: robust (median), so
     // that real anomalies do not inflate it, and shrunk toward 1 while few.
     // Only checks made with the current noise count: an old z was formed with

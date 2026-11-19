@@ -2227,6 +2227,88 @@ console.log(JSON.stringify(out));
 
 
 @unittest.skipUnless(NODE, "node is not installed")
+class TestSiteRoundTrip(unittest.TestCase):
+    """A session read back from its JSON is the same session, to the last digit.
+
+    The cloud merge (page.html, rebase()) replays one device's actions on
+    the other device's copy, read from JSON, and accepts the result only
+    when it is byte-identical to what each person saw.  So toJSON(fromJSON(x))
+    must give x again, and the next dip on the copy must give the same
+    numbers as on the live session.
+    """
+
+    SESSIONS = (
+        f"const ex = {json.dumps((HERE / 'examples').as_posix())};\n"
+        "const settle = (s, v) => { for (let k = 0; k < 4 && s.current().state === 'pending'; k++) s.dip(v, 7); };\n"
+        "const S = {};\n"
+        "let rows = core.readRawText(fs.readFileSync(ex + '/demo_raw.csv', 'utf8'));\n"
+        "S.demo = core.replayRows(rows, {D: 1760, Dpm: 200, Lest: 2950, pourUnit: 50, sigmaRead: 1.0, pourRel: 0.003, pourAbs: 1.0}, {overflowRows: new Set([22])}).session;\n"
+        "rows = core.readRawText(fs.readFileSync(ex + '/demo_drain_raw.csv', 'utf8'));\n"
+        "S.demoDrain = core.replayRows(rows, {D: 2400, Dpm: 200, Lest: 5100, direction: 'drain', pourUnit: 100}, {neckEntrance: true}).session;\n"
+        # a fill by hand: cans with fill starts, batches with notes, a note edit, an override, an open tally
+        "const s = new core.Session({tank: 'f', D: 2400, Lest: 5000, pourUnit: 200});\n"
+        "s.start('?', 100, '', 1000); settle(s, 100);\n"
+        "for (let i = 0; i < 9; i++) {\n"
+        "  s.tap(2000 + i, 200, 1500 + i); s.tap(3000 + i, 200);\n"
+        "  const L = s.closeBatch({ note: 'n' + i }); L.pourTime = 3000 + i;\n"
+        "  s.dip(100 + 30 * (i + 1) + (i === 5 ? 9 : 0), 4000 + i); settle(s, 100 + 30 * (i + 1));\n"
+        "}\n"
+        "s.editNote(3, 'wet plate'); s.override('checked'); s.tap(9000, 200);\n"
+        "S.fill = s;\n"
+        "const fin = core.Session.fromJSON(JSON.parse(JSON.stringify(s.toJSON()))); fin.untap(); fin.finish(10000); S.finished = fin;\n"
+        # a drain by hand, from the brim
+        "const d = new core.Session({tank: 'd', D: 2400, Lest: 5000, pourUnit: 200, direction: 'drain'});\n"
+        "d.start('?', 2300, '', 1000, {at: 'entrance'}); settle(d, 2300);\n"
+        "for (let i = 0; i < 8; i++) { d.tap(2000 + i, 200); d.tap(2100 + i, 200); d.closeBatch({}); d.dip(2300 - 25 * (i + 1), 3000); settle(d, 2300 - 25 * (i + 1)); }\n"
+        "S.drain = d;\n"
+        # a transfer: one tally, two tanks; the view on tank B
+        "const t = new core.TransferSession({tank: 'a', D: 1800, Lest: 3000, pourUnit: 200}, {tank: 'b', D: 2480, Lest: 5200, pourUnit: 200});\n"
+        "const both = (a, b) => { for (let k = 0; k < 6 && t.pendingTank(); k++) t.dip(t.pendingTank() === 'out' ? a : b, 3100); };\n"
+        "t.start('?', 1800, '?', 400, '', 1000); both(1800, 400);\n"
+        "for (let i = 0; i < 6; i++) { t.tap(2000 + i, 200); t.tap(2100 + i, 200); const L = t.closeBatch({}); L.pourTime = 2100; t.in.current().pourTime = 2100;\n"
+        "  t.dipBoth(1800 - 25 * (i + 1) - (i === 4 ? 6 : 0), 400 + 15 * (i + 1), 3000 + i); both(1800 - 25 * (i + 1), 400 + 15 * (i + 1)); }\n"
+        "t.active = 'in';\n"
+        "S.transfer = t;\n"
+        "const read = (x) => { const o = JSON.parse(JSON.stringify(x.toJSON())); return o.kind === 'transfer' ? core.TransferSession.fromJSON(o) : core.Session.fromJSON(o); };\n"
+    )
+
+    def test_to_json_of_from_json_is_the_same_text(self):
+        got = _node(
+            self.SESSIONS
+            + "const out = {};\n"
+            "for (const k of Object.keys(S)) { const a = JSON.stringify(S[k].toJSON()); out[k] = [a === JSON.stringify(read(S[k]).toJSON()), a.length]; }\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(set(got), {"demo", "demoDrain", "fill", "finished", "drain", "transfer"})
+        for k, (same, size) in got.items():
+            self.assertTrue(same, k)
+            self.assertGreater(size, 1000, k)
+
+    def test_the_next_dip_on_a_copy_gives_the_same_numbers(self):
+        # At every level of the demo: the live session and a copy read from
+        # its JSON take the same pour and dips; their JSON stays the same.
+        got = _node(
+            self.SESSIONS
+            + "rows = core.readRawText(fs.readFileSync(ex + '/demo_raw.csv', 'utf8'));\n"
+            "const live = new core.Session({D: 1760, Dpm: 200, Lest: 2950, pourUnit: 50, sigmaRead: 1.0, pourRel: 0.003, pourAbs: 1.0});\n"
+            "live.start(rows[0].step, rows[0].H); settle(live, rows[0].H);\n"
+            "const diff = [];\n"
+            "for (let i = 1; i < rows.length; i++) {\n"
+            "  const c = read(live);\n"
+            "  for (const x of [live, c]) { x.pour(rows[i].step, { overflow: i + 1 === 22 }); x.dip(rows[i].H + (i === 11 ? 4 : 0), 5); settle(x, rows[i].H); }\n"
+            "  if (JSON.stringify(live.toJSON()) !== JSON.stringify(c.toJSON())) diff.push(i + 1);\n"
+            "}\n"
+            # the transfer: one more batch on the live session and on a copy
+            "const tc = read(t);\n"
+            "for (const x of [t, tc]) { x.tap(5000, 200); x.tap(5100, 200); x.closeBatch({}); x.dipBoth(1640, 497, 6000); for (let k = 0; k < 6 && x.pendingTank(); k++) x.dip(x.pendingTank() === 'out' ? 1640 : 497, 6100); }\n"
+            "console.log(JSON.stringify({ diff, rows: rows.length, transfer: JSON.stringify(t.toJSON()) === JSON.stringify(tc.toJSON()) }));"
+        )
+        self.assertGreater(got["rows"], 20)
+        self.assertEqual(got["diff"], [], "the rows where the copy judged a dip with other numbers")
+        self.assertTrue(got["transfer"])
+
+
+@unittest.skipUnless(NODE, "node is not installed")
 class TestSiteCore(unittest.TestCase):
     def test_geometry_matches_python(self):
         shell = Shell(1243.6, 5285.1, -36.3)
