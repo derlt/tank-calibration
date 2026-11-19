@@ -1449,7 +1449,12 @@
           names.push(m[1]);
           return /^\d$/.test(m[1]) ? NUM : TEXT;
         }).join("");
-        pats.push({ re: new RegExp("^" + src + "$"), names, out: d[k], lit: key.replace(/\{\w+\}/g, "").length });
+        // The fixed text at the two ends and the longest fixed piece: a
+        // text without them cannot match, so one() skips the regex.
+        const bits = key.split(/\{\w+\}/);
+        const pre = bits[0], post = bits[bits.length - 1];
+        const mid = bits.slice(1, -1).reduce((x, y) => (y.length > x.length ? y : x), "");
+        pats.push({ re: new RegExp("^" + src + "$"), names, out: d[k], lit: key.replace(/\{\w+\}/g, "").length, pre, post, mid });
       } else exact.set(key, d[k]);
     }
     // The most specific pattern first: the one with the most fixed text.
@@ -1461,6 +1466,7 @@
   function one(s, c, depth, misses) {
     if (c.exact.has(s)) return c.exact.get(s);
     for (const p of c.pats) {
+      if (s.length < p.lit || !s.startsWith(p.pre) || !s.endsWith(p.post) || (p.mid && s.indexOf(p.mid) < 0)) continue;
       const m = p.re.exec(s);
       if (!m) continue;
       const vals = {};
