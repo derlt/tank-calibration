@@ -530,6 +530,10 @@ The timer does not count the can. Tap *+1 can poured* when the can is full.
 That tap is the record, and it also stops the timer and the alarm. Emptying
 the can into the tank has no timer.
 
+With the cloud, every device on the campaign runs the same fill timer and
+rings its alarms (docs/cloud.md, "The fill timer on every device"). A start,
+a stop or *±20 s* on one phone changes it on all.
+
 **Next can while the dip waits.** In a fill, the pump fills the can from
 outside the tank, so the next can can fill while the level settles and you
 dip. After *Batch done* (or *Poured*), the pour card stays under the dip

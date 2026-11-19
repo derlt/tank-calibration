@@ -8,6 +8,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Cloud: the fill timer runs and rings on every device of a campaign.**
+  When one person starts the fill timer, the other devices on the campaign
+  show the same countdown and ring *Close the valve* and *Can full* at the
+  same moment, corrected for the difference between the phones' clocks.
+  A stop, *±20 s* or *+1 can* on any device changes it on all; the later
+  change wins. The timer is kept apart from the campaign data (a new D1
+  table `timers`, `GET`/`PUT /api/campaigns/:id/timer`), so it never gives
+  a merge or a conflict. Apply the schema (`make db-schema`) before the new
+  Worker serves.
+
 - **Cloud: two writers of one campaign merge instead of a conflict.** One
   person counts the cans while another dips, on two phones: when the second
   save finds that the first device saved before it, the page replays its own

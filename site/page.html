@@ -1251,6 +1251,8 @@
     storage: localStorage,
     fetch: typeof fetch === "function" ? (u, i) => fetch(u, i) : null,
     origin: pageOrigin,
+    // The page's clock: the shared fill timer turns the server's times into it.
+    now: () => Date.now(),
     onClosed: closedDone,
     // The merge at a 409 (rebase()): two people who write in turn keep both
     // their work.  mergeOn: the switch in Files → Cloud can stop it.
@@ -1380,6 +1382,8 @@
       else if (SYNC_TEXT[r.state]) cloudMsg = SYNC_TEXT[r.state];
       if (tab === "files") renderArchive();
       renderCloud();
+      // A timer change that waited for the campaign's first upload goes now.
+      if (CL.timerWaits()) timerTick();
       return r;
     });
   }
@@ -1397,6 +1401,7 @@
   function cloudTick() {
     if (!CL || !CL.loggedIn()) return;
     if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+    timerTick();
     if (CL.state() === "dirty" || CL.waiting().length) { cloudSync(); return; }
     // Follow the cloud only while nothing is half typed: an open note edit stays.
     if (!S || !CL.link() || editRow != null) return;
@@ -1547,6 +1552,7 @@
     // page is hidden.  Back in view: catch up at once (upload, or take the
     // newer cloud version), not at the next tick.
     const flush = () => {
+      if (CL.loggedIn() && CL.timerWaits()) timerTick({ keepalive: true });
       if (!CL.loggedIn() || !(CL.dirty() || CL.waiting().length)) return;
       if (syncTimer != null) { clearTimeout(syncTimer); syncTimer = null; }
       cloudSync({ keepalive: true });
@@ -2051,7 +2057,7 @@
     act("tap", [now, u, T.pour && !T.pour.early && T.pour.size === u && T.pour.start <= now ? T.pour.start : null]);
     followPlan();
     // The can is counted: its pour timer and alarm are done.
-    if (T.pour || T.wait) { delete T.pour; delete T.wait; saveTimer(); }
+    if (T.pour || T.wait) { dropTimer(); }
     stopAlarm();
     unlockAudio();
     if (navigator.vibrate) navigator.vibrate(40);
@@ -2116,7 +2122,7 @@
       const ts = S.canList().map((c) => c.t).filter((x) => x != null);
       o.pourTime = ts.length ? ts[ts.length - 1] : Date.now();
       act("closeBatch", [o]);
-      if (T.pour || T.wait) { delete T.pour; delete T.wait; saveTimer(); }
+      if (T.pour || T.wait) { dropTimer(); }
       stopAlarm(); unlockAudio();
       $("p-note").value = ""; $("p-vol").value = ""; $("t-part").checked = false; $("p-over").checked = false; $("p-neck").checked = false;
       setTimeout(() => $("d-val").focus(), 50);
@@ -2133,7 +2139,7 @@
       text = $("p-extra").checked ? `${v}+?` : String(v);
     }
     act("pour", [text, Object.assign({ note: $("p-note").value.trim(), pourTime: Date.now() }, overNeck())]);
-    if (T.pour || T.wait) { delete T.pour; delete T.wait; saveTimer(); }
+    if (T.pour || T.wait) { dropTimer(); }
     stopAlarm(); unlockAudio();
     $("p-note").value = ""; $("p-vol").value = ""; $("p-unknown").checked = false; $("p-extra").checked = false; $("p-over").checked = false; $("p-neck").checked = false;
     setTimeout(() => $("d-val").focus(), 50);
@@ -2186,7 +2192,7 @@
   function stopPumpForA(opensA) {
     if (!isTransfer() || !opensA || !timerOn()) return true;
     if (!confirm(tr("The fill timer runs: the pump draws from tank A. Stop the pump and the timer?"))) return false;
-    delete T.pour; delete T.wait; saveTimer(); stopAlarm();
+    dropTimer(); stopAlarm();
     return true;
   }
   /** Transfer: Undo last entry takes back a reading of tank A. */
@@ -2203,7 +2209,7 @@
   function dropStaleTimer() {
     const run = T.pour || T.wait;
     if (!run || !run.early || !pending() || earlyTimer()) return;
-    delete T.pour; delete T.wait; saveTimer();
+    dropTimer();
   }
 
   $("a-redip").addEventListener("click", () => {
@@ -3605,6 +3611,74 @@
   let timersSig = "", lastEta = 0;
   function saveTimer() { localStorage.setItem(TIMER, JSON.stringify(T)); }
   function clearTimers() { T = {}; localStorage.removeItem(TIMER); stopAlarm(); releaseWake(); stopPourAnim(); }
+  /** The fill timer ends here (stop, a can counted, a batch closed): it ends on the team's devices too. */
+  function dropTimer() { const had = !!T.pour; delete T.pour; delete T.wait; saveTimer(); if (had) shareTimer(); }
+
+  // ---- the fill timer in the cloud (cloud.js, "the fill timer").  The team's
+  // devices on one campaign share the running fill timer: a start, a stop,
+  // +20 s or −20 s on one device changes it on all, and each device rings
+  // its own alarms at the same moment.  The settle timer needs no sharing:
+  // it runs from the batch's pour time, which is campaign data.
+  /** The part of the fill timer the team shares, or null. */
+  function sharedTimer() {
+    const p = T.pour;
+    if (!p) return null;
+    if (!p.run) { p.run = CC ? CC.newId() : String(p.start); saveTimer(); }
+    return { run: p.run, start: p.start, dur: p.dur, size: p.size, lead: p.lead, early: !!p.early };
+  }
+  /** This device changed the fill timer: upload it now. */
+  function shareTimer() {
+    if (!CL || !CL.link()) return;
+    CL.timerChanged(sharedTimer());
+    timerTick({ keepalive: typeof document !== "undefined" && !!document.hidden });
+  }
+  /** Upload this device's timer change, else ask for the team's (every 10 s; every 3 s while a timer runs). */
+  function timerTick(opts) {
+    if (!CL || !S || !CL.loggedIn()) return;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+    // A hidden page asks nothing, but its own change still goes up.
+    if (!CL.timerWaits() && typeof document !== "undefined" && document.hidden) return;
+    CL.timerSync(opts).then((r) => { if (r) applyTimer(r); }).catch((e) => console.error(e));
+  }
+  /**
+   * The team's fill timer, from the cloud: it runs, and rings, here too.
+   * The same run (another device pressed +20 s) keeps this device's state;
+   * a new run starts here with its own start time.  A run that was already
+   * past its alarms when it came in does not ring for them again.
+   */
+  function applyTimer(r) {
+    const x = r.timer, pt = T.pour;
+    if (!x) {
+      if (!pt) return;
+      // The cloud never had a timer for this campaign: the one here (started
+      // before the upload or the login) goes up.
+      if (r.none) { shareTimer(); return; }
+      delete T.pour;
+      if (alarmKind === "fill") stopAlarm();
+      saveTimer(); render();
+      return;
+    }
+    if (pt && pt.run === x.run) {
+      if (pt.dur === x.dur && pt.size === x.size && pt.lead === x.lead && Math.abs(pt.start - x.start) < 1000) return;
+      const more = x.dur - pt.dur;
+      Object.assign(pt, { start: x.start, dur: x.dur, size: x.size, lead: x.lead, early: !!x.early });
+      if (more !== 0) {
+        pt.preAlarmed = false; pt.fullAlarmed = false;
+        if (more > 0 && alarmKind === "fill") stopAlarm();
+      }
+    } else {
+      const left = x.dur - (Date.now() - x.start) / 1000;
+      if (alarmKind === "fill") stopAlarm();
+      delete T.wait;
+      T.pour = {
+        run: x.run, start: x.start, dur: x.dur, size: x.size, lead: x.lead, early: !!x.early,
+        // ios: the iPhone timer of the other device rings there, not here.
+        preAlarmed: left <= 0, fullAlarmed: left < -180, ios: false, by: r.by || "",
+      };
+      keepAwake();
+    }
+    saveTimer(); render();
+  }
 
   /** "1:30" = 90 s, "1:02:00" = 3720 s, "1.5" = 1.5 min = 90 s.  Blank = null. */
   function parseDur(text) {
@@ -3802,8 +3876,8 @@
   /** ios: the iPhone timer runs too, so the page's fill alarms stay quiet. */
   function startPour(run, now, ios) {
     delete T.wait;
-    T.pour = { start: now, dur: run.dur, size: run.size, lead: run.lead, preAlarmed: false, fullAlarmed: false, ios: !!ios, early: !!run.early };
-    saveTimer(); keepAwake(); render();
+    T.pour = { run: CC ? CC.newId() : String(now), start: now, dur: run.dur, size: run.size, lead: run.lead, preAlarmed: false, fullAlarmed: false, ios: !!ios, early: !!run.early };
+    saveTimer(); shareTimer(); keepAwake(); render();
   }
   /** Shortcuts must open within this time of the tap, or the wait is over. */
   const IOS_WAIT_MS = 60000;
@@ -3817,18 +3891,18 @@
     if (window.addEventListener) window.addEventListener("pagehide", () => { if (T.wait && !T.pour && iosWaiting(Date.now())) startPour(T.wait, Date.now(), true); });
   }
   $("pt-page").addEventListener("click", () => { if (T.wait) startPour(T.wait, Date.now(), false); });
-  $("pt-stop").addEventListener("click", () => { delete T.pour; delete T.wait; saveTimer(); stopAlarm(); render(); });
+  $("pt-stop").addEventListener("click", () => { dropTimer(); stopAlarm(); render(); });
   $("pt-more").addEventListener("click", () => {
     if (!T.pour) return;
     T.pour.dur += 20;
     T.pour.preAlarmed = false; T.pour.fullAlarmed = false;
-    stopAlarm(); saveTimer(); render();
+    stopAlarm(); saveTimer(); shareTimer(); render();
   });
   $("pt-less").addEventListener("click", () => {
     if (!T.pour) return;
     T.pour.dur = Math.max(5, T.pour.dur - 20);
     T.pour.preAlarmed = false; T.pour.fullAlarmed = false;
-    saveTimer(); render();
+    saveTimer(); shareTimer(); render();
   });
 
   function tickPour(now) {
@@ -3891,7 +3965,8 @@
       if (left > lead) {
         box.className = "timer run";
         $("pt-clock").textContent = fmtClock(Math.ceil(left));
-        $("pt-status").textContent = `Filling a ${f(pt.size, 0)} L can: ${fmtClock(Math.ceil(left))} left of ${fmtClock(pt.dur)}. ${pt.ios ? "The iPhone timer rings" : "The alarm rings"} at ${fmtClock(lead)} left.`;
+        $("pt-status").textContent = `Filling a ${f(pt.size, 0)} L can: ${fmtClock(Math.ceil(left))} left of ${fmtClock(pt.dur)}. ${pt.ios ? "The iPhone timer rings" : "The alarm rings"} at ${fmtClock(lead)} left.`
+          + (pt.by ? ` Started by ${pt.by}.` : "");
         $("t-plus").classList.remove("pulse");
       } else if (left > 0) {
         box.className = "timer pre";
@@ -4841,7 +4916,9 @@
   // After a newer version from another device: every 3 s for 2 minutes.
   if (CL) {
     setInterval(cloudTick, 10000);
-    setInterval(() => { if (Date.now() < followUntil) cloudTick(); }, FOLLOW_EVERY);
+    // While a fill timer runs, the timer alone every 3 s: a stop or +20 s on
+    // another device must come in before the alarm.
+    setInterval(() => { if (Date.now() < followUntil) cloudTick(); else if (T.pour || CL.timerWaits()) timerTick(); }, FOLLOW_EVERY);
     cloudTick();
   }
 })();

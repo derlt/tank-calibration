@@ -42,6 +42,22 @@ CREATE TABLE IF NOT EXISTS campaigns (
 );
 CREATE INDEX IF NOT EXISTS campaigns_updated ON campaigns(workspace_id, updated_at);
 
+-- The fill timer that runs now in one campaign, shared by the team's
+-- devices.  It is not part of the campaign data: a timer start or stop is
+-- no new version, so it never gives a merge or a conflict.  The change
+-- with the later changed_at (the server's clock) wins.  data NULL: no
+-- timer runs.  rev goes up by one on every change, for a cheap poll.
+CREATE TABLE IF NOT EXISTS timers (
+  workspace_id  TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  campaign_id   TEXT NOT NULL,
+  rev           INTEGER NOT NULL,
+  data          TEXT,
+  changed_at    INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL,
+  updated_by    TEXT NOT NULL,
+  PRIMARY KEY (workspace_id, campaign_id)
+);
+
 -- Failed logins and signups, per IP address and per workspace name.
 CREATE TABLE IF NOT EXISTS fails (
   key    TEXT PRIMARY KEY,

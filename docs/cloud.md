@@ -127,6 +127,35 @@ the normal choice).
 For two tanks at once, use one transfer campaign on one device (§3.12), or one
 campaign per tank.
 
+### The fill timer on every device
+
+The devices on one campaign share the fill timer that runs now. When one
+person presses *Start fill timer*, the other devices show the same countdown
+and ring their own alarms at the same moment: *Close the valve* and *Can
+full: pump off*. *Stop timer*, *+20 s*, *−20 s*, *+1 can*, *Batch done* and
+*Poured* on any device change it on all. The timer card of a timer from
+another device says *Started by Binh.*
+
+| What | How |
+|---|---|
+| Upload | At once after the change, with keepalive when the page is hidden. |
+| Follow | Every 10 s; every 3 s while a fill timer runs. A question that finds nothing new sends no timer. |
+| Two changes at once | The later change wins (by the time of the change, not of the upload). An offline stop that comes in late does not undo a newer start. |
+| Clocks | Every timer answer has the server's clock. Each device turns the start time into its own clock, so phones whose clocks differ by some seconds ring together. |
+| Campaign data | None. A timer change is no new version: it never gives a merge, a conflict or an upload of the campaign. |
+| Late join | A device that opens the campaign during a run shows it and rings the alarm of the state the run is in now. It does not ring when the can was full more than 3 min before. |
+| iPhone timer | Only the device that started the timer runs it. The other devices ring with the page. |
+
+The timer starts in the cloud after the campaign's first upload. A timer that
+runs before the login goes up when the cloud has none for that campaign.
+Only the open campaign shares its timer. The settle timer needs no sharing:
+it runs from the batch's pour time, which is campaign data.
+
+A server without the `timers` table (the schema was not applied after an
+update) answers 500 to the timer calls. The timer then stays on each device
+and the page tries again. Run `make db-schema`: it adds the table and keeps
+the data.
+
 The merge adds these keys to the browser's storage: the action list and a
 fingerprint of the base version inside `calib-site:link` (about 20 bytes per
 row, tens of bytes per action, at most 500 actions), `calib-site:premerge`
@@ -184,6 +213,9 @@ Free plan limits (2026): Workers 100 000 requests per day; D1 5 GB, 5 million
 row reads and 100 000 row writes per day. One device that follows a campaign
 makes about 2 requests per minute, and every 3 s for 2 minutes after a newer
 version from another device came in (about 20 per minute in that window).
+While a fill timer runs, each device asks for the timer every 3 s (about 20
+per minute): a device that runs timers for 10 hours makes about 12 000
+requests a day.
 
 ## Firewall (Cloudflare zone)
 
@@ -286,6 +318,8 @@ All bodies are JSON. Send `Authorization: Bearer <token>` after the login.
 | `GET /api/campaigns/:id` | `?have=N` (optional) | `{data, version, …}`, or `{same: true}` when you have version N |
 | `PUT /api/campaigns/:id` | `data, base_version` (0 = new) | `200/201 {version}` · `409 {current}` (`current.deleted_at` set: deleted) |
 | `DELETE /api/campaigns/:id` | `?base_version=N` | `200` · `409` |
+| `GET /api/campaigns/:id/timer` | `?have=REV` (optional) | `{rev, timer, changed_at, updated_by, now}`, or `{same: true, rev, now}`; no timer yet: `{rev: 0, timer: null, now}` |
+| `PUT /api/campaigns/:id/timer` | `timer` (`{run, start, dur, size, lead, early}` or `null`), `at` (the time of the change) | `200 {rev, changed_at, now}` · `409 {current}` (a later change is there) · `404` |
 | `GET /api/health` | — | `{ok: true}` |
 
 ## Files
@@ -293,10 +327,10 @@ All bodies are JSON. Send `Authorization: Bearer <token>` after the login.
 | File | Role |
 |---|---|
 | `worker/index.js` | The Worker: routes, auth, limits |
-| `worker/schema.sql` | The D1 tables |
-| `site/cloud.js` | The page's client: login, link, the action list, sync, the merge, conflict, poll (inlined in the page) |
+| `worker/schema.sql` | The D1 tables (`timers`: the shared fill timer) |
+| `site/cloud.js` | The page's client: login, link, the action list, sync, the merge, conflict, poll, the shared fill timer (inlined in the page) |
 | `site/_headers` | Security headers for the hosted page |
 | `site/sw.js` | The hosted page's offline copy (service worker, copied to `site/public/`) |
-| `tests/test_cloud.py` | Tests: the Worker on an in-memory SQLite D1, the client, two page devices, the merge and a seeded two-writer stress run |
+| `tests/test_cloud.py` | Tests: the Worker on an in-memory SQLite D1, the client, two page devices, the merge, a seeded two-writer stress run and the shared fill timer |
 | `tests/test_secrets.py` | No `.env` value or server code in the page or in git |
 | `tests/cloud_harness.mjs` | Runs the Worker under Node (`node:sqlite`, Node 22.5 or newer) |

@@ -15,6 +15,8 @@
  *             chooses: take the cloud copy, or keep theirs as a new campaign
  *   poll      a clean link asks for a newer version, so a team can follow
  *             one campaign live
+ *   timer     the fill timer that runs now, shared by the team's devices
+ *             apart from the campaign data (last change wins, no merge)
  *
  * Storage keys (localStorage):
  *   calib-site:cloud   {base, token, workspace, user, expires, auto}
@@ -646,6 +648,114 @@
   };
   /** Conflict, choice 2 (also for a deleted campaign or another workspace): the browser copy becomes a new cloud campaign. */
   Client.prototype.fork = function () { return this.linkNew(); };
+
+  // ------------------------------------------------------- the fill timer
+  //
+  // The fill timer that runs now in the open campaign, shared by the team's
+  // devices (worker: /api/campaigns/:id/timer).  It is not campaign data:
+  // no version, no merge, no outbox.  The change made last wins, so a
+  // device that starts, stops or moves the timer (+20 s) sets it for all.
+  //
+  //   timer   {run, start, dur, size, lead, early} or null (no timer runs);
+  //           run: a random id of one timer run, start: ms
+  //   tm      {id, rev}: the cloud's timer rev this device has, per campaign
+  //   tmOut   {id, timer, at}: this device's last change, not uploaded yet
+  //   skew    the server's clock minus this device's clock, ms
+  //
+  // On the wire, start and at are on the server's clock; the page gets them
+  // on its own clock.  So two phones whose clocks differ by some seconds
+  // still ring at the same moment.  Memory only: a reload starts again
+  // from the cloud's timer.
+
+  function shift(timer, by) { return timer ? Object.assign({}, timer, { start: Math.round(timer.start + by) }) : null; }
+
+  /** A server answer with `now`: a better estimate of the clock skew replaces the old one. */
+  Client.prototype._clock = function (t0, r) {
+    const t1 = this.now();
+    if (!r || typeof r.now !== "number" || !isFinite(r.now)) return;
+    const rtt = Math.max(0, t1 - t0);
+    // The error is at most half the round trip: a short trip wins, and an
+    // estimate older than 5 minutes yields to any answer.
+    if (this.skewRtt == null || rtt <= this.skewRtt + 250 || t1 - this.skewAt > 300000) {
+      this.skew = r.now - (t0 + t1) / 2; this.skewRtt = rtt; this.skewAt = t1;
+    }
+  };
+  /** The page started, stopped or changed the fill timer: upload it at the next timerSync. */
+  Client.prototype.timerChanged = function (timer) {
+    const l = this.link();
+    if (!l) return;
+    this.tmOut = { id: l.id, timer: timer ? Object.assign({}, timer) : null, at: this.now() };
+  };
+  /** A timer change of the open campaign waits for upload. */
+  Client.prototype.timerWaits = function () { const l = this.link(); return !!(this.tmOut && l && this.tmOut.id === l.id); };
+
+  /**
+   * Upload this device's timer change, else ask for a newer one.
+   * -> null (nothing new, offline, the campaign is not in the cloud yet) |
+   *    {timer, by, at, none}: the cloud's timer, on this device's clock, for
+   *    the page; none: the cloud never had one for this campaign
+   */
+  Client.prototype.timerSync = function (opts) {
+    if (this.tmBusy) { this.tmAgain = true; return this.tmBusy; }
+    const run = async () => {
+      let got = null;
+      do {
+        this.tmAgain = false;
+        const r = await this._timerSync(opts);
+        // An upload settles the question; a poll that finds nothing keeps
+        // what an earlier round found.
+        got = r.pushed ? r.got : r.got || got;
+      } while (this.tmAgain);
+      return got;
+    };
+    this.tmBusy = run().finally(() => { this.tmBusy = null; });
+    return this.tmBusy;
+  };
+  Client.prototype._timerSync = async function (opts) {
+    const l = this.link();
+    if (this.tmOut && (!l || this.tmOut.id !== l.id)) this.tmOut = null;   // another campaign is open now
+    if (!l || !(l.version >= 1) || l.gone || !this.here(l) || !this.loggedIn()) return { got: null };
+    const path = `/api/campaigns/${encodeURIComponent(l.id)}/timer`;
+    // none: the cloud never had a timer for this campaign.
+    const back = (x) => ({ timer: shift(x.timer, -(this.skew || 0)), by: x.updated_by || "", at: x.changed_at, none: !x.rev });
+    const keep = (x) => { this.tm = { id: l.id, rev: x.rev }; };
+    const out = this.tmOut;
+    const t0 = this.now();
+    if (out) {
+      let r;
+      try {
+        const skew = this.skew || 0;
+        r = await this.request("PUT", path, { timer: shift(out.timer, skew), at: Math.round(out.at + skew) }, null,
+          { keepalive: !!(opts && opts.keepalive) });
+      } catch (e) {
+        this._clock(t0, e.body && e.body.current);
+        if (e.status === 409 && e.body && e.body.current) {
+          // Another device changed the timer later than this one: its change stays.
+          if (this.tmOut === out) this.tmOut = null;
+          keep(e.body.current);
+          return { pushed: true, got: this.tmOut ? null : back(e.body.current) };
+        }
+        // Offline, busy or an older server: the change waits for the next try.
+        if (e.status === 0 || e.status === 429 || e.status >= 500 || e.status === 401) return { pushed: true, got: null };
+        if (this.tmOut === out) this.tmOut = null;   // refused (400, 404): it never uploads
+        return { pushed: true, got: null };
+      }
+      this._clock(t0, r);
+      if (this.tmOut === out) this.tmOut = null;
+      keep(r);
+      return { pushed: true, got: null };
+    }
+    const have = this.tm && this.tm.id === l.id ? this.tm.rev : null;
+    let r;
+    try { r = await this.request("GET", path + (have != null ? "?have=" + have : "")); } catch (e) { return { got: null }; }
+    this._clock(t0, r);
+    const cur = this.link();
+    if (!cur || cur.id !== l.id) return { got: null };   // another campaign opened meanwhile
+    if (this.tmOut) { this.tmAgain = true; return { got: null }; }   // a change here meanwhile: it goes first
+    keep(r);
+    if (r.same) return { got: null };
+    return { got: back(r) };
+  };
 
   const api = { Client, CloudError, newId, normBase, sig, gzip, canon, sessionSig, fingerprint, AUTH, LINK, OUTBOX, MERGES, OPS_MAX };
   if (typeof module !== "undefined" && module.exports) module.exports = api;

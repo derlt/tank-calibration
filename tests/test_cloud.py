@@ -294,6 +294,60 @@ class TestCampaigns(unittest.TestCase):
 
 
 @unittest.skipUnless(SQLITE, "node with node:sqlite is not installed")
+class TestTimerApi(unittest.TestCase):
+    def test_the_last_change_wins_and_the_rev_polls(self):
+        got = _run(
+            SIGNUP
+            + "const id = 'c0ffee00-1111-2222-3333-444455556666';\n"
+            "await h.call(env, 'PUT', '/api/campaigns/' + id, { data: h.session('alpha', 1), base_version: 0 }, tok);\n"
+            "const tp = '/api/campaigns/' + id + '/timer';\n"
+            "const t = (start) => ({ run: 'run-1', start, dur: 60, size: 200, lead: 15, early: false });\n"
+            "const g0 = (await h.call(env, 'GET', tp, null, tok)).body;\n"
+            "out.none = [g0.rev, g0.timer, typeof g0.now];\n"
+            "out.none0 = (await h.call(env, 'GET', tp + '?have=0', null, tok)).body.same;\n"
+            "const now = Date.now();\n"
+            "const p1 = await h.call(env, 'PUT', tp, { timer: t(now), at: now }, tok);\n"
+            "out.p1 = [p1.status, p1.body.rev];\n"
+            "const g1 = (await h.call(env, 'GET', tp, null, tok)).body;\n"
+            "out.g1 = [g1.rev, g1.timer.run, g1.timer.dur, g1.updated_by];\n"
+            "out.same = (await h.call(env, 'GET', tp + '?have=1', null, tok)).body;\n"
+            # an older change (an offline device that comes back late) does not overwrite
+            "const old = await h.call(env, 'PUT', tp, { timer: null, at: now - 5000 }, tok);\n"
+            "out.old = [old.status, old.body.current.rev, old.body.current.timer.run];\n"
+            # a stop, later: it wins; a clock that runs ahead counts as now
+            "const stop = await h.call(env, 'PUT', tp, { timer: null, at: now + 3600000 }, tok);\n"
+            "out.stop = [stop.status, stop.body.rev, stop.body.changed_at <= Date.now()];\n"
+            "out.stopped = (await h.call(env, 'GET', tp, null, tok)).body.timer;\n"
+            "out.bad = [(await h.call(env, 'PUT', tp, { timer: { run: 'x y', start: now, dur: 60, size: 200, lead: 15 } }, tok)).status,\n"
+            "  (await h.call(env, 'PUT', tp, { timer: Object.assign(t(now), { dur: -1 }) }, tok)).status,\n"
+            "  (await h.call(env, 'PUT', tp, { timer: Object.assign(t(now), { start: 5 }) }, tok)).status];\n"
+            "out.unknown = (await h.call(env, 'PUT', '/api/campaigns/nope-0000-1111/timer', { timer: null }, tok)).status;\n"
+            "out.noToken = (await h.call(env, 'GET', tp, null, null)).status;\n"
+            # another workspace sees no timer of this one, and cannot set it
+            "const s2 = await h.call(env, 'POST', '/api/workspaces', { workspace: 'Team-2', keyword: 'another long keyword', user: 'Cu', signup_code: 'test-signup-code' });\n"
+            "out.other = [(await h.call(env, 'GET', tp, null, s2.body.token)).body.rev,\n"
+            "  (await h.call(env, 'PUT', tp, { timer: t(now) }, s2.body.token)).status];\n"
+            "await h.call(env, 'DELETE', '/api/campaigns/' + id + '?base_version=1', null, tok);\n"
+            "out.deleted = (await h.call(env, 'PUT', tp, { timer: t(Date.now()) }, tok)).status;\n"
+        )
+        self.assertEqual(got["none"], [0, None, "number"], "no timer yet; every answer has the server's clock")
+        self.assertTrue(got["none0"])
+        self.assertEqual(got["p1"], [200, 1])
+        self.assertEqual(got["g1"], [1, "run-1", 60, "An"])
+        self.assertTrue(got["same"]["same"])
+        self.assertNotIn("timer", got["same"], "a poll with the current rev gets no timer")
+        self.assertEqual(got["old"], [409, 1, "run-1"], "an older change overwrites nothing")
+        self.assertEqual(got["stop"][:2], [200, 2])
+        self.assertTrue(got["stop"][2], "a change is never later than the server's now")
+        self.assertIsNone(got["stopped"])
+        self.assertEqual(got["bad"], [400, 400, 400])
+        self.assertEqual(got["unknown"], 404)
+        self.assertEqual(got["noToken"], 401)
+        self.assertEqual(got["other"], [0, 404], "workspaces stay apart")
+        self.assertEqual(got["deleted"], 404, "a deleted campaign takes no timer")
+
+
+@unittest.skipUnless(SQLITE, "node with node:sqlite is not installed")
 class TestGzipBody(unittest.TestCase):
     def test_worker_reads_a_gzip_body_within_the_limit(self):
         got = _run(
@@ -431,6 +485,41 @@ class TestClient(unittest.TestCase):
         self.assertEqual(got["aConflict"], "conflict")
         self.assertEqual(got["fork"], ["saved", True], "keep mine: a new campaign")
         self.assertEqual(got["list"], ["alpha", "alpha-b"])
+
+    def test_the_fill_timer_on_two_clocks(self):
+        got = _run(
+            self.PRELUDE
+            # C's clock runs 5 s ahead of the server's; C keeps its network when A goes offline
+            + "const C = new cloud.Client({ storage: mem(), fetch: h.fetchFor(env, '10.0.0.3'), origin: h.BASE, now: () => Date.now() + 5000 });\n"
+            "await C.login('', 'team-1', 'correct horse battery', 'Chi');\n"
+            "A.linkNew();\n"
+            "A.timerChanged({ run: 'early', start: Date.now(), dur: 30, size: 200, lead: 15 });\n"
+            "out.beforeUpload = [await A.timerSync(), A.timerWaits()];\n"
+            "await A.sync(() => h.session('alpha', 1));\n"
+            "await A.timerSync(); A.timerChanged(null); await A.timerSync();\n"
+            "const c = await C.fetchCampaign(A.link().id); C.linkTo(c);\n"
+            "const start = Date.now();\n"
+            "A.timerChanged({ run: 'r1', start, dur: 60, size: 200, lead: 15, early: false });\n"
+            "out.push = [await A.timerSync(), A.timerWaits()];\n"
+            "const g = await C.timerSync();\n"
+            "out.got = [g.timer.run, g.timer.dur, g.by, Math.round((g.timer.start - start) / 1000)];\n"
+            "out.again = await C.timerSync();\n"
+            # A goes offline and stops the timer; C adds 20 s later: C's change wins
+            "online = false; A.timerChanged(null); out.offline = [await A.timerSync(), A.timerWaits()];\n"
+            "await new Promise((r) => setTimeout(r, 30));\n"
+            "C.timerChanged(Object.assign({}, g.timer, { dur: 80 })); await C.timerSync();\n"
+            "online = true; const back = await A.timerSync();\n"
+            "out.lww = [back.timer.dur, back.by, A.timerWaits(), Math.abs(back.timer.start - start) < 1000];\n"
+            # another campaign opens: a change that waits for the old one is dropped
+            "A.timerChanged(null); A.linkNew(); out.dropped = [await A.timerSync(), A.timerWaits()];\n"
+        )
+        self.assertEqual(got["beforeUpload"], [None, True], "the change waits for the campaign's first upload")
+        self.assertEqual(got["push"], [None, False])
+        self.assertEqual(got["got"], ["r1", 60, "An", 5], "the start comes in on C's own clock, 5 s ahead")
+        self.assertIsNone(got["again"], "nothing new")
+        self.assertEqual(got["offline"], [None, True], "offline: the change waits")
+        self.assertEqual(got["lww"], [80, "Chi", False, True], "the later change wins; A takes it on A's clock")
+        self.assertEqual(got["dropped"], [None, False])
 
     def test_lost_answer_is_not_a_conflict(self):
         got = _run(
@@ -1388,6 +1477,55 @@ class TestPage(unittest.TestCase):
         self.assertTrue(got["quiet"], "no new version yet: the 3 s timer does not ask")
         self.assertTrue(got["fast"], "after a new version: the 3 s timer asks")
         self.assertTrue(got["after"], "after 2 minutes: the 10 s timer only")
+
+    def test_the_fill_timer_runs_and_rings_on_both_devices(self):
+        page = (ROOT / "site" / "page.html").as_posix()
+        core = (ROOT / "site" / "site_core.js").as_posix()
+        got = _run(
+            self._devices()
+            # each page runs on its own clock (B 7 s ahead), with its interval timers kept
+            + "const RD = Date;\n"
+            "const clock = (off) => class FD extends RD { constructor(...x) { if (x.length) super(...x); else super(RD.now() + off.v); } static now() { return RD.now() + off.v; } };\n"
+            "const offA = { v: 0 }, offB = { v: 7000 }, ivA = [], ivB = [];\n"
+            "const kit = (off, iv) => ({ Date: clock(off), setInterval: (fn, ms) => { iv.push({ fn, ms }); return iv.length; } });\n"
+            "const s1 = new Map(), s2 = new Map();\n"
+            f"const a = stub.boot({json.dumps(page)}, {json.dumps(core)}, s1, Object.assign(dev('10.0.0.1'), kit(offA, ivA))).el;\n"
+            f"const b = stub.boot({json.dumps(page)}, {json.dumps(core)}, s2, Object.assign(dev('10.0.0.2'), kit(offB, ivB))).el;\n"
+            "const beat = (iv) => iv.find((x) => x.ms === 500).fn();\n"
+            "const tm = (st) => JSON.parse(st.get('calib-site:timer') || '{}');\n"
+            "const row = () => env.DB.raw.prepare('SELECT rev, data FROM timers').get();\n"
+            "await login(a, 'An'); start(a); a('t-unit').value = '200';\n"
+            "a('tm-fill-200').value = '1:00'; a('tm-lead').value = '15'; a('tm-save').click();\n"
+            "a('c-sync').click(); await settled(s1);\n"
+            "await login(b, 'Binh'); const id = link(s1).id;\n"
+            "openCloud(b, id); await until(() => link(s2) && link(s2).id === id);\n"
+            "b('t-unit').value = '200';\n"
+            # A starts the fill timer: it goes up at once
+            "a('pt-start').click(); out.up = await until(() => row() && row().data);\n"
+            "b('c-sync').click(); await until(() => tm(s2).pour);\n"
+            "const pa = tm(s1).pour, pb = tm(s2).pour;\n"
+            "out.same = [pb.run === pa.run, pb.dur, pb.ios, pb.by, Math.round((pb.start - pa.start) / 1000)];\n"
+            "beat(ivB); out.status = b('pt-status').textContent;\n"
+            # 46 s later B rings by itself: close the valve
+            "offA.v += 46000; offB.v += 46000; beat(ivB); beat(ivA);\n"
+            "out.ringB = [!b('alarm')._classes.has('hidden'), b('alarm-text').textContent];\n"
+            "out.ringA = !a('alarm')._classes.has('hidden');\n"
+            # B adds 20 s: A takes it and stops its alarm
+            "b('pt-more').click(); await until(() => JSON.parse(row().data).dur === 80);\n"
+            "a('c-sync').click(); await until(() => tm(s1).pour.dur === 80);\n"
+            "out.more = [tm(s1).pour.preAlarmed, a('alarm')._classes.has('hidden')];\n"
+            # A counts the can: the timer ends on B too
+            "a('t-plus').click(); await until(() => row().data == null);\n"
+            "b('c-sync').click(); await until(() => !tm(s2).pour);\n"
+            "out.ended = [!tm(s2).pour, b('alarm')._classes.has('hidden')];\n"
+        )
+        self.assertTrue(got["up"], "a start uploads at once, not at the next tick")
+        self.assertEqual(got["same"], [True, 60, False, "An", 7], "B runs A's timer on its own clock")
+        self.assertIn("Started by An.", got["status"])
+        self.assertEqual(got["ringB"], [True, "Close the valve: 0:14 to full"])
+        self.assertTrue(got["ringA"])
+        self.assertEqual(got["more"], [False, True], "+20 s on B: A's alarm stops and rings again later")
+        self.assertEqual(got["ended"], [True, True], "+1 can on A ends the timer on B")
 
     def test_hidden_page_uploads_at_once(self):
         page = (ROOT / "site" / "page.html").as_posix()

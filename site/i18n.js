@@ -541,6 +541,7 @@
     "Enter the can size to use the timer.": "Nhập cỡ bình để dùng hẹn giờ.",
     "Filling a {0} L can: {1} left of {2}.": "Đang bơm bình {0} L: còn {1} trên {2}.",
     "The alarm rings at {0} left.": "Chuông báo reo khi còn {0}.",
+    "Started by {name}.": "Do {name} bắt đầu.",
     "The iPhone timer rings at {0} left.": "Hẹn giờ iPhone reo khi còn {0}.",
     "The page then shows no alarm banner and makes no sound for the fill timer: the iPhone rings.": "Khi đó trang không hiện băng báo động và không phát âm thanh cho hẹn giờ bơm: iPhone sẽ reo.",
     "{0} to full: close the valve now.": "Còn {0} là đầy: khoá van ngay.",

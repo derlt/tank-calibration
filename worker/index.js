@@ -355,6 +355,75 @@ async function deleteCampaign(env, a, id, url, now) {
   return json({ ok: true });
 }
 
+// ------------------------------------------------------------ the fill timer
+// One running fill timer per campaign, shared by the team's devices.  It is
+// not campaign data: no version, no merge.  The change made last wins (by
+// `at`, the device's time of the change on the server's clock).  Every
+// answer has `now`, the server's clock, so a device can correct its own.
+const TIMER_SPAN = 2 * 86400 * 1000;   // a start more than 2 days off is a bad clock
+
+function timerData(v, now) {
+  if (v == null) return null;
+  const bad = (what) => { throw new HttpError(400, `Bad timer: ${what}.`); };
+  if (typeof v !== "object" || Array.isArray(v)) bad("not an object");
+  const run = v.run;
+  if (typeof run !== "string" || !/^[A-Za-z0-9-]{1,64}$/.test(run)) bad("run");
+  const n = (k, lo, hi) => {
+    const x = v[k];
+    if (typeof x !== "number" || !Number.isFinite(x) || x < lo || x > hi) bad(k);
+    return x;
+  };
+  const out = {
+    run,
+    start: Math.round(n("start", now - TIMER_SPAN, now + TIMER_SPAN)),
+    dur: n("dur", 1, 86400),
+    size: n("size", 0.001, 1e6),
+    lead: n("lead", 0, 120),
+    early: v.early === true,
+  };
+  return out;
+}
+
+async function getTimer(env, a, id, url, now) {
+  const have = url.searchParams.get("have");
+  const known = have != null && /^\d+$/.test(have) ? Number(have) : -1;
+  const row = await env.DB.prepare(
+    "SELECT rev, data, changed_at, updated_at, updated_by FROM timers WHERE workspace_id = ?1 AND campaign_id = ?2",
+  ).bind(a.ws, id).first();
+  if (!row) return json(known === 0 ? { same: true, rev: 0, now } : { rev: 0, timer: null, now });
+  if (row.rev === known) return json({ same: true, rev: row.rev, now });
+  const { data, ...meta } = row;
+  return json(Object.assign({ timer: data == null ? null : JSON.parse(data), now }, meta));
+}
+
+async function putTimer(request, env, a, id, now) {
+  const body = await readBody(request);
+  const timer = timerData(body.timer, now);
+  // A device's clock can run ahead: a change is never later than now.
+  const at = Number.isFinite(body.at) ? Math.min(Math.round(body.at), now) : now;
+  const data = timer == null ? null : JSON.stringify(timer);
+  // One statement: the campaign must exist, and an older change than the
+  // stored one does not overwrite it.
+  const row = await env.DB.prepare(
+    "INSERT INTO timers (workspace_id, campaign_id, rev, data, changed_at, updated_at, updated_by) "
+    + "SELECT ?1, ?2, 1, ?3, ?4, ?5, ?6 FROM campaigns WHERE workspace_id = ?1 AND id = ?2 AND deleted_at IS NULL "
+    + "ON CONFLICT(workspace_id, campaign_id) DO UPDATE SET rev = timers.rev + 1, data = excluded.data, "
+    + "changed_at = excluded.changed_at, updated_at = excluded.updated_at, updated_by = excluded.updated_by "
+    + "WHERE excluded.changed_at >= timers.changed_at RETURNING rev, changed_at",
+  ).bind(a.ws, id, data, at, now, a.user).first();
+  if (row) return json({ rev: row.rev, changed_at: row.changed_at, now });
+  const live = await env.DB.prepare(
+    "SELECT 1 AS ok FROM campaigns WHERE workspace_id = ?1 AND id = ?2 AND deleted_at IS NULL",
+  ).bind(a.ws, id).first();
+  if (!live) throw new HttpError(404, "No such campaign in this workspace.");
+  const cur = await env.DB.prepare(
+    "SELECT rev, data, changed_at, updated_at, updated_by FROM timers WHERE workspace_id = ?1 AND campaign_id = ?2",
+  ).bind(a.ws, id).first();
+  const { data: d, ...meta } = cur;
+  return json({ error: "A newer timer change is in the cloud.", conflict: true,
+    current: Object.assign({ timer: d == null ? null : JSON.parse(d), now }, meta) }, 409);
+}
+
 async function route(request, env, url, now) {
   const path = url.pathname, method = request.method;
   if (path === "/api/health" && method === "GET") return json({ ok: true });
@@ -373,6 +442,14 @@ async function route(request, env, url, now) {
     if (method === "GET") return getCampaign(env, a, id, url);
     if (method === "PUT") return putCampaign(request, env, a, id, now);
     if (method === "DELETE") return deleteCampaign(env, a, id, url, now);
+  }
+  const t = /^\/api\/campaigns\/([^/]+)\/timer$/.exec(path);
+  if (t) {
+    let raw;
+    try { raw = decodeURIComponent(t[1]); } catch (e) { throw new HttpError(400, "Bad campaign id."); }
+    const id = campaignId(raw);
+    if (method === "GET") return getTimer(env, a, id, url, now);
+    if (method === "PUT") return putTimer(request, env, a, id, now);
   }
   throw new HttpError(404, "No such API route.");
 }
