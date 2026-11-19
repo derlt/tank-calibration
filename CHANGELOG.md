@@ -318,6 +318,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **On-site page: a second tab no longer wipes cans and dips.** Two tabs of
+  the page share one saved session, and each tab kept the session it read.
+  A tap in the older tab saved its older session over the newer one: in a
+  test, 3 cans counted in one tab were gone after one tap in the other. Now
+  the older tab takes the newer session when the other tab saves, when it
+  comes back into view and at the first tap; and a save checks that nothing
+  changed since this tab read the session. If it did, the entry does not
+  count, and the page asks you to enter it again.
+
 - **On-site page: no redraw while you scroll.** Safari and Chrome on a phone
   send a resize event when their toolbar shows or hides during a scroll; the
   page drew all of itself again each time. Now only a new width (a turn of

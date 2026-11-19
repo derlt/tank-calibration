@@ -626,6 +626,7 @@
     "The level moves in one direction: it is not settled (waves, foam, weep hole lag).": "Mức đang dịch chuyển một chiều: chưa ổn định (sóng, bọt, độ trễ lỗ thoát).",
     "Wait {0} minutes and dip again.": "Chờ {0} phút rồi đo lại.",
     "Dip again.": "Đo lại.",
+    "This campaign changed in another tab or window of this page. This page now shows that version: enter your last step again.": "Đợt đo này đã thay đổi ở một thẻ hoặc cửa sổ khác của trang. Trang này giờ hiển thị bản đó: hãy nhập lại bước vừa làm.",
     "Do not look at the earlier readings.": "Đừng nhìn các số đo trước.",
     "Do not look at the first reading.": "Đừng nhìn số đo đầu tiên.",
     "Second reading needed": "Cần đo lần thứ hai",

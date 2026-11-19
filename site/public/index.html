@@ -1566,6 +1566,7 @@
     "The level moves in one direction: it is not settled (waves, foam, weep hole lag).": "Mức đang dịch chuyển một chiều: chưa ổn định (sóng, bọt, độ trễ lỗ thoát).",
     "Wait {0} minutes and dip again.": "Chờ {0} phút rồi đo lại.",
     "Dip again.": "Đo lại.",
+    "This campaign changed in another tab or window of this page. This page now shows that version: enter your last step again.": "Đợt đo này đã thay đổi ở một thẻ hoặc cửa sổ khác của trang. Trang này giờ hiển thị bản đó: hãy nhập lại bước vừa làm.",
     "Do not look at the earlier readings.": "Đừng nhìn các số đo trước.",
     "Do not look at the first reading.": "Đừng nhìn số đo đầu tiên.",
     "Second reading needed": "Cần đo lần thứ hai",
@@ -5927,12 +5928,29 @@
   let sel = null;         // the selected level in Log & charts: { tank, row }, shared by the table and the chart
 
   // ------------------------------------------------------------ storage
-  function save() { if (S) { localStorage.setItem(KEY, JSON.stringify(S.toJSON())); cloudChanged(); } }
+  // Two tabs or windows of the page share the browser's storage, and each
+  // holds the session it read.  A tab left behind (the return from
+  // Shortcuts can open the page a second time) would write its older session
+  // over the newer one: the cans and dips of the other tab would be gone.
+  // So the page keeps the text it last read or wrote (stored); before a write
+  // it checks that the storage still holds that text.  When another tab
+  // wrote since, this tab takes the newer session and does not write.
+  let stored = null;
+  const STALE = "This campaign changed in another tab or window of this page. This page now shows that version: enter your last step again.";
+  function changedElsewhere() { return localStorage.getItem(KEY) !== stored; }
+  function writeActive(text) {
+    if (text == null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, text);
+    stored = text;
+  }
+  /** Before a write: a newer session from another tab wins, and the write stops. */
+  function guardStale() { if (changedElsewhere()) { adoptStored(); throw new Error(STALE); } }
+  function save() { if (S) { guardStale(); writeActive(JSON.stringify(S.toJSON())); cloudChanged(); } }
   function fromJSON(obj) {
     return obj && obj.kind === "transfer" ? C.TransferSession.fromJSON(obj) : C.Session.fromJSON(obj);
   }
   function load() {
     const t = localStorage.getItem(KEY);
+    stored = t;
     if (!t) return null;
     try { return fromJSON(JSON.parse(t)); } catch (e) { console.error(e); return null; }
   }
@@ -5955,7 +5973,11 @@
   }) : null;
   let cloudMsg = "", cloudList = null, syncTimer = null;
   /** Write the session to this browser without a new cloud change (it came from the cloud). */
-  function keepLocal() { if (S) localStorage.setItem(KEY, JSON.stringify(S.toJSON())); }
+  function keepLocal() {
+    if (!S) return;
+    if (changedElsewhere()) { adoptStored(); return; }
+    writeActive(JSON.stringify(S.toJSON()));
+  }
   /** A new open session: link it to a new cloud campaign when that is on, else unlink. */
   function cloudNew() {
     if (!CL) return;
@@ -6820,11 +6842,11 @@
       if (!stopPumpForA(undoOpensA())) return;
       const a = S.out.current(), b = S.in.current();
       if (S.out.levels.length === 1 && S.in.levels.length === 1
-        && (!a || !a.dips.length) && (!b || !b.dips.length)) { S = null; localStorage.removeItem(KEY); cloudNew(); return; }
+        && (!a || !a.dips.length) && (!b || !b.dips.length)) { guardStale(); S = null; writeActive(null); cloudNew(); return; }
       S.undo(); save();
       return;
     }
-    if (S.levels.length === 1 && S.levels[0].dips.length <= 1) { S = null; localStorage.removeItem(KEY); cloudNew(); return; }
+    if (S.levels.length === 1 && S.levels[0].dips.length <= 1) { guardStale(); S = null; writeActive(null); cloudNew(); return; }
     S.undo(); save();
   }));
 
@@ -6877,10 +6899,11 @@
     localStorage.setItem(ARCH, JSON.stringify(a.slice(0, 20)));
   }
   $("f-new").addEventListener("click", () => {
+    if (changedElsewhere()) { adoptStored(); return; }
     if (S && !confirm(tr("Close this session? Export it first. It goes to this browser's archive."))) return;
     if (S) pushArchive(cloudClose());
     resetTallySize();
-    S = null; localStorage.removeItem(KEY); cloudNew(); render();
+    S = null; writeActive(null); cloudNew(); render();
   });
   $("f-archive").addEventListener("click", (ev) => {
     const b = ev.target.closest("button[data-i]"); if (!b) return;
@@ -9377,6 +9400,27 @@
   if (typeof navigator !== "undefined" && navigator.serviceWorker && typeof location !== "undefined"
     && location.protocol === "https:") {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
+  }
+
+  /** Take the session (and its timer) another tab wrote: the newer state wins. */
+  function adoptStored() {
+    S = load();
+    T = loadJSON(TIMER, {});
+    editRow = null; sel = null;
+    render();
+  }
+  // Another tab wrote: take its session at once (the storage event), when
+  // this tab comes back into view, and before a tap here acts on an old one.
+  if (window.addEventListener) {
+    window.addEventListener("storage", (ev) => {
+      if (ev.key === KEY || ev.key === null) { if (changedElsewhere()) adoptStored(); }
+      else if (ev.key === TIMER) { T = loadJSON(TIMER, {}); if (S) render(); }
+    });
+    window.addEventListener("pageshow", () => { if (changedElsewhere()) adoptStored(); });
+  }
+  if (document.addEventListener) {
+    document.addEventListener("visibilitychange", () => { if (!document.hidden && changedElsewhere()) adoptStored(); });
+    document.addEventListener("pointerdown", () => { if (changedElsewhere()) adoptStored(); }, true);
   }
 
   S = load();

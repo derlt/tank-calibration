@@ -9,6 +9,15 @@ The page is one file. It runs offline in the browser of a phone, a tablet or a
 laptop. It needs no network and no install. It saves the session in the
 browser after every entry.
 
+**Two tabs of the page.** Two tabs or windows of the page share one saved
+session. A tab that shows an older state (left open behind a newer one, for
+example after the return from the Shortcuts timer) takes the newer session as
+soon as it can: when the other tab saves, when it comes back into view, and
+at your first tap on it. It never writes its older session over the newer
+one. If it still has the older state when you enter something, the entry
+does not count; the page shows the newer session and asks you to enter your
+last step again.
+
 ## Get the page
 
 The built page is in the repository: `site/calib_site.html`. Copy that one file

@@ -744,6 +744,38 @@ class TestSitePage(unittest.TestCase):
         self.assertEqual(got["first"], ["live"], "the first tab is the end: no wrap")
 
     @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_older_tab_does_not_overwrite_a_newer_session(self):
+        """Two tabs share the storage: a tab left behind takes the newer session, it never writes over it."""
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "let a = stub.boot(page, corePath, store).el;\n"
+            "a('s-tank').value = 't1'; a('s-D').value = '1800'; a('s-L').value = '3000';\n"
+            "a('s-dip').value = '400'; a('s-unit').value = '200';\n"
+            "a('s-go').click(); a('d-val').value = '400'; a('d-go').click();\n"
+            "const b = stub.boot(page, corePath, store).el;   // the second tab, opened now\n"
+            "const cans = () => JSON.parse(store.get('calib-site:active')).batch.cans.length;\n"
+            "let t = 1e12; Date.now = () => (t += 60000);   // far apart: no quick-tap question\n"
+            "a('t-plus').click(); a('t-plus').click(); a('t-plus').click(); out.a = cans();\n"
+            "b('t-plus').click(); out.stale = cans(); out.msg = b('p-err').textContent;\n"
+            "out.shown = b('t-count').textContent;\n"
+            "b('t-plus').click(); out.after = cans(); out.msg2 = b('p-err').textContent;\n"
+            "a('t-plus').click(); out.back = cans(); out.msgA = a('p-err').textContent;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["a"], 3)
+        self.assertEqual(got["stale"], 3, "the older tab's tap does not write over the 3 cans")
+        self.assertIn("changed in another tab", got["msg"])
+        self.assertTrue(got["shown"].startswith("3 "), "the older tab now shows the newer session")
+        self.assertEqual(got["after"], 4, "the next tap counts on the newer session")
+        self.assertEqual(got["msg2"], "")
+        self.assertEqual(got["back"], 4, "the first tab is now the older one: same rule")
+        self.assertIn("changed in another tab", got["msgA"])
+
+    @unittest.skipUnless(NODE, "node is not installed")
     def test_page_archive_list_draws_in_the_files_tab(self):
         """The archive parses every archived campaign: only the Files tab draws it."""
         stub = (HERE / "tests" / "page_stub.js").as_posix()
