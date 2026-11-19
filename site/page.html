@@ -1145,11 +1145,20 @@
     polling = true;
     CL.poll(applyCloud).then((c) => {
       if (!c) return;
-      if (!c.gone) cloudMsg = `Updated from the cloud at ${C.clock(Date.now())}.`;
+      if (!c.gone) { cloudMsg = `Updated from the cloud at ${C.clock(Date.now())}.`; followFast(); }
       render();
     }).catch((e) => console.error(e)).then(() => { polling = false; });
   }
   let polling = false;
+  // Someone else writes into this campaign: the team takes turns (counts,
+  // then dips), so the next turn comes soon.  For 2 minutes after a newer
+  // version came in, the page asks every 3 s instead of every 10 s: the
+  // next writer then starts from the newest copy, and a conflict is rarer.
+  // 20 requests a minute per device; a poll that finds nothing sends no
+  // campaign data.
+  const FOLLOW_EVERY = 3000, FOLLOW_FOR = 120000;
+  let followUntil = 0;
+  function followFast() { followUntil = Date.now() + FOLLOW_FOR; }
   function stamp(ms) { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${C.clock(ms)}`; }
   function renderCloud() {
     if (!CL) { $("hdr-cloud").textContent = ""; return; }
@@ -4540,7 +4549,12 @@
   // Every 10 s: upload what waits, or (in view, nothing to upload) ask for a
   // newer version, so a device that follows a campaign shows a new dip
   // within about 10 s.  A poll that finds nothing sends no campaign data.
-  if (CL) { setInterval(cloudTick, 10000); cloudTick(); }
+  // After a newer version from another device: every 3 s for 2 minutes.
+  if (CL) {
+    setInterval(cloudTick, 10000);
+    setInterval(() => { if (Date.now() < followUntil) cloudTick(); }, FOLLOW_EVERY);
+    cloudTick();
+  }
 })();
 </script>
 </body>

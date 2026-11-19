@@ -673,6 +673,40 @@ class TestPage(unittest.TestCase):
         self.assertEqual(got["hdr"], "cloud: conflict")
         self.assertEqual(got["cloud"], ["", 1], "the cloud keeps A's can, not B's note")
 
+    def test_fast_follow_after_a_new_version(self):
+        got = _run(
+            self._devices()
+            # B's page keeps its interval timers and runs on a clock the test moves
+            + "let skew = 0; const RD = Date;\n"
+            "class FD extends RD { constructor(...x) { if (x.length) super(...x); else super(RD.now() + skew); } static now() { return RD.now() + skew; } }\n"
+            "const iv = [];\n"
+            "const s1 = new Map(), s2 = new Map(); const a = boot(s1, '10.0.0.1').el;\n"
+            f"const pb = stub.boot({json.dumps((ROOT / 'site' / 'page.html').as_posix())}, {json.dumps((ROOT / 'site' / 'site_core.js').as_posix())}, s2,\n"
+            "  Object.assign(dev('10.0.0.2'), { Date: FD, setInterval: (fn, ms) => { iv.push({ fn, ms }); return iv.length; } })), b = pb.el;\n"
+            "out.timers = iv.map((x) => x.ms);\n"
+            "const fast = () => iv.find((x) => x.ms === 3000).fn(), slow = () => iv.find((x) => x.ms === 10000).fn();\n"
+            "await login(a, 'An'); start(a); a('c-sync').click(); await settled(s1);\n"
+            "await login(b, 'Binh'); const id = link(s1).id;\n"
+            "openCloud(b, id); await until(() => link(s2) && link(s2).id === id);\n"
+            "const dipA = async (v) => { a('d-val').value = String(v); a('d-go').click(); a('c-sync').click(); await settled(s1); };\n"
+            "const seen = () => link(s2).version;\n"
+            # nothing new came in yet: the 3 s timer does not ask
+            "await dipA(101); fast(); await new Promise((r) => setTimeout(r, 50));\n"
+            "out.quiet = seen() < link(s1).version;\n"
+            "slow(); await until(() => seen() === link(s1).version);\n"
+            # a new version came in: now every 3 s
+            "await dipA(102); fast(); out.fast = await until(() => seen() === link(s1).version);\n"
+            # 2 minutes later: back to 10 s
+            "skew = 121000;\n"
+            "await dipA(103); fast(); await new Promise((r) => setTimeout(r, 50));\n"
+            "out.after = seen() < link(s1).version;\n"
+        )
+        self.assertIn(3000, got["timers"])
+        self.assertIn(10000, got["timers"])
+        self.assertTrue(got["quiet"], "no new version yet: the 3 s timer does not ask")
+        self.assertTrue(got["fast"], "after a new version: the 3 s timer asks")
+        self.assertTrue(got["after"], "after 2 minutes: the 10 s timer only")
+
     def test_hidden_page_uploads_at_once(self):
         page = (ROOT / "site" / "page.html").as_posix()
         core = (ROOT / "site" / "site_core.js").as_posix()
