@@ -775,6 +775,10 @@
     // The plan group this batch is for: the batch tally counts by it.  A
     // level in the neck is outside the plan (the plan is the shell).
     else if (this.cfg.plan) L.plan = planPick(o.plan || this.planNow());
+    // When the batch went in (ms): the settle timer runs from it.  The page
+    // gives it, so a replay of this action (the cloud merge) never reads
+    // the clock.
+    if (Object.prototype.hasOwnProperty.call(o, "pourTime")) L.pourTime = o.pourTime;
     this.levels.push(L);
     return L;
   };
@@ -1115,11 +1119,16 @@
     return { text, cans: rec };
   };
 
+  /** opts as closeTally and pour; opts.pourTime (ms) as pour. */
   Session.prototype.closeBatch = function (opts) {
     if (this.finished) throw new Error("this tank is finished: reopen it first");
-    const t = this.closeTally(opts);
-    const L = this.pour(t.text, opts);
+    const o = Object.assign({}, opts || {});
+    const t = this.closeTally(o);
+    const has = Object.prototype.hasOwnProperty.call(o, "pourTime"), at = o.pourTime;
+    delete o.pourTime;
+    const L = this.pour(t.text, o);
     L.cans = t.cans;
+    if (has) L.pourTime = at;
     return L;
   };
 
@@ -1222,6 +1231,19 @@
     L.verdict = { status: "OVERRIDE", color: "warn", title: "Accepted by the operator", message: "This level is kept as an anchor. Its interval stays out of the running fit.", advice: "" };
     this._refit();
     return L.verdict;
+  };
+
+  /**
+   * Take another reading (Dip again): the current level waits for one more
+   * dip.  Its earlier readings stay in the record, hidden from the verdict
+   * until the new one is in.
+   */
+  Session.prototype.redip = function () {
+    const L = this.current();
+    if (!L) return null;
+    L.state = "pending";
+    L.verdict = Object.assign({}, L.verdict || {}, { status: "REDIP", hidden: true, color: "warn", title: "Extra reading", message: "The earlier readings are hidden.", advice: "Dip again." });
+    return L;
   };
 
   /** Remove the last dip, or the last level when it has no dips. */
@@ -2491,6 +2513,7 @@
     // A finished tank gets no level: its water still moves, but it is not dipped.
     const Lo = this.out.finished ? null : this.out.pour(stepText, { neck: !!o.neck, note: o.note, plan });
     const Li = this.in.finished ? null : this.in.pour(stepText, { overflow: !!o.overflow, note: o.note, plan });
+    pourTimes(o, Lo, Li);
     this._afterFinish();
     this._pair();
     return Lo || Li;
@@ -2552,9 +2575,28 @@
       if (t.cans.fills) Li.cans.fills = t.cans.fills.slice();
       if (t.cans.typed) Li.cans.typed = t.cans.typed;
     }
+    pourTimes(o, Lo, Li);
     this._afterFinish();
     this._pair();
     return Lo || Li;
+  };
+
+  /** opts.pourTime (ms), when given, on the new level of each open tank. */
+  function pourTimes(o, Lo, Li) {
+    if (!Object.prototype.hasOwnProperty.call(o, "pourTime")) return;
+    if (Lo) Lo.pourTime = o.pourTime;
+    if (Li) Li.pourTime = o.pourTime;
+  }
+
+  /**
+   * Take another reading on one tank (k: "out" or "in", else the tank the
+   * actions fall on).  The pair view leaves while that level is open again.
+   */
+  TransferSession.prototype.redip = function (k) {
+    const key = k === "in" || k === "out" ? k : this.liveKey();
+    const L = this[key].redip();
+    this._pair();
+    return L;
   };
 
   /**

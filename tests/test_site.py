@@ -2307,6 +2307,38 @@ class TestSiteRoundTrip(unittest.TestCase):
         self.assertEqual(got["diff"], [], "the rows where the copy judged a dip with other numbers")
         self.assertTrue(got["transfer"])
 
+    def test_dip_again_and_the_pour_time_are_core_actions(self):
+        # The page's Dip again and the pour time go through the core, so a
+        # replay of the action makes the same row without the page.
+        got = _node(
+            self.SESSIONS
+            + "const out = {};\n"
+            "const f = read(S.fill); f.untap(); f.tap(1, 200); f.tap(2, 200);\n"
+            "const L = f.closeBatch({ pourTime: 1234, note: 'x' });\n"
+            "out.keys = Object.keys(L).slice(-2); out.pourTime = L.pourTime;\n"
+            "f.dip(400, 3); for (let k = 0; k < 4 && f.current().state === 'pending'; k++) f.dip(400, 4);\n"
+            "const was = f.current().dips.length, v = f.redip();\n"
+            "out.redip = [v.row, v.state, v.verdict.status, v.verdict.hidden, v.dips.length === was];\n"
+            "out.poured = read(S.fill).pour('300', { pourTime: 99 }).pourTime;\n"
+            "out.noTime = 'pourTime' in read(S.fill).pour('300', {});\n"
+            # a transfer: the tank is named; the pair leaves while it waits
+            "const tr = read(S.transfer);\n"
+            "const r = tr.redip('out');\n"
+            "out.transfer = [r === tr.out.current(), tr.out.current().state, tr.in.current().state, tr.pair, tr.pendingTank()];\n"
+            # a transfer with tank B finished: the batch's time goes on A's new row only
+            "const u = read(S.transfer); u.in.finish(50); const lastB = u.in.current().pourTime;\n"
+            "u.tap(1, 200); u.closeBatch({ pourTime: 777 });\n"
+            "out.finishedB = [u.out.current().pourTime, u.in.current().pourTime === lastB];\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["keys"], ["cans", "pourTime"], "the same key order as before: the same JSON")
+        self.assertEqual(got["pourTime"], 1234)
+        self.assertEqual(got["redip"][1:], ["pending", "REDIP", True, True], "the readings stay")
+        self.assertEqual(got["poured"], 99)
+        self.assertFalse(got["noTime"])
+        self.assertEqual(got["transfer"], [True, "pending", "accepted", None, "out"])
+        self.assertEqual(got["finishedB"], [777, True], "a finished tank's last row keeps its time")
+
 
 @unittest.skipUnless(NODE, "node is not installed")
 class TestSiteCore(unittest.TestCase):

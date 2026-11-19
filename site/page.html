@@ -1824,10 +1824,10 @@
     if (S.cans()) {
       const o = Object.assign({ partial: $("t-part").checked, note: $("p-note").value.trim() }, overNeck());
       if (typed != null) o.volume = typed;
-      const L = S.closeBatch(o);
-      const ts = L.cans.taps.filter((x) => x != null);
-      L.pourTime = ts.length ? ts[ts.length - 1] : Date.now();
-      if (isTransfer()) S.in.current().pourTime = L.pourTime;
+      // The batch went in at its last can, else now.
+      const ts = S.canList().map((c) => c.t).filter((x) => x != null);
+      o.pourTime = ts.length ? ts[ts.length - 1] : Date.now();
+      S.closeBatch(o);
       if (T.pour || T.wait) { delete T.pour; delete T.wait; saveTimer(); }
       stopAlarm(); unlockAudio();
       $("p-note").value = ""; $("p-vol").value = ""; $("t-part").checked = false; $("p-over").checked = false; $("p-neck").checked = false;
@@ -1845,9 +1845,7 @@
       }
       text = $("p-extra").checked ? `${v}+?` : String(v);
     }
-    const L = S.pour(text, Object.assign({ note: $("p-note").value.trim() }, overNeck()));
-    L.pourTime = Date.now();
-    if (isTransfer()) S.in.current().pourTime = L.pourTime;
+    S.pour(text, Object.assign({ note: $("p-note").value.trim(), pourTime: Date.now() }, overNeck()));
     if (T.pour || T.wait) { delete T.pour; delete T.wait; saveTimer(); }
     stopAlarm(); unlockAudio();
     $("p-note").value = ""; $("p-vol").value = ""; $("p-unknown").checked = false; $("p-extra").checked = false; $("p-over").checked = false; $("p-neck").checked = false;
@@ -1925,11 +1923,12 @@
   }
 
   $("a-redip").addEventListener("click", () => {
-    const L = isTransfer() ? S[S.liveKey()].current() : S.current();
+    const k = isTransfer() ? S.liveKey() : null;
+    const L = isTransfer() ? S[k].current() : S.current();
     if (!L) return;
-    if (!stopPumpForA(isTransfer() && S.liveKey() === "out")) return;
-    L.state = "pending"; L.verdict = Object.assign({}, L.verdict || {}, { status: "REDIP", hidden: true, color: "warn", title: "Extra reading", message: "The earlier readings are hidden.", advice: "Dip again." });
-    if (isTransfer()) S._pair();   // the pair judged a decided level: it leaves while this one is open again
+    if (!stopPumpForA(k === "out")) return;
+    // A transfer: the pair judged a decided level; it leaves while this one is open again.
+    if (isTransfer()) S.redip(k); else S.redip();
     save(); render(); $("d-val").focus();
   });
   $("a-edit").addEventListener("click", guard("d-err", () => {
