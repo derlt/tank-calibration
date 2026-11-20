@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Cloud: the iPhone timer stopped after Shortcuts.** With the iPhone timer
+  on, the page timer starts as Shortcuts opens, and iOS stops the page before
+  the start reaches the cloud. When Safari loaded the page again, the page
+  took the cloud's older "no timer" (from the last can) and stopped its own
+  run. The waiting change now stays in the browser across the reload, and a
+  cloud state older than the device's own start no longer stops it.
+
 ### Added
 
 - **Cloud: the fill timer runs and rings on every device of a campaign.**

@@ -3648,6 +3648,10 @@
    */
   function applyTimer(r) {
     const x = r.timer, pt = T.pour;
+    // A cloud state older than this device's own change of its run (an
+    // upload that never went out: iOS stops the page while Shortcuts is
+    // open) does not undo it: this device's run goes up instead.
+    if (pt && r.at != null && r.at < (pt.at || pt.start) - 1000 && !(x && x.run === pt.run && x.dur === pt.dur)) { shareTimer(); return; }
     if (!x) {
       if (!pt) return;
       // The cloud never had a timer for this campaign: the one here (started
@@ -3662,6 +3666,7 @@
       if (pt.dur === x.dur && pt.size === x.size && pt.lead === x.lead && Math.abs(pt.start - x.start) < 1000) return;
       const more = x.dur - pt.dur;
       Object.assign(pt, { start: x.start, dur: x.dur, size: x.size, lead: x.lead, early: !!x.early });
+      if (r.at != null) pt.at = r.at;
       if (more !== 0) {
         pt.preAlarmed = false; pt.fullAlarmed = false;
         if (more > 0 && alarmKind === "fill") stopAlarm();
@@ -3671,7 +3676,7 @@
       if (alarmKind === "fill") stopAlarm();
       delete T.wait;
       T.pour = {
-        run: x.run, start: x.start, dur: x.dur, size: x.size, lead: x.lead, early: !!x.early,
+        run: x.run, at: r.at != null ? r.at : Date.now(), start: x.start, dur: x.dur, size: x.size, lead: x.lead, early: !!x.early,
         // ios: the iPhone timer of the other device rings there, not here.
         preAlarmed: left <= 0, fullAlarmed: left < -180, ios: false, by: r.by || "",
       };
@@ -3876,7 +3881,7 @@
   /** ios: the iPhone timer runs too, so the page's fill alarms stay quiet. */
   function startPour(run, now, ios) {
     delete T.wait;
-    T.pour = { run: CC ? CC.newId() : String(now), start: now, dur: run.dur, size: run.size, lead: run.lead, preAlarmed: false, fullAlarmed: false, ios: !!ios, early: !!run.early };
+    T.pour = { run: CC ? CC.newId() : String(now), at: now, start: now, dur: run.dur, size: run.size, lead: run.lead, preAlarmed: false, fullAlarmed: false, ios: !!ios, early: !!run.early };
     saveTimer(); shareTimer(); keepAwake(); render();
   }
   /** Shortcuts must open within this time of the tap, or the wait is over. */
@@ -3894,13 +3899,13 @@
   $("pt-stop").addEventListener("click", () => { dropTimer(); stopAlarm(); render(); });
   $("pt-more").addEventListener("click", () => {
     if (!T.pour) return;
-    T.pour.dur += 20;
+    T.pour.dur += 20; T.pour.at = Date.now();
     T.pour.preAlarmed = false; T.pour.fullAlarmed = false;
     stopAlarm(); saveTimer(); shareTimer(); render();
   });
   $("pt-less").addEventListener("click", () => {
     if (!T.pour) return;
-    T.pour.dur = Math.max(5, T.pour.dur - 20);
+    T.pour.dur = Math.max(5, T.pour.dur - 20); T.pour.at = Date.now();
     T.pour.preAlarmed = false; T.pour.fullAlarmed = false;
     saveTimer(); shareTimer(); render();
   });

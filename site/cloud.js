@@ -22,11 +22,13 @@
  *   calib-site:cloud   {base, token, workspace, user, expires, auto}
  *   calib-site:link    the link of the open session (see "the link" below)
  *   calib-site:outbox  [{link, data}]: closed sessions whose changes wait for upload
+ *   calib-site:timer-out  the fill timer change that waits for upload
  */
 (function (root) {
   "use strict";
 
   const AUTH = "calib-site:cloud", LINK = "calib-site:link", OUTBOX = "calib-site:outbox", MERGES = "calib-site:merges";
+  const TIMER_OUT = "calib-site:timer-out";
   const MERGES_KEEP = 20;
   const TIMEOUT = 15000;
   // An upload gets one more second per 4 KB of body: 4 KB/s is 32 kbit/s, a
@@ -659,13 +661,22 @@
   //   timer   {run, start, dur, size, lead, early} or null (no timer runs);
   //           run: a random id of one timer run, start: ms
   //   tm      {id, rev}: the cloud's timer rev this device has, per campaign
-  //   tmOut   {id, timer, at}: this device's last change, not uploaded yet
+  //   tmOut   {id, timer, at}: this device's last change, not uploaded yet;
+  //           kept in storage (TIMER_OUT), so a reload still uploads it.  The
+  //           iPhone timer needs this: the page starts its timer as Shortcuts
+  //           opens, iOS stops the page before the upload goes out, and the
+  //           page loads again when Safari comes back.
   //   skew    the server's clock minus this device's clock, ms
   //
   // On the wire, start and at are on the server's clock; the page gets them
   // on its own clock.  So two phones whose clocks differ by some seconds
-  // still ring at the same moment.  Memory only: a reload starts again
-  // from the cloud's timer.
+  // still ring at the same moment.  tm and skew are memory only: a reload
+  // asks the cloud again.
+
+  Object.defineProperty(Client.prototype, "tmOut", {
+    get() { if (this._tmOut === undefined) this._tmOut = this._get(TIMER_OUT) || null; return this._tmOut; },
+    set(v) { this._tmOut = v || null; this._set(TIMER_OUT, v || null); },
+  });
 
   function shift(timer, by) { return timer ? Object.assign({}, timer, { start: Math.round(timer.start + by) }) : null; }
 
@@ -717,7 +728,8 @@
     if (!l || !(l.version >= 1) || l.gone || !this.here(l) || !this.loggedIn()) return { got: null };
     const path = `/api/campaigns/${encodeURIComponent(l.id)}/timer`;
     // none: the cloud never had a timer for this campaign.
-    const back = (x) => ({ timer: shift(x.timer, -(this.skew || 0)), by: x.updated_by || "", at: x.changed_at, none: !x.rev });
+    // at: the time of the cloud's change, on this device's clock.
+    const back = (x) => ({ timer: shift(x.timer, -(this.skew || 0)), by: x.updated_by || "", at: x.changed_at == null ? null : x.changed_at - (this.skew || 0), none: !x.rev });
     const keep = (x) => { this.tm = { id: l.id, rev: x.rev }; };
     const out = this.tmOut;
     const t0 = this.now();

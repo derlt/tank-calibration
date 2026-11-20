@@ -5645,11 +5645,13 @@
  *   calib-site:cloud   {base, token, workspace, user, expires, auto}
  *   calib-site:link    the link of the open session (see "the link" below)
  *   calib-site:outbox  [{link, data}]: closed sessions whose changes wait for upload
+ *   calib-site:timer-out  the fill timer change that waits for upload
  */
 (function (root) {
   "use strict";
 
   const AUTH = "calib-site:cloud", LINK = "calib-site:link", OUTBOX = "calib-site:outbox", MERGES = "calib-site:merges";
+  const TIMER_OUT = "calib-site:timer-out";
   const MERGES_KEEP = 20;
   const TIMEOUT = 15000;
   // An upload gets one more second per 4 KB of body: 4 KB/s is 32 kbit/s, a
@@ -6282,13 +6284,22 @@
   //   timer   {run, start, dur, size, lead, early} or null (no timer runs);
   //           run: a random id of one timer run, start: ms
   //   tm      {id, rev}: the cloud's timer rev this device has, per campaign
-  //   tmOut   {id, timer, at}: this device's last change, not uploaded yet
+  //   tmOut   {id, timer, at}: this device's last change, not uploaded yet;
+  //           kept in storage (TIMER_OUT), so a reload still uploads it.  The
+  //           iPhone timer needs this: the page starts its timer as Shortcuts
+  //           opens, iOS stops the page before the upload goes out, and the
+  //           page loads again when Safari comes back.
   //   skew    the server's clock minus this device's clock, ms
   //
   // On the wire, start and at are on the server's clock; the page gets them
   // on its own clock.  So two phones whose clocks differ by some seconds
-  // still ring at the same moment.  Memory only: a reload starts again
-  // from the cloud's timer.
+  // still ring at the same moment.  tm and skew are memory only: a reload
+  // asks the cloud again.
+
+  Object.defineProperty(Client.prototype, "tmOut", {
+    get() { if (this._tmOut === undefined) this._tmOut = this._get(TIMER_OUT) || null; return this._tmOut; },
+    set(v) { this._tmOut = v || null; this._set(TIMER_OUT, v || null); },
+  });
 
   function shift(timer, by) { return timer ? Object.assign({}, timer, { start: Math.round(timer.start + by) }) : null; }
 
@@ -6340,7 +6351,8 @@
     if (!l || !(l.version >= 1) || l.gone || !this.here(l) || !this.loggedIn()) return { got: null };
     const path = `/api/campaigns/${encodeURIComponent(l.id)}/timer`;
     // none: the cloud never had a timer for this campaign.
-    const back = (x) => ({ timer: shift(x.timer, -(this.skew || 0)), by: x.updated_by || "", at: x.changed_at, none: !x.rev });
+    // at: the time of the cloud's change, on this device's clock.
+    const back = (x) => ({ timer: shift(x.timer, -(this.skew || 0)), by: x.updated_by || "", at: x.changed_at == null ? null : x.changed_at - (this.skew || 0), none: !x.rev });
     const keep = (x) => { this.tm = { id: l.id, rev: x.rev }; };
     const out = this.tmOut;
     const t0 = this.now();
@@ -9077,6 +9089,10 @@
    */
   function applyTimer(r) {
     const x = r.timer, pt = T.pour;
+    // A cloud state older than this device's own change of its run (an
+    // upload that never went out: iOS stops the page while Shortcuts is
+    // open) does not undo it: this device's run goes up instead.
+    if (pt && r.at != null && r.at < (pt.at || pt.start) - 1000 && !(x && x.run === pt.run && x.dur === pt.dur)) { shareTimer(); return; }
     if (!x) {
       if (!pt) return;
       // The cloud never had a timer for this campaign: the one here (started
@@ -9091,6 +9107,7 @@
       if (pt.dur === x.dur && pt.size === x.size && pt.lead === x.lead && Math.abs(pt.start - x.start) < 1000) return;
       const more = x.dur - pt.dur;
       Object.assign(pt, { start: x.start, dur: x.dur, size: x.size, lead: x.lead, early: !!x.early });
+      if (r.at != null) pt.at = r.at;
       if (more !== 0) {
         pt.preAlarmed = false; pt.fullAlarmed = false;
         if (more > 0 && alarmKind === "fill") stopAlarm();
@@ -9100,7 +9117,7 @@
       if (alarmKind === "fill") stopAlarm();
       delete T.wait;
       T.pour = {
-        run: x.run, start: x.start, dur: x.dur, size: x.size, lead: x.lead, early: !!x.early,
+        run: x.run, at: r.at != null ? r.at : Date.now(), start: x.start, dur: x.dur, size: x.size, lead: x.lead, early: !!x.early,
         // ios: the iPhone timer of the other device rings there, not here.
         preAlarmed: left <= 0, fullAlarmed: left < -180, ios: false, by: r.by || "",
       };
@@ -9305,7 +9322,7 @@
   /** ios: the iPhone timer runs too, so the page's fill alarms stay quiet. */
   function startPour(run, now, ios) {
     delete T.wait;
-    T.pour = { run: CC ? CC.newId() : String(now), start: now, dur: run.dur, size: run.size, lead: run.lead, preAlarmed: false, fullAlarmed: false, ios: !!ios, early: !!run.early };
+    T.pour = { run: CC ? CC.newId() : String(now), at: now, start: now, dur: run.dur, size: run.size, lead: run.lead, preAlarmed: false, fullAlarmed: false, ios: !!ios, early: !!run.early };
     saveTimer(); shareTimer(); keepAwake(); render();
   }
   /** Shortcuts must open within this time of the tap, or the wait is over. */
@@ -9323,13 +9340,13 @@
   $("pt-stop").addEventListener("click", () => { dropTimer(); stopAlarm(); render(); });
   $("pt-more").addEventListener("click", () => {
     if (!T.pour) return;
-    T.pour.dur += 20;
+    T.pour.dur += 20; T.pour.at = Date.now();
     T.pour.preAlarmed = false; T.pour.fullAlarmed = false;
     stopAlarm(); saveTimer(); shareTimer(); render();
   });
   $("pt-less").addEventListener("click", () => {
     if (!T.pour) return;
-    T.pour.dur = Math.max(5, T.pour.dur - 20);
+    T.pour.dur = Math.max(5, T.pour.dur - 20); T.pour.at = Date.now();
     T.pour.preAlarmed = false; T.pour.fullAlarmed = false;
     saveTimer(); shareTimer(); render();
   });

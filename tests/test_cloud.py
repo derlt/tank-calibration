@@ -1527,6 +1527,41 @@ class TestPage(unittest.TestCase):
         self.assertEqual(got["more"], [False, True], "+20 s on B: A's alarm stops and rings again later")
         self.assertEqual(got["ended"], [True, True], "+1 can on A ends the timer on B")
 
+    def test_the_iphone_timer_survives_the_reload_after_shortcuts(self):
+        # The iPhone timer: the page timer starts as Shortcuts opens (the page
+        # hides), iOS stops the page before the upload goes out, and Safari
+        # loads the page again on its way back.  The cloud still holds the
+        # older "no timer" of the last can: it must not stop the new run.
+        def run(keep_out: bool):
+            return _run(
+                self._devices()
+                + "const s1 = new Map(); let p = boot(s1, '10.0.0.1'), a = p.el;\n"
+                "const tm = () => JSON.parse(s1.get('calib-site:timer') || '{}');\n"
+                "const row = () => env.DB.raw.prepare('SELECT rev, data FROM timers').get();\n"
+                "await login(a, 'An'); start(a); a('t-unit').value = '200';\n"
+                "a('tm-fill-200').value = '1:00'; a('tm-save').click(); a('c-sync').click(); await settled(s1);\n"
+                "a('pt-start').click(); await until(() => row() && row().data); a('t-plus').click(); await until(() => row().data == null);\n"
+                "const P = JSON.parse(s1.get('calib-site:prefs') || '{}'); P.iosTimer = true; s1.set('calib-site:prefs', JSON.stringify(P));\n"
+                "p = boot(s1, '10.0.0.1'); a = p.el; a('t-unit').value = '200';\n"
+                # the next can starts some seconds after the last one
+                "await new Promise((r) => setTimeout(r, 1200));\n"
+                "a('pt-start').click();\n"
+                "net.on = false; p.document.hidden = true; p.document.fire('visibilitychange');\n"
+                "await new Promise((r) => setTimeout(r, 50));\n"
+                "out.hidden = !!tm().pour;\n"
+                + ("" if keep_out else "s1.delete('calib-site:timer-out');\n")
+                + "net.on = true; p = boot(s1, '10.0.0.1'); a = p.el; a('t-unit').value = '200';\n"
+                "a('c-sync').click(); await until(() => row().data != null);\n"
+                "out.runs = !!tm().pour;\n"
+                "out.cloud = row().data && JSON.parse(row().data).run === tm().pour.run;\n"
+            )
+        for keep in (True, False):
+            with self.subTest(stored_change=keep):
+                got = run(keep)
+                self.assertTrue(got["hidden"], "the page timer starts as Shortcuts opens")
+                self.assertTrue(got["runs"], "after the reload the timer still runs")
+                self.assertTrue(got["cloud"], "and its run goes up to the team")
+
     def test_hidden_page_uploads_at_once(self):
         page = (ROOT / "site" / "page.html").as_posix()
         core = (ROOT / "site" / "site_core.js").as_posix()

@@ -144,7 +144,7 @@ another device says *Started by Binh.*
 | Clocks | Every timer answer has the server's clock. Each device turns the start time into its own clock, so phones whose clocks differ by some seconds ring together. |
 | Campaign data | None. A timer change is no new version: it never gives a merge, a conflict or an upload of the campaign. |
 | Late join | A device that opens the campaign during a run shows it and rings the alarm of the state the run is in now. It does not ring when the can was full more than 3 min before. |
-| iPhone timer | Only the device that started the timer runs it. The other devices ring with the page. |
+| iPhone timer | Only the device that started the timer runs it. The other devices ring with the page. iOS stops the page while Shortcuts is open, so the start often uploads only when the page is back, after Safari loads it again. The change waits in the browser (`calib-site:timer-out`) until it is uploaded, and a cloud state older than this device's own start never stops it. |
 
 The timer starts in the cloud after the campaign's first upload. A timer that
 runs before the login goes up when the cloud has none for that campaign.
