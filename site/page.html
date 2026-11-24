@@ -557,7 +557,7 @@
       <label><span id="s-step-label">Liquid before the first dip, L (? = unknown heel)</span><input id="s-step" value="?"></label>
       <label><span id="s-dip-label">First reading, mm</span><input id="s-dip" class="big" type="number" inputmode="decimal" step="0.5"></label>
     </div>
-    <p class="muted" id="s-first-note">Sound the bottom first and record the heel as this row (§3.3). The first level always needs two readings: no prediction can test it.</p>
+    <p class="muted" id="s-first-note">Sound the bottom first and record the heel as this row (§3.3). The first level is accepted on one reading: the first pour is tested against it.</p>
     <div id="s-b-wrap" class="hidden">
       <h2 style="margin-top:0.9rem">Tank B — pour in</h2>
       <div class="grid">
@@ -572,7 +572,7 @@
         <label>Liquid in tank B before the first batch, L (? = unknown heel)<input id="sB-step" value="?"></label>
         <label>Tank B first reading, mm<input id="sB-dip" class="big" type="number" inputmode="decimal" step="0.5"></label>
       </div>
-      <p class="muted">Sound the bottom of tank B and record the heel as this row (§3.3). Two readings, as always for a first level.</p>
+      <p class="muted">Sound the bottom of tank B and record the heel as this row (§3.3). One reading is enough for a first level.</p>
     </div>
     <div class="row" style="margin-top:0.6rem"><button id="s-go">Start campaign</button></div>
     <p id="s-err" class="error"></p>
@@ -979,7 +979,7 @@
     <h2>How the check works</h2>
     <p><b>The question.</b> You just read the tape. Is the reading good, or must you dip again? You must know <i>now</i>: after the next pour that level is gone.</p>
     <p><b>Test 1: the prediction.</b> The page knows your diameter and length estimates, the readings you accepted, and the pour. From these it learns the tank shape, and it predicts the level that this pour must give. If your reading falls inside the band, accept it and pour the next can.</p>
-    <p><b>Test 2: the repeat reading.</b> If the reading misses the band, or if no prediction is possible (the first level, an unknown pour), the page asks for a second reading. It hides the first reading and the prediction, so that the second reading cannot copy them. Two readings that agree within about 1 mm make a good dip.</p>
+    <p><b>Test 2: the repeat reading.</b> If the reading misses the band, or if no prediction is possible (an unknown pour), the page asks for a second reading. It hides the first reading and the prediction, so that the second reading cannot copy them. Two readings that agree within about 1 mm make a good dip.</p>
     <div class="table"><table style="margin:0.5rem 0">
       <tr><th class="l">Repeat</th><th class="l">Prediction</th><th class="l">Meaning</th><th class="l">Action</th></tr>
       <tr><td class="l">—</td><td class="l">inside</td><td class="l">good reading</td><td class="l">pour next</td></tr>
@@ -1912,10 +1912,10 @@
     $("s-step-label").textContent = transfer ? "Liquid in tank A at the first dip, L (? = unknown)"
       : drain ? "Liquid in the tank at the first dip, L (? = unknown)" : "Liquid before the first dip, L (? = unknown heel)";
     $("s-first-note").textContent = transfer
-      ? "Prime the pump and fill A's hose before tank A's reading (§3.11). Then read tank B: sound its bottom and record the heel as this row (§3.3). Both first levels need two readings."
+      ? "Prime the pump and fill A's hose before tank A's reading (§3.11). Then read tank B: sound its bottom and record the heel as this row (§3.3). One reading per tank decides a first level."
       : drain
-        ? "Prime the pump and fill the hose before this reading: water that fills the hose later leaves the tank off the record. The first level always needs two readings: no prediction can test it."
-        : "Sound the bottom first and record the heel as this row (§3.3). The first level always needs two readings: no prediction can test it.";
+        ? "Prime the pump and fill the hose before this reading: water that fills the hose later leaves the tank off the record. The first level is accepted on one reading: the first pour is tested against it."
+        : "Sound the bottom first and record the heel as this row (§3.3). The first level is accepted on one reading: the first pour is tested against it.";
     renderPlanSetup();
   }
 

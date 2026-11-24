@@ -281,7 +281,7 @@ is the same in both modes: only the text changes.
 |---|---|---|
 | **Reading good** (green) | Inside the predicted band. | Pour the next can. |
 | **Check this reading** (amber) | The reading misses the prediction. | Dip again. The page hides your first reading and the prediction, so they cannot bias the second. |
-| **Second reading needed** (amber) | No prediction can test this level: the first level, an unknown pour, or a band too wide to catch a 3 mm slip. | Dip again. |
+| **Second reading needed** (amber) | No prediction can test this level: an unknown pour, or a band too wide to catch a 3 mm slip. | Dip again. |
 | **Readings do not agree** (amber) | The readings differ by more than about 1.4 mm. | Dip again. If the readings move in one direction, the level is not settled: wait 5 minutes. |
 | **Reading confirmed** (green) | Two readings agree, and the level is inside the band. | Pour the next can. |
 | **Shape still unknown** (blue) | Two readings agree, but the first 3 intervals are still teaching the bottom shape. | Pour the next can. |
@@ -1030,7 +1030,7 @@ rises. The method is §3.12 of the methodology.
 
 The setup asks for both tanks: A's record (it is a drain, so the start-level
 choice applies to A) and B's record with its heel. Both first levels are
-dipped before the first batch, two readings each. Then each batch is: pump
+dipped before the first batch, one reading each. Then each batch is: pump
 cans from A → *Batch done* → empty the cans into B → dip A → dip B. The dip
 card has **one field per tank** and one button per tank: *Check alpha*
 submits A's reading, *Check beta* submits B's. Each button reads only its

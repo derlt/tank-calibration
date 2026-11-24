@@ -584,7 +584,6 @@ class TestSitePage(unittest.TestCase):
             "  {D: 1800, Dpm: 100, Lest: 3000, tank: 'alpha', pourUnit: 200},\n"
             "  {D: 2480, Dpm: 200, Lest: 5200, tank: 'beta', pourUnit: 200});\n"
             "X.start('?', core.brim(PA), '?', core.levelFor(2000, PB), '', null, {at: 'entrance'});\n"
-            "X.dip(core.brim(PA)); X.dip(core.levelFor(2000, PB));\n"
             "let k = 0; while (X.pendingTank() === 'out' && k++ < 4) X.dip(core.brim(PA));\n"
             "k = 0; while (X.pendingTank() === 'in' && k++ < 4) X.dip(core.levelFor(2000, PB));\n"
             "X.tap(60000, 200); X.tap(120000, 200);\n"
@@ -1013,7 +1012,6 @@ class TestSitePage(unittest.TestCase):
             "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
             "el('s-go').click();\n"
             "out.first = el('dip-expect-a').textContent;\n"
-            "el('d-val').value = '400'; el('d-go').click();\n"
             "el('t-plus').click(); el('p-go').click();\n"
             "out.pour = el('dip-expect-a').textContent;\n"
             "// A reading far off asks for a repeat: the repeat stays blind.\n"
@@ -1021,7 +1019,7 @@ class TestSitePage(unittest.TestCase):
             "out.repeat = el('dip-expect-a').textContent;\n"
             "console.log(JSON.stringify(out));"
         )
-        self.assertIn("none (the first level)", got["first"])
+        self.assertEqual(got["first"], "", "the first level is one reading: no dip card before the first pour")
         self.assertRegex(got["pour"], r"^Expected level: \d+(\.\d)? mm ± \d+(\.\d)? mm \(2σ\)")
         self.assertIn("hidden", got["repeat"], "a repeat reading must stay blind (§10a.6)")
 
@@ -1777,7 +1775,6 @@ function runTransfer(batches) {
     {D: 2480, Dpm: 200, Lest: 5200, tank: 'beta', pourUnit: 200});
   let VA = CAPA, VB = 2000, t = 0;
   X.start('?', core.brim(PA), '?', core.levelFor(VB, PB), '', null, {at: 'entrance'});
-  X.dip(core.brim(PA)); X.dip(core.levelFor(VB, PB));
   const dipTank = (k, H) => {
     X.dip(H);
     let n = 1;
@@ -1856,7 +1853,6 @@ const Z = new core.TransferSession(
   {D: 1800, Dpm: 200, Lest: 3000, tank: 'alpha', pourUnit: 200},
   {D: 2480, Dpm: 200, Lest: 5200, tank: 'beta', pourUnit: 200});
 Z.start('?', 1800, '?', 400, '', null, {at: 'entrance'});
-Z.dip(1800); Z.dip(400);
 Z.undo();
 out.undoStart = [Z.out.current().dips.length, Z.in.current().dips.length, Z.pendingTank()];
 console.log(JSON.stringify(out));
@@ -1884,7 +1880,7 @@ console.log(JSON.stringify(out));
         self.assertIn("must be more than 0", got["atomicErr"])
         self.assertEqual(got["atomic"], [0.5, 0.5, 1900.0, 2100.0],
                          "a failed settings save changes nothing on either tank")
-        self.assertEqual(got["undoStart"], [2, 1, "in"], "the first undo takes back B's reading")
+        self.assertEqual(got["undoStart"], [1, 0, "in"], "the first undo takes back B's reading")
 
     def test_transfer_dip_both(self):
         got = _node(
@@ -1895,23 +1891,28 @@ const X = new core.TransferSession(
 X.start('?', 1800, '?', 400, '', null, {at: 'entrance'});
 const out = {};
 const dips = (S) => [S.out.current().dips.length, S.in.current().dips.length];
+const pour = (S) => { S.tap(1, 200); S.tap(2, 200); S.tap(3, 200); S.closeBatch({}); };
+// One reading per tank decides the start levels: nothing waits.
 out.start = dips(X).concat([X.pendingTanks()]);
+out.startStates = [X.out.current().state, X.in.current().state];
+pour(X);
+out.poured = dips(X).concat([X.pendingTanks()]);
 // One field only: the other tank keeps waiting.
-X.dipBoth(1800, null);
+X.dipBoth(1000, null); X.dipBoth(1000.5, null);
 out.one = dips(X).concat([X.pendingTanks()]);
-X.dipBoth(null, 400);
+X.dipBoth(null, 100); X.dipBoth(null, 100.5);
 out.oneB = dips(X).concat([X.pendingTanks()]);
-out.states = [X.out.current().state, X.in.current().state];
 // Both fields at once on a fresh session: A first, then B.
 const Y = new core.TransferSession(
   {D: 1800, Dpm: 200, Lest: 3000, tank: 'alpha', pourUnit: 200},
   {D: 2480, Dpm: 200, Lest: 5200, tank: 'beta', pourUnit: 200});
 Y.start('?', 1800, '?', 400, '', null, {at: 'entrance'});
-Y.dipBoth(1800, 400);
+pour(Y);
+Y.dipBoth(1000, 100); Y.dipBoth(1000.5, 100.5);
 out.both = dips(Y).concat([Y.pendingTanks()]);
 // A value for a decided tank is refused before anything is recorded.
 out.err = null;
-try { X.dipBoth(1700, 300); } catch (e) { out.err = e.message; }
+try { X.dipBoth(900, 90); } catch (e) { out.err = e.message; }
 out.after = dips(X);
 out.blank = null;
 try { X.dipBoth(null, ''); } catch (e) { out.blank = e.message; }
@@ -1920,15 +1921,15 @@ const Z = new core.TransferSession(
   {D: 1800, Dpm: 200, Lest: 3000, tank: 'alpha', pourUnit: 200},
   {D: 2480, Dpm: 200, Lest: 5200, tank: 'beta', pourUnit: 200});
 Z.start('?', 1800, '?', 400, '', null, {at: 'entrance'});
+pour(Z);
 out.bad = null;
-try { Z.dipBoth(1800, 'abc'); } catch (e) { out.bad = e.message; }
+try { Z.dipBoth(1000, 'abc'); } catch (e) { out.bad = e.message; }
 out.badAfter = dips(Z);
 // The current tank takes the override while both levels wait for a reading.
 const W = new core.TransferSession(
   {D: 1800, Dpm: 200, Lest: 3000, tank: 'alpha', pourUnit: 200},
   {D: 2480, Dpm: 200, Lest: 5200, tank: 'beta', pourUnit: 200});
 W.start('?', 1800, '?', 400, '', null, {at: 'entrance'});
-W.dipBoth(1800, 400);   // the start levels are decided
 W.tap(1, 200); W.tap(2, 200); W.tap(3, 200);
 W.closeBatch({});
 W.dipBoth(1000, 100);   // first readings, both miss: both wait
@@ -1940,16 +1941,17 @@ out.over = [W.out.current().state, W.in.current().state];
 console.log(JSON.stringify(out));
 """
         )
-        self.assertEqual(got["start"], [1, 1, ["out", "in"]], "start takes one reading per tank")
-        self.assertEqual(got["one"], [2, 1, ["in"]], "only A was filled: B keeps waiting")
+        self.assertEqual(got["start"], [1, 1, []], "start takes one reading per tank and decides it")
+        self.assertEqual(got["startStates"], ["start", "start"])
+        self.assertEqual(got["poured"], [0, 0, ["out", "in"]], "after the pour both tanks wait")
+        self.assertEqual(got["one"], [2, 0, ["in"]], "only A was filled: B keeps waiting")
         self.assertEqual(got["oneB"], [2, 2, []], "B's reading alone finishes the batch")
-        self.assertEqual(got["states"], ["start", "start"])
         self.assertEqual(got["both"], [2, 2, []], "both readings in one call")
         self.assertIn("alpha is decided", got["err"])
         self.assertEqual(got["after"], [2, 2], "a refused entry records nothing")
         self.assertIn("at least one reading", got["blank"])
         self.assertIn("cannot read dip", got["bad"])
-        self.assertEqual(got["badAfter"], [1, 1], "a bad field records neither reading")
+        self.assertEqual(got["badAfter"], [0, 0], "a bad field records neither reading")
         self.assertEqual(got["wait"], [["out", "in"], 2, 2], "both levels wait on disagreeing readings")
         self.assertEqual(got["over"], ["pending", "override"],
                          "the current tank takes the override")
@@ -2045,7 +2047,6 @@ const X = new core.TransferSession(
   {D: 2480, Dpm: 2500, Lest: 5200, Lpm: 4000, tank: 'beta', pourUnit: 200});
 let VA = CAPA, VB = 2000, t = 0;
 X.start('?', core.brim(PA), '?', core.levelFor(VB, PB), '', null, {at: 'entrance'});
-X.dip(core.brim(PA)); X.dip(core.levelFor(VB, PB));
 const dipTank = (k, H) => {
   X.dip(H);
   let n = 1;
@@ -2119,11 +2120,9 @@ console.log(JSON.stringify(out));
             " edgeOut: el('d-val')._classes.has('dip-out'),"
             " edgeIn: el('d-val-b')._classes.has('dip-in')};\n"
             "const dips = () => { const c = JSON.parse(store.get('calib-site:active'));"
-            " return [c.out.levels[0].dips.length, c.in.levels[0].dips.length]; };\n"
-            "// One button per tank: each submits only its own field.\n"
-            "el('d-val').value = '1800'; el('d-val-b').value = '400';\n"
-            "el('d-go-a').click(); out.afterA = dips(); out.keepB = el('d-val-b').value;\n"
-            "el('d-go-b').click(); out.afterB = dips();\n"
+            " const n = c.out.levels.length - 1;"
+            " return [c.out.levels[n].dips.length, c.in.levels[n].dips.length]; };\n"
+            "out.startDecided = dips();\n"
             "out.card = {title: el('pour-title').textContent, plus: el('t-plus').textContent,"
             " neck: !el('p-neck-wrap')._classes.has('hidden'), over: el('p-over-text').textContent,"
             " neckText: el('p-neck-text').textContent, advice: el('now-advice').textContent};\n"
@@ -2134,8 +2133,9 @@ console.log(JSON.stringify(out));
             " btnA: el('d-go-a').textContent, btnB: el('d-go-b').textContent,"
             " two: el('dip-card')._classes.has('two'), batchText: el('dip-batch-text').textContent};\n"
             "el('d-val').value = '1700'; el('d-val-b').value = '500';\n"
-            "el('d-go-a').click();\n"
-            "el('d-go-b').click();\n"
+            "// One button per tank: each submits only its own field.\n"
+            "el('d-go-a').click(); out.afterA = dips(); out.keepB = el('d-val-b').value;\n"
+            "el('d-go-b').click(); out.afterB = dips();\n"
             "if (!el('d-go-a').disabled) { el('d-val').value = '1700'; el('d-go-a').click(); }\n"
             "if (!el('d-go-b').disabled) { el('d-val-b').value = '500'; el('d-go-b').click(); }\n"
             "out.verdict = el('verdict').innerHTML;\n"
@@ -2195,13 +2195,14 @@ console.log(JSON.stringify(out));
                       "the wave sits in its own clipped box, twice as wide, so it can flow")
         self.assertIn("alpha", got["hdr"]["tiles"])
         self.assertIn("beta", got["hdr"]["tiles"])
-        self.assertIn("no prediction (the first level)", got["hdr"]["tiles"])
+        self.assertIn("First level recorded", got["hdr"]["tiles"])
+        self.assertIn("pour to predict", got["hdr"]["tiles"])
         self.assertNotIn("extra dip", got["hdr"]["count"], "no extra dips yet: none shown")
         self.assertLess(got["hdr"]["now"].index("current"), got["hdr"]["now"].index("beta"),
                         "the current marker sits on tank A")
         self.assertNotIn("<dd></dd>", got["hdr"]["now"], "no empty cell shifts the Now grid")
-        self.assertIn("alpha: next reading", got["dipA"]["a"])
-        self.assertIn("beta: next reading", got["dipA"]["b"], "both tanks ask for a reading at once")
+        self.assertIn("alpha: decided at 1800.0 mm", got["dipA"]["a"], "the start level is already decided")
+        self.assertIn("beta: decided at 400.0 mm", got["dipA"]["b"])
         self.assertTrue(got["dipA"]["row"], "the second field shows")
         self.assertTrue(got["dipA"]["two"], "each tank has its own button")
         self.assertFalse(got["dipA"]["one"], "the single button hides")
@@ -2223,9 +2224,10 @@ console.log(JSON.stringify(out));
         self.assertFalse(got["dipA"]["roleBHidden"])
         self.assertTrue(got["dipA"]["edgeOut"], "tank A's field has its own edge colour")
         self.assertTrue(got["dipA"]["edgeIn"], "tank B's field has its own edge colour")
-        self.assertEqual(got["afterA"], [2, 1], "the A button submits only tank A")
-        self.assertEqual(got["keepB"], "400", "tank B's field keeps its value")
-        self.assertEqual(got["afterB"], [2, 2], "the B button submits only tank B")
+        self.assertEqual(got["startDecided"], [1, 1], "one start reading per tank decides it")
+        self.assertEqual(got["afterA"], [1, 0], "the A button submits only tank A")
+        self.assertEqual(got["keepB"], "500", "tank B's field keeps its value")
+        self.assertEqual(got["afterB"], [1, 1], "the B button submits only tank B")
         self.assertEqual(got["card"]["title"], "1 · Pump out")
         self.assertEqual(got["card"]["plus"], "+1 can full (200 L)")
         self.assertTrue(got["card"]["neck"], "the neck tick shows for tank A")
@@ -2521,8 +2523,8 @@ class TestSiteCore(unittest.TestCase):
             "out.roundTrip = core.Session.fromJSON(j).toRawCsv() === s.toRawCsv();\n"
             "console.log(JSON.stringify(out));"
         )
-        self.assertEqual(got["start1"], "REDIP", "the first level always needs a repeat")
-        self.assertEqual(got["start2"], "ACCEPT")
+        self.assertEqual(got["start1"], "ACCEPT", "the first level is accepted on one reading")
+        self.assertEqual(got["start2"], "ACCEPT", "a second reading re-opens it")
         self.assertAlmostEqual(got["startH"], 62.25)
         self.assertIn("cannot read pour", got["badPour"])
         self.assertFalse(got["learning"])
@@ -2963,7 +2965,7 @@ class TestSiteCore(unittest.TestCase):
         self.assertNotIn("ALARM", statuses, statuses)
         self.assertNotIn("NECK", statuses)
         self.assertEqual(got["detected"], "drain")
-        self.assertEqual(got["out"][0]["dips"], 2, "the first level needs two readings")
+        self.assertEqual(got["out"][0]["dips"], 1, "the first level needs one reading")
         self.assertAlmostEqual(got["brimStart"], got["B"], places=6, msg="the neck-entrance reading is B")
         self.assertAlmostEqual(got["priorB"], got["B"], places=6)
         p, t = got["status"]["fit"]["p"], got["P"]
@@ -3849,7 +3851,6 @@ class TestSiteTiles(unittest.TestCase):
             "out.plan = el('s-plan-check').textContent;\n"
             "el('s-go').click(); out.started = !!store.get('calib-site:active');\n"
             "out.before = el('tiles').innerHTML;\n"
-            "el('d-val').value = '10'; el('d-go').click(); el('d-val').value = '10'; el('d-go').click();\n"
             "out.t0 = el('tiles').innerHTML;\n"
             "el('t-plus').click(); out.t1 = el('tiles').innerHTML;\n"
             "el('t-plus').click(); out.t2 = el('tiles').innerHTML;\n"
@@ -3861,7 +3862,7 @@ class TestSiteTiles(unittest.TestCase):
             "const s2 = new Map(); const p2 = stub.boot(page, corePath, s2), e2 = p2.el;\n"
             "e2('s-tank').value = 't2'; e2('s-D').value = '1800'; e2('s-L').value = '3000';\n"
             "e2('s-dip').value = '400'; e2('s-unit').value = '200';\n"
-            "e2('s-go').click(); e2('d-val').value = '400'; e2('d-go').click(); e2('d-val').value = '400'; e2('d-go').click();\n"
+            "e2('s-go').click();\n"
             "out.n0 = e2('tiles').innerHTML;\n"
             "e2('t-plus').click(); e2('t-plus').click(); out.n1 = e2('tiles').innerHTML;\n"
             "console.log(JSON.stringify(out));"
@@ -3869,8 +3870,8 @@ class TestSiteTiles(unittest.TestCase):
         self.assertEqual(got["empty"], [True, "calib site"], "no campaign: no tile row")
         self.assertEqual(got["plan"], "3 batches · 1200 L = nominal ✓ · symmetric ✓")
         self.assertTrue(got["started"])
-        self.assertIn("no level", got["before"])
-        self.assertIn("no prediction (the first level)", got["before"])
+        self.assertIn("First level recorded", got["before"], "the start level is decided at once")
+        self.assertNotIn("no level", got["before"])
         t0 = self._tile(got["t0"])
         self.assertEqual((t0["cur"], t0["pred"], t0["width"]),
                          ("10.0", "368.9", "0.0"), "the plan batch is 2 cans of 200 L")
@@ -3919,7 +3920,7 @@ class TestSiteTiles(unittest.TestCase):
             "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
             "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
             "el('s-go').click(); out.first = el('tiles').innerHTML;\n"
-            "el('d-val').value = '400'; el('d-go').click(); out.good = el('tiles').innerHTML;\n"
+            "out.good = out.first;\n"
             "el('t-plus').click(); out.tapped = el('tiles').innerHTML;\n"
             "el('p-go').click(); out.batch = el('tiles').innerHTML;\n"
             "const pred = /class=\"num pred\">([^<]*)</.exec(out.batch)[1];\n"
@@ -3932,10 +3933,9 @@ class TestSiteTiles(unittest.TestCase):
             "tap(); out.otherTab = scrolled;\n"
             "console.log(JSON.stringify(out));"
         )
-        self.assertEqual(self._mark(got["first"]), [("warn", "↻ again")],
-                         "the start reading asks for a second reading")
-        self.assertEqual(self._mark(got["good"]), [("ok", "✓ good")])
-        self.assertIn("Reading confirmed", got["good"], "the tooltip names the verdict")
+        self.assertEqual(self._mark(got["first"]), [("ok", "✓ good")],
+                         "the start reading is accepted on one reading")
+        self.assertIn("First level recorded", got["good"], "the tooltip names the verdict")
         self.assertEqual(self._mark(got["tapped"]), [("ok", "✓ good")], "the mark stays while the cans are tapped")
         self.assertEqual(self._mark(got["batch"]), [], "Batch done: the new level has no reading yet")
         self.assertEqual(self._mark(got["miss"]), [("warn", "↻ again")], "a miss asks for another dip")
@@ -3957,13 +3957,17 @@ class TestSiteTiles(unittest.TestCase):
             "el('s-dip').value = '1800'; el('sB-dip').value = '400'; el('s-unit').value = '200';\n"
             "el('s-go').click();\n"
             "out.start = el('tiles').innerHTML;\n"
-            "el('d-val').value = '1800'; el('d-go-a').click(); out.a = el('tiles').innerHTML;\n"
+            "el('t-plus').click(); el('p-go').click(); out.batch = el('tiles').innerHTML;\n"
+            "el('d-val').value = '1000'; el('d-go-a').click(); out.a1 = el('tiles').innerHTML;\n"
+            "el('d-val').value = '1000'; el('d-go-a').click(); out.a = el('tiles').innerHTML;\n"
             "console.log(JSON.stringify(out));"
         )
-        self.assertEqual(self._mark(got["start"]), [("warn", "↻ again"), ("warn", "↻ again")],
-                         "both start readings wait for a second reading")
-        self.assertEqual(self._mark(got["a"]), [("ok", "✓ good"), ("warn", "↻ again")],
-                         "each tile has its own mark: A is decided, B still waits")
+        self.assertEqual(self._mark(got["start"]), [("ok", "✓ good"), ("ok", "✓ good")],
+                         "both start readings are accepted on one reading")
+        self.assertEqual(self._mark(got["batch"]), [], "Batch done: the new levels have no reading yet")
+        self.assertEqual(self._mark(got["a1"]), [("warn", "↻ again")], "A's first reading asks for another")
+        self.assertEqual(self._mark(got["a"]), [("ok", "✓ learning")],
+                         "each tile has its own mark: A is decided, B has no reading yet")
 
     def test_page_tiles_pending_batch_and_the_waiting_ring(self):
         """A batch waiting for its dip: a full track and the expected dip.
@@ -4121,7 +4125,7 @@ class TestSiteTiles(unittest.TestCase):
             "// A transfer shares the tally: both tanks label the plan's batch, or neither does.\n"
             "const t = new core.TransferSession({D: 1800, Lest: 3000, direction: 'transfer', pourUnit: 200},\n"
             "  {tank: 'B', D: 1800, Lest: 3000, direction: 'fill', pourUnit: 200});\n"
-            "t.start('?', 1800, '?', 400); t.dipBoth(1800, 400);\n"
+            "t.start('?', 1800, '?', 400);\n"
             "t.tap(1, 200);\n"
             "out.transfer = t.tiles();\n"
             "console.log(JSON.stringify(out));"
@@ -4301,7 +4305,7 @@ class TestSiteFinish(unittest.TestCase):
             "out.reopened = { fin: !!back.finished, why: back.tileView().why, csv: back.toRawCsv() };\n"
             "// No accepted level: nothing to close.\n"
             "const e = new core.Session({D: 1800, Lest: 3000, direction: 'fill'});\n"
-            "e.start('?', 1000);\n"
+            "e.start('?', 1000); e.dip(1005);   // a re-opened start level waits again\n"
             "out.noLevel = (() => { try { e.finish(1); return null; } catch (x) { return x.message; } })();\n"
             "console.log(JSON.stringify(out));"
         )
@@ -4337,7 +4341,7 @@ class TestSiteFinish(unittest.TestCase):
         got = _node(
             "const t = new core.TransferSession({D: 1800, Lest: 3000, direction: 'drain', pourUnit: 200},\n"
             "  {tank: 'B', D: 1800, Lest: 3000, direction: 'fill', pourUnit: 200});\n"
-            "t.start('?', 1800, '?', 400); t.dipBoth(1800, 400);\n"
+            "t.start('?', 1800, '?', 400);\n"
             "t.tap(1, 200); t.tap(2, 200); t.closeBatch(); t.dipBoth(1700, 500); t.dipBoth(1700, 500);\n"
             "const out = { pending: t.pendingTank() };\n"
             "t.out.finish(3);\n"
@@ -4373,8 +4377,10 @@ class TestSiteFinish(unittest.TestCase):
             "let p = stub.boot(page, corePath, store), el = p.el;\n"
             "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
             "el('s-dip').value = '1000'; el('s-unit').value = '200'; el('s-go').click();\n"
+            "el('d-val').value = '1005'; el('d-go').click();   // re-open the start level: it waits again\n"
             "out.noLevel = { disabled: el('now-fin-a').disabled, label: el('now-fin-a').textContent, title: el('now-fin-a').title };\n"
             "el('d-val').value = '1000'; el('d-go').click();\n"
+            "if (el('now-fin-a').disabled) { el('d-val').value = '1000'; el('d-go').click(); }\n"
             "out.ready = { disabled: el('now-fin-a').disabled, label: el('now-fin-a').textContent };\n"
             "el('now-fin-a').click();\n"
             "out.fin = { banner: el('fin-banner').textContent, hidden: el('fin-banner')._classes.has('hidden'),\n"

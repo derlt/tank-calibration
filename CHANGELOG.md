@@ -34,6 +34,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **The first level needs one reading, not two.** The start level is accepted
+  on one reading (*First level recorded*) and the first pour is tested against
+  it; a second dip still re-opens it. The setup notes, the help and the docs
+  say so. An unknown pour and a blunt prediction still ask for two readings.
+
 - **Cloud: far fewer requests, less battery.** The page asked every 10 s (the
   campaign and the timer), every 3 s while a timer ran and for 2 minutes after
   each new version. Now: at once when the page comes into view, then every

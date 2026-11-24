@@ -1405,7 +1405,9 @@
         });
         setState("overflow"); L.verdict = verdict; this._refit(); return verdict;
       }
-      if (nd < 2) {
+      // The first level is taken as one reading, before any pour: the first
+      // pour is then tested against it.  Any other level here needs a repeat.
+      if (nd < 2 && !L.start) {
         Object.assign(verdict, {
           status: "REDIP", color: "warn", title: "Second reading needed",
           message: `No prediction can test ${why}. Only a repeat reading can.`,
@@ -1414,8 +1416,9 @@
         setState("pending"); L.verdict = verdict; return verdict;
       }
       Object.assign(verdict, {
-        status: "ACCEPT", color: "ok", title: "Reading confirmed",
-        message: `Two readings agree within ${fmt(a.spread, 1)} mm. Adopted ${fmt(a.H, 1)} mm.`,
+        status: "ACCEPT", color: "ok", title: nd < 2 ? "First level recorded" : "Reading confirmed",
+        message: nd < 2 ? `Adopted ${fmt(a.H, 1)} mm (one reading: the first pour is tested against it).`
+          : `Two readings agree within ${fmt(a.spread, 1)} mm. Adopted ${fmt(a.H, 1)} mm.`,
         advice: nextStep(cfg),
       });
       if (L.start && L.entrance) {
