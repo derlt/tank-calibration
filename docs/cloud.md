@@ -37,7 +37,8 @@ browser first, and it works without a network.
    **Upload as a new cloud campaign** puts your copy in this workspace.
 5. On another device, log in to the same workspace, press **Sync now**, and
    **Open** the campaign. That device follows the campaign: while the page is
-   in view, it asks every 10 s, and at once when it comes back into view, and
+   in view, it asks at once when it comes back into view, then every 30 s (every
+   10 s for a minute after a newer version came in), and
    gets the newer version while it has no changes of its own. A question that
    finds nothing new sends no campaign data.
 
@@ -139,7 +140,7 @@ another device says *Started by Binh.*
 | What | How |
 |---|---|
 | Upload | At once after the change, with keepalive when the page is hidden. |
-| Follow | Every 10 s; every 3 s while a fill timer runs. A question that finds nothing new sends no timer. |
+| Follow | At once when the page comes into view; then every 30 s, every 10 s while a fill timer runs. A hidden page asks nothing. A question that finds nothing new sends no timer. |
 | Two changes at once | The later change wins (by the time of the change, not of the upload). An offline stop that comes in late does not undo a newer start. |
 | Clocks | Every timer answer has the server's clock. Each device turns the start time into its own clock, so phones whose clocks differ by some seconds ring together. |
 | Campaign data | None. A timer change is no new version: it never gives a merge, a conflict or an upload of the campaign. |
@@ -211,11 +212,10 @@ enough for about 30 devices.
 
 Free plan limits (2026): Workers 100 000 requests per day; D1 5 GB, 5 million
 row reads and 100 000 row writes per day. One device that follows a campaign
-makes about 2 requests per minute, and every 3 s for 2 minutes after a newer
-version from another device came in (about 20 per minute in that window).
-While a fill timer runs, each device asks for the timer every 3 s (about 20
-per minute): a device that runs timers for 10 hours makes about 12 000
-requests a day.
+makes about 4 requests per minute while in view (none while hidden), and
+12 per minute for a minute after a newer version from another device came in.
+While a fill timer runs, each device asks for the timer every 10 s (6 per
+minute): a device that runs timers for 10 hours makes about 3 600 requests a day.
 
 ## Firewall (Cloudflare zone)
 

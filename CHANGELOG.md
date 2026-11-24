@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Cloud: far fewer requests, less battery.** The page asked every 10 s (the
+  campaign and the timer), every 3 s while a timer ran and for 2 minutes after
+  each new version. Now: at once when the page comes into view, then every
+  30 s; every 10 s while a fill timer runs or for a minute after a new
+  version; nothing while the page is hidden.
+
 ### Fixed
 
 - **Cloud: the iPhone timer stopped after Shortcuts.** With the iPhone timer

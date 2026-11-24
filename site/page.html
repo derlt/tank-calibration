@@ -1398,15 +1398,34 @@
       Promise.resolve().then(fn).catch((e) => { $("c-err").textContent = e.message; console.error(e); }).then(() => render());
     };
   }
-  function cloudTick() {
+  // Ask the cloud only when it can matter.  A hidden page asks nothing.  The
+  // events that bring the page back (focus, visible, online, a tap on Sync)
+  // ask at once; between them the page asks slowly: every 30 s while idle,
+  // every 10 s while a fill timer runs (a stop or +20 s from another device
+  // must come in before the alarm), and for 1 minute after a newer version
+  // came in (the team takes turns).  Retries of a failed upload: every 10 s.
+  const IDLE_EVERY = 30000, ACTIVE_EVERY = 10000, FOLLOW_FOR = 60000;
+  let lastTimerAt = 0, lastPollAt = 0, lastPushAt = 0;
+  function cloudTick(force) {
     if (!CL || !CL.loggedIn()) return;
     if (typeof navigator !== "undefined" && navigator.onLine === false) return;
-    timerTick();
-    if (CL.state() === "dirty" || CL.waiting().length) { cloudSync(); return; }
+    const now = Date.now();
+    force = force === true || force === "now";
+    const timerBusy = !!(T.pour || CL.timerWaits());
+    if (force || now - lastTimerAt >= (timerBusy ? ACTIVE_EVERY : IDLE_EVERY)) {
+      lastTimerAt = now;
+      if (!CL.tmBusy) timerTick();   // focus and visibilitychange come together: one request
+    }
+    if (CL.state() === "dirty" || CL.waiting().length) {
+      if (force || now - lastPushAt >= ACTIVE_EVERY) { lastPushAt = now; cloudSync(); }
+      return;
+    }
     // Follow the cloud only while nothing is half typed: an open note edit stays.
     if (!S || !CL.link() || editRow != null) return;
     if (typeof document !== "undefined" && document.hidden) return;
-    if (polling) return;   // focus and visibilitychange often come together: one poll
+    if (!force && now - lastPollAt < (now < followUntil ? ACTIVE_EVERY : IDLE_EVERY)) return;
+    lastPollAt = now;
+    if (polling) return;
     polling = true;
     CL.poll(applyCloud).then((c) => {
       if (!c) return;
@@ -1415,13 +1434,9 @@
     }).catch((e) => console.error(e)).then(() => { polling = false; });
   }
   let polling = false;
-  // Someone else writes into this campaign: the team takes turns (counts,
-  // then dips), so the next turn comes soon.  For 2 minutes after a newer
-  // version came in, the page asks every 3 s instead of every 10 s: the
-  // next writer then starts from the newest copy, and a conflict is rarer.
-  // 20 requests a minute per device; a poll that finds nothing sends no
-  // campaign data.
-  const FOLLOW_EVERY = 3000, FOLLOW_FOR = 120000;
+  // Someone else writes into this campaign: the team takes turns, so for a
+  // minute after a newer version came in the page asks every 10 s instead of
+  // every 30 s.  A poll that finds nothing sends no campaign data.
   let followUntil = 0;
   function followFast() { followUntil = Date.now() + FOLLOW_FOR; }
   function stamp(ms) { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${C.clock(ms)}`; }
@@ -1510,7 +1525,7 @@
       const st = CL.state();
       if (S && (st === "none" || st === "elsewhere" || st === "gone")) { CL.linkNew(); await cloudSync(); await refreshList(); }
     }));
-    $("c-sync").addEventListener("click", cloudDo(async () => { await cloudSync(); cloudTick(); await refreshList(); }));
+    $("c-sync").addEventListener("click", cloudDo(async () => { await cloudSync(); cloudTick("now"); await refreshList(); }));
     $("c-take").addEventListener("click", cloudDo(async () => {
       // My copy goes to the archive with its conflicted link: opened again,
       // it shows the same choice, and never overwrites the cloud copy.
@@ -1545,7 +1560,7 @@
         cloudMsg = ""; tab = "live";
       })();
     });
-    if (window.addEventListener) window.addEventListener("online", () => { cloudTick(); });
+    if (window.addEventListener) window.addEventListener("online", () => { cloudTick(true); });
     // The page goes out of view (the phone locks, Shortcuts opens, another
     // app): upload now, not after the 1.5 s wait, or the change waits until
     // the page is open again.  keepalive lets the upload finish after the
@@ -1558,11 +1573,11 @@
       cloudSync({ keepalive: true });
     };
     if (document.addEventListener) {
-      document.addEventListener("visibilitychange", () => { if (document.hidden) flush(); else cloudTick(); });
+      document.addEventListener("visibilitychange", () => { if (document.hidden) flush(); else cloudTick(true); });
     }
     if (window.addEventListener) {
       window.addEventListener("pagehide", flush);
-      window.addEventListener("focus", () => cloudTick());
+      window.addEventListener("focus", () => cloudTick(true));
     }
   }
 
@@ -4920,11 +4935,8 @@
   // within about 10 s.  A poll that finds nothing sends no campaign data.
   // After a newer version from another device: every 3 s for 2 minutes.
   if (CL) {
-    setInterval(cloudTick, 10000);
-    // While a fill timer runs, the timer alone every 3 s: a stop or +20 s on
-    // another device must come in before the alarm.
-    setInterval(() => { if (Date.now() < followUntil) cloudTick(); else if (T.pour || CL.timerWaits()) timerTick(); }, FOLLOW_EVERY);
-    cloudTick();
+    setInterval(() => cloudTick(false), 10000);
+    cloudTick(true);
   }
 })();
 </script>

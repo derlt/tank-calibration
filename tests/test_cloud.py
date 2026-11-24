@@ -956,7 +956,7 @@ class TestStress(unittest.TestCase):
             "  const q = pick(4);\n"
             "  if (q === 0) { d.doc.hidden = true; d.doc.fire('visibilitychange'); await settle(d); d.doc.hidden = false; d.doc.fire('visibilitychange'); await settle(d); }\n"
             "  else if (q === 1) d.on = !d.on;\n"
-            "  else if (q === 2) { const t = d.iv.find((x) => x.ms === 10000); if (t) t.fn(); await new Promise((r) => setTimeout(r, 10)); await settle(d); }\n"
+            "  else if (q === 2) { d.doc.fire('visibilitychange'); await new Promise((r) => setTimeout(r, 10)); await settle(d); }\n"
             "  else { const s2 = await sync(d); check(d, i, s2); if (s2 && s2.conflict) { conflicts.push(['sync', link(d.st).conflict.why || 'none']); await take(d); } }\n"
             "};\n"
             "const counter = async (d) => {\n"                            # taps, Batch done, a recount
@@ -1454,29 +1454,30 @@ class TestPage(unittest.TestCase):
             f"const pb = stub.boot({json.dumps((ROOT / 'site' / 'page.html').as_posix())}, {json.dumps((ROOT / 'site' / 'site_core.js').as_posix())}, s2,\n"
             "  Object.assign(dev('10.0.0.2'), { Date: FD, setInterval: (fn, ms) => { iv.push({ fn, ms }); return iv.length; } })), b = pb.el;\n"
             "out.timers = iv.map((x) => x.ms);\n"
-            "const fast = () => iv.find((x) => x.ms === 3000).fn(), slow = () => iv.find((x) => x.ms === 10000).fn();\n"
+            "const tick = () => iv.find((x) => x.ms === 10000).fn();\n"
             "await login(a, 'An'); start(a); a('c-sync').click(); await settled(s1);\n"
             "await login(b, 'Binh'); const id = link(s1).id;\n"
             "openCloud(b, id); await until(() => link(s2) && link(s2).id === id);\n"
             "b('t-unit').value = '200';   // the can size on B's device too\n"
             "const dipA = async (v) => { a('d-val').value = String(v); a('d-go').click(); a('c-sync').click(); await settled(s1); };\n"
             "const seen = () => link(s2).version;\n"
-            # nothing new came in yet: the 3 s timer does not ask
-            "await dipA(101); fast(); await new Promise((r) => setTimeout(r, 50));\n"
+            # right after the first look: an idle page does not ask again for 30 s
+            "tick(); await new Promise((r) => setTimeout(r, 50));\n"
+            "await dipA(101); tick(); await new Promise((r) => setTimeout(r, 50));\n"
             "out.quiet = seen() < link(s1).version;\n"
-            "slow(); await until(() => seen() === link(s1).version);\n"
-            # a new version came in: now every 3 s
-            "await dipA(102); fast(); out.fast = await until(() => seen() === link(s1).version);\n"
-            # 2 minutes later: back to 10 s
-            "skew = 121000;\n"
-            "await dipA(103); fast(); await new Promise((r) => setTimeout(r, 50));\n"
+            "skew = 31000; tick(); await until(() => seen() === link(s1).version);\n"
+            # a new version came in: for a minute, every 10 s
+            "skew = 42000; await dipA(102); tick(); out.fast = await until(() => seen() === link(s1).version);\n"
+            # the minute is over, the look finds nothing; 11 s later the idle page waits
+            "skew = 110000; tick(); await new Promise((r) => setTimeout(r, 50));\n"
+            "await dipA(103); skew = 121000; tick(); await new Promise((r) => setTimeout(r, 50));\n"
             "out.after = seen() < link(s1).version;\n"
         )
-        self.assertIn(3000, got["timers"])
+        self.assertNotIn(3000, got["timers"], "no 3 s timer any more")
         self.assertIn(10000, got["timers"])
-        self.assertTrue(got["quiet"], "no new version yet: the 3 s timer does not ask")
-        self.assertTrue(got["fast"], "after a new version: the 3 s timer asks")
-        self.assertTrue(got["after"], "after 2 minutes: the 10 s timer only")
+        self.assertTrue(got["quiet"], "idle: no look 10 s after the last one")
+        self.assertTrue(got["fast"], "after a new version: every 10 s")
+        self.assertTrue(got["after"], "after the minute: back to every 30 s")
 
     def test_the_fill_timer_runs_and_rings_on_both_devices(self):
         page = (ROOT / "site" / "page.html").as_posix()
