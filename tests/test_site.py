@@ -3700,7 +3700,10 @@ class TestSitePlan(unittest.TestCase):
         self.assertFalse(got["hidden"])
         self.assertEqual(got["head"], "Batch 300 L · 1/2", "the batch size, then its number in the group")
         self.assertEqual(got["ptally"][0], '<span class="pips"><i class="now"></i><i class=""></i></span>'
-                         '<span class="pgrp">group 1/5</span>', "a pip per batch of the group, then the group")
+                         '<span class="pgrp"><i class="now" style="flex:300 1 0"><b style="width:0.0%"></b></i>'
+                         '<i class="" style="flex:600 1 0"></i><i class="" style="flex:800 1 0"></i>'
+                         '<i class="" style="flex:600 1 0"></i><i class="" style="flex:300 1 0"></i></span>',
+                         "a pip per batch of the group, then a segment per group as wide as its batch size")
         self.assertEqual(got["ptally"][1], "Group 1 of 5: 0 of 2 batches done")
         self.assertEqual(got["unit0"], "200", "the batch starts with its largest can")
         self.assertEqual(got["target"], "0 / 2 cans · 0 L", "the plan's batch is two cans: 200 + 100 L")

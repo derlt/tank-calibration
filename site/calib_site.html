@@ -324,17 +324,23 @@
   .plan-row button { min-height: 2.3rem; min-width: 2.3rem; padding: 0.2rem 0.5rem; }
   #s-plan-check.ok { color: var(--ok); font-weight: 650; }
   .plan-live { margin: 0; }
-  /* The group tally on the batch line: one pip per batch of the group in
-     work (done filled, the one in work ringed), then the group's number
-     among the groups.  A long group (over 16) is a thin bar instead. */
-  .ptally { display: inline-flex; align-items: center; gap: 0.45rem; min-width: 0; }
-  .ptally .pips { display: inline-flex; flex-wrap: wrap; gap: 3px; max-width: 9.5rem; }
-  .ptally .pips > i { width: 0.45rem; height: 0.45rem; border-radius: 50%; background: var(--todo-bg); box-shadow: inset 0 0 0 1px var(--todo); }
+  /* The tally on the batch line: one pip per batch of the group in work
+     (done filled, the one in work ringed), then a thin strip of the groups,
+     each segment as wide as its batch size (done filled, the group in work
+     filled up to its batches done, outlined).  A long group (over 16) is a
+     thin bar instead of pips. */
+  .ptally { display: inline-flex; align-items: center; gap: 0.4rem; min-width: 0; }
+  .ptally .pips { display: inline-flex; flex-wrap: wrap; gap: 2px; max-width: 8rem; }
+  .ptally .pips > i { width: 0.38rem; height: 0.38rem; border-radius: 50%; background: var(--todo-bg); box-shadow: inset 0 0 0 1px var(--todo); }
   .ptally .pips > i.done { background: var(--info); box-shadow: none; }
   .ptally .pips > i.now { background: var(--info-bg); box-shadow: inset 0 0 0 1.5px var(--info); }
-  .ptally .pbar { width: 4rem; height: 0.35rem; border-radius: 999px; background: var(--todo-bg); overflow: hidden; }
+  .ptally .pbar { width: 3.5rem; height: 0.3rem; border-radius: 999px; background: var(--todo-bg); overflow: hidden; }
   .ptally .pbar > i { display: block; height: 100%; background: var(--info); }
-  .ptally .pgrp { font: 600 0.72rem var(--mono); color: var(--muted); white-space: nowrap; }
+  .ptally .pgrp { display: inline-flex; gap: 2px; width: 4rem; height: 0.3rem; }
+  .ptally .pgrp > i { min-width: 2px; border-radius: 1px; background: var(--todo-bg); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; }
+  .ptally .pgrp > i.done { background: var(--info); box-shadow: none; opacity: 0.55; }
+  .ptally .pgrp > i.now { box-shadow: inset 0 0 0 1px var(--info); }
+  .ptally .pgrp > i.now > b { display: block; height: 100%; background: var(--info); }
   .sizes { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem; }
   .sizes button { min-height: 2.3rem; padding: 0.2rem 0.7rem; font-size: 0.9rem; background: var(--surface); color: var(--brand-ink); }
   .sizes button[aria-pressed=true] { background: var(--brand); color: #fff; }
@@ -2411,7 +2417,6 @@
     "Batch {0} L": "Mẻ {0} L",
     "Batch ≈ {0} L": "Mẻ ≈ {0} L",
     "{0}/{1}": "{0}/{1}",
-    "group {0}/{1}": "nhóm {0}/{1}",
     "Group {0} of {1}: {2} of {3} batches done": "Nhóm {0}/{1}: xong {2}/{3} mẻ",
     "{0} of {1} batches done": "Xong {0}/{1} mẻ",
     "{0}/{1} (plan {2})": "{0}/{1} (kế hoạch {2})",
@@ -9007,7 +9012,7 @@
         : adv && adv.target > 0 ? `Batch ≈ ${f(adv.target, 0)} L` : "";
     $("t-plan").classList.toggle("hidden", !head && !vw);
     $("t-plan-head").textContent = head;
-    renderPlanTally(b);
+    renderPlanTally(st);
     const chip = $("t-warn"), text = $("t-warn-text");
     const open = !!vw && warnOpen === vw.chip;
     for (const tone of ["bad", "warn"]) {
@@ -9046,12 +9051,14 @@
   }
 
   /**
-   * The group tally beside the batch line: a pip per batch of the group in
-   * work (done, in work, to come) and `group 2/5` when the plan has more
-   * than one group.  Hidden without a plan and when the plan is complete.
+   * The tally beside the batch line: a pip per batch of the group in work
+   * (done, in work, to come), then a thin strip of the plan's groups, each
+   * as wide as its batch size, when the plan has more than one group.  A
+   * group the recount dropped (no batch) has no segment.  Hidden without a
+   * plan and when the plan is complete.
    */
-  function renderPlanTally(b) {
-    const el = $("t-plan-tally");
+  function renderPlanTally(st) {
+    const el = $("t-plan-tally"), b = st && st.batch;
     el.classList.toggle("hidden", !b);
     if (!b) { el.innerHTML = ""; el.setAttribute("aria-label", ""); return; }
     const done = b.inGroup - 1;
@@ -9062,7 +9069,17 @@
       for (let i = 1; i <= b.count; i++) marks += `<i class="${i < b.inGroup ? "done" : i === b.inGroup ? "now" : ""}"></i>`;
       marks += "</span>";
     }
-    const grp = b.groups > 1 ? `<span class="pgrp">group ${b.number}/${b.groups}</span>` : "";
+    let grp = "";
+    if (b.groups > 1) {
+      grp = '<span class="pgrp">';
+      st.groups.forEach((g, i) => {
+        if (!(g.count > 0)) return;
+        const cls = i < b.group ? "done" : i === b.group ? "now" : "";
+        const fill = i === b.group ? `<b style="width:${(100 * g.done / g.count).toFixed(1)}%"></b>` : "";
+        grp += `<i class="${cls}" style="flex:${g.size} 1 0">${fill}</i>`;
+      });
+      grp += "</span>";
+    }
     el.innerHTML = marks + grp;
     el.setAttribute("aria-label", b.groups > 1
       ? `Group ${b.number} of ${b.groups}: ${done} of ${b.count} batches done`

@@ -248,7 +248,7 @@ explanation. **Simple** shows only what to do and the numbers to read:
 - the level, and where the batch in the pour panel lands:
   `After 400 L: 531.4 ± 2.3 mm`;
 - the batch line (`Batch 800 L · 3/8`, then a pip per batch of the group in
-  work and `group 2/5`) and every warning (brim, bottom,
+  work and a thin strip of the groups, each as wide as its batch size) and every warning (brim, bottom,
   overflow, drift alarm);
 - a short settle line (`Settling: 3:20 left.`, `Settled: dip now.`) and the
   expected level in the dip panel (`Expect 572.8 ± 3.3 mm`);
