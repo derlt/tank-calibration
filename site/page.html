@@ -324,31 +324,27 @@
   .plan-row button { min-height: 2.3rem; min-width: 2.3rem; padding: 0.2rem 0.5rem; }
   #s-plan-check.ok { color: var(--ok); font-weight: 650; }
   .plan-live { margin: 0; }
-  /* The plan's tally: two thin lines under the batch text.  The first is
-     the groups, one separate block each, as wide as the litres of the group
-     (batch size × batches), the batch size under it: done faded, to come
-     hollow, the group in work tinted and ringed.  The second is the batches
-     of the group in work, one pip each (done filled, the one in work ◉, the
-     rest hollow) in a soft pill of the same tint, under the group and
-     joined to it by a small notch.  A group of more than 16 batches is a
-     thin bar in the pill; a plan with one group has the pill alone. */
-  .ptally { margin: 0.4rem 0 0; }
-  .ptally .pgs { display: flex; gap: 4px; align-items: flex-start; }
-  .ptally .pgc { position: relative; display: flex; flex-direction: column; min-width: 6px; }
-  .ptally .pgc > i { display: block; height: 0.5rem; border-radius: 3px; background: var(--todo-bg); box-shadow: inset 0 0 0 1px var(--todo); }
-  .ptally .pgc.done > i { background: var(--info); opacity: 0.55; box-shadow: none; }
-  .ptally .pgc.now > i { background: var(--info-bg); box-shadow: inset 0 0 0 1.5px var(--info); }
-  .ptally .pgc > span { margin-top: 2px; text-align: center; overflow: hidden; white-space: nowrap; font: 600 0.58rem/0.8rem var(--mono); color: var(--todo); }
+  /* The plan's tally: one row under the batch text.  Every batch of the
+     plan is a dot of the same size, and the dots stretch to the width of
+     the card.  A group is its dots with a thin line under them and the batch
+     size under the line: the line is faded blue when the group is done, blue
+     for the group in work, grey for the groups to come.  A dot is filled
+     when its batch is done, ◉ for the batch in work, hollow for the batches
+     to come. */
+  .ptally { margin: 0.45rem 0 0; }
+  .ptally .pgs { display: flex; gap: 5px; align-items: flex-start; }
+  .ptally .pgc { display: flex; flex-direction: column; min-width: 0; }
+  .ptally .pgc > .c { display: flex; align-items: center; height: 1.1rem; padding: 0 1px; }
+  .ptally .pgc > .c > i { flex: 1 1 0; min-width: 0; display: flex; justify-content: center; }
+  .ptally .pgc > .c > i > b { display: block; width: 100%; max-width: 0.7rem; aspect-ratio: 1; border-radius: 50%; box-sizing: border-box; box-shadow: inset 0 0 0 1px var(--todo); }
+  .ptally .pgc.done > .c > i > b { background: var(--info); box-shadow: none; opacity: 0.5; }
+  .ptally .pgc.now > .c > i.done > b { background: var(--info); box-shadow: none; }
+  .ptally .pgc > .c > i.now > b { background: radial-gradient(circle, var(--info) 0 30%, transparent 33%); box-shadow: inset 0 0 0 1.5px var(--info); }
+  .ptally .pgc > span { position: relative; margin-top: 2px; padding-top: 3px; text-align: center; overflow: hidden; white-space: nowrap; font: 600 0.58rem/0.8rem var(--mono); color: var(--todo); }
+  .ptally .pgc > span::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; border-radius: 2px; background: var(--line); }
+  .ptally .pgc.done > span::before { background: var(--info); opacity: 0.5; }
   .ptally .pgc.now > span { color: var(--info); }
-  .ptally .pgc.now::after { content: ""; position: absolute; left: 50%; bottom: -0.38rem; width: 0.45rem; height: 0.45rem; margin-left: -0.225rem; background: var(--info-bg); transform: rotate(45deg); border-radius: 1px; }
-  .ptally .gpill { display: flex; align-items: center; width: max-content; max-width: 100%; margin-top: 0.3rem; background: var(--info-bg); border-radius: 999px; padding: 0.18rem 0.45rem; position: relative; }
-  .ptally .pips { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px; }
-  .ptally .pips > i { width: 0.38rem; height: 0.38rem; border-radius: 50%; background: var(--card); box-shadow: inset 0 0 0 1px var(--todo); }
-  .ptally .pips > i.done { background: var(--info); box-shadow: none; }
-  /* The batch in work is ◉: a ring with a dot in its middle, a little larger. */
-  .ptally .pips > i.now { width: 0.62rem; height: 0.62rem; background: radial-gradient(circle, var(--info) 0 30%, transparent 33%); box-shadow: inset 0 0 0 1.5px var(--info); }
-  .ptally .pbar { width: 3.5rem; height: 0.3rem; border-radius: 999px; background: var(--card); overflow: hidden; }
-  .ptally .pbar > i { display: block; height: 100%; background: var(--info); }
+  .ptally .pgc.now > span::before { background: var(--info); }
   .sizes { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem; }
   .sizes button { min-height: 2.3rem; padding: 0.2rem 0.7rem; font-size: 0.9rem; background: var(--surface); color: var(--brand-ink); }
   .sizes button[aria-pressed=true] { background: var(--brand); color: #fff; }
@@ -3556,44 +3552,30 @@
   }
 
   /**
-   * The plan's tally under the batch text.  With more than one group, a line
-   * of blocks, one per group, as wide as its litres (batch size × batches),
-   * the batch size under it; a group the recount dropped (no batch) has no
-   * block.  Then the batches of the group in work, a pip each, in a pill
-   * under that group (the notch joins them).  Hidden without a plan and when
-   * the plan is complete.
+   * The plan's tally under the batch text: a dot per batch of the plan, the
+   * same size for all, grouped by the plan's groups (each as wide as its
+   * batches), the batch size under each group.  A group the recount dropped
+   * (no batch) has no dots.  The group in work shows its done batches, ◉ for
+   * the batch in work and the rest hollow; earlier groups are done, later
+   * ones to come.  Hidden without a plan and when the plan is complete.
    */
   function renderPlanTally(st) {
     const el = $("t-plan-tally"), b = st && st.batch;
     el.classList.toggle("hidden", !b);
     if (!b) { el.innerHTML = ""; el.setAttribute("aria-label", ""); return; }
     const done = b.inGroup - 1;
-    let pill, pw;
-    if (b.count > 16) { pill = `<span class="pbar"><i style="width:${(100 * done / b.count).toFixed(1)}%"></i></span>`; pw = 4.4; }
-    else {
-      pill = '<span class="pips">';
-      for (let i = 1; i <= b.count; i++) pill += `<i class="${i < b.inGroup ? "done" : i === b.inGroup ? "now" : ""}"></i>`;
-      pill += "</span>";
-      pw = (b.count - 1) * 0.505 + 0.62 + 0.9;
-    }
-    let blocks = "", total = 0, before = 0, mine = 0;
+    let out = "";
     st.groups.forEach((g, i) => {
       if (!(g.count > 0)) return;
-      const lit = g.size * g.count;
-      if (i < b.group) before += lit;
-      if (i === b.group) mine = lit;
-      total += lit;
       const cls = i < b.group ? "done" : i === b.group ? "now" : "";
-      blocks += `<div class="pgc ${cls}" style="flex:${lit} 1 0"><i></i><span>${f(g.size, 0)}</span></div>`;
+      let dots = "";
+      for (let k = 0; k < g.count; k++) {
+        const d = i === b.group ? (k < b.inGroup - 1 ? "done" : k === b.inGroup - 1 ? "now" : "") : "";
+        dots += `<i class="${d}"><b></b></i>`;
+      }
+      out += `<div class="pgc ${cls}" style="flex:${g.count} 1 0"><div class="c">${dots}</div><span>${f(g.size, 0)}</span></div>`;
     });
-    let out = "", style = "";
-    if (b.groups > 1 && total > 0) {
-      out = `<div class="pgs" aria-hidden="true">${blocks}</div>`;
-      // The pill sits under its group: centred on it, kept inside the card.
-      const mid = (100 * (before + mine / 2) / total).toFixed(2);
-      style = ` style="margin-left:clamp(0px, calc(${mid}% - ${(pw / 2).toFixed(2)}rem), calc(100% - ${pw.toFixed(2)}rem))"`;
-    }
-    el.innerHTML = out + `<div class="gpill"${style}>${pill}</div>`;
+    el.innerHTML = `<div class="pgs" aria-hidden="true">${out}</div>`;
     el.setAttribute("aria-label", b.groups > 1
       ? `Group ${b.number} of ${b.groups}: ${done} of ${b.count} batches done`
       : `${done} of ${b.count} batches done`);

@@ -3699,14 +3699,19 @@ class TestSitePlan(unittest.TestCase):
         self.assertEqual(got["err"], "")
         self.assertFalse(got["hidden"])
         self.assertEqual(got["head"], "Batch 300 L · 1/2", "the batch size, then its number in the group")
-        self.assertIn('<div class="pgs" aria-hidden="true"><div class="pgc now" style="flex:600 1 0"><i></i><span>300</span></div>'
-                      '<div class="pgc " style="flex:1200 1 0"><i></i><span>600</span></div>'
-                      '<div class="pgc " style="flex:6400 1 0"><i></i><span>800</span></div>'
-                      '<div class="pgc " style="flex:1200 1 0"><i></i><span>600</span></div>'
-                      '<div class="pgc " style="flex:600 1 0"><i></i><span>300</span></div></div>', got["ptally"][0],
-                      "a block per group as wide as its litres, the batch size under it")
-        self.assertIn('<span class="pips"><i class="now"></i><i class=""></i></span>', got["ptally"][0],
-                      "a pip per batch of the group in work, ◉ for the batch in work")
+        def dots(*states):
+            return "".join('<i class="%s"><b></b></i>' % k for k in states)
+
+        self.assertEqual(
+            got["ptally"][0],
+            '<div class="pgs" aria-hidden="true">'
+            '<div class="pgc now" style="flex:2 1 0"><div class="c">' + dots("now", "") + '</div><span>300</span></div>'
+            '<div class="pgc " style="flex:2 1 0"><div class="c">' + dots("", "") + '</div><span>600</span></div>'
+            '<div class="pgc " style="flex:8 1 0"><div class="c">' + dots(*[""] * 8) + '</div><span>800</span></div>'
+            '<div class="pgc " style="flex:2 1 0"><div class="c">' + dots("", "") + '</div><span>600</span></div>'
+            '<div class="pgc " style="flex:2 1 0"><div class="c">' + dots("", "") + '</div><span>300</span></div>'
+            '</div>',
+            "a dot per batch, the same size, a group as wide as its batches, the batch size under it; ◉ for the batch in work")
         self.assertEqual(got["ptally"][1], "Group 1 of 5: 0 of 2 batches done")
         self.assertEqual(got["unit0"], "200", "the batch starts with its largest can")
         self.assertEqual(got["target"], "0 / 2 cans · 0 L", "the plan's batch is two cans: 200 + 100 L")
