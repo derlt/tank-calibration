@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Timer settings from the timer card.** A **Timer settings** button on the
+  fill timer card opens the Settings tab at the timers. The *Timers, alarm
+  and device* card is now open by default.
 - **Lock-screen alarms by Web Push.** In the Home Screen app a switch in
   Settings sends the fill and settle alarms to the server, which sends a
   notification at each alarm, so it reaches the lock screen. A Durable Object

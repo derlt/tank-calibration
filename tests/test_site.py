@@ -1060,8 +1060,13 @@ class TestSitePage(unittest.TestCase):
             "el('pt-start').click();\n"
             "out.jump = {settings: !el('settings')._classes.has('hidden'), open: el('timers').open,"
             " err: el('tm-err').textContent, live: el('p-err').textContent};\n"
+            "// The timer card's button opens the timer settings.\n"
+            "el('timers').open = false; el('pt-settings').click();\n"
+            "out.settingsButton = {settings: !el('settings')._classes.has('hidden'), open: el('timers').open};\n"
             "console.log(JSON.stringify(out));"
         )
+        self.assertEqual(got["settingsButton"], {"settings": True, "open": True}, "the timer card's Timer settings button")
+        self.assertIn('id="timers" style="margin-top:0.8rem" open>', (SITE / "page.html").read_text(encoding="utf-8"), "open by default")
         self.assertTrue(got["noSession"]["campaign"], "no campaign card before the first level")
         self.assertTrue(got["noSession"]["timers"], "no timers before the first level")
         self.assertEqual(got["noSession"]["sr"], "0.4", "the noise card shows the defaults")

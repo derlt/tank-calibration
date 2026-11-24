@@ -593,6 +593,7 @@
             <button class="secondary small hidden" id="pt-less">−20 s</button>
             <button class="secondary small hidden" id="pt-more">+20 s</button>
             <button class="danger small hidden" id="pt-stop">Stop timer</button>
+            <button class="secondary small" id="pt-settings">Timer settings</button>
           </div>
         </div>
         <p class="muted vb" id="t-help">Start the fill timer when you start the pump. The alarm rings before the can is full: close the valve. Tap <b>+1 can poured</b> when the can is full. Emptying the can into the tank has no timer. Each can keeps the size set in Options, so one batch can mix sizes. The count is saved after each tap. One dip follows the batch.</p>
@@ -803,7 +804,7 @@
       <p class="muted">The repeatability σ comes from a repeat study: many dips at one level, without pouring. Your study at 501 mm and 1033 mm gave 0.2–0.4 mm. Every ± here means "the truth is almost surely inside" (2σ).</p>
     </div>
 
-    <details class="card" id="timers" style="margin-top:0.8rem">
+    <details class="card" id="timers" style="margin-top:0.8rem" open>
       <summary><b>Timers, alarm and device</b></summary>
       <div class="grid" style="margin-top:0.6rem">
         <label>Settle (idle) after a batch, m:ss<input id="tm-settle" placeholder="5:00"></label>
@@ -3965,6 +3966,12 @@
   }
   $("pt-page").addEventListener("click", () => { if (T.wait) startPour(T.wait, Date.now(), false); });
   $("pt-stop").addEventListener("click", () => { dropTimer(); stopAlarm(); render(); });
+  // The timer card's way to the timer settings (Settings tab, the card open).
+  $("pt-settings").addEventListener("click", () => {
+    goTab("settings");
+    $("timers").open = true;
+    if ($("timers").scrollIntoView) $("timers").scrollIntoView({ block: "start" });
+  });
   $("pt-more").addEventListener("click", () => {
     if (!T.pour) return;
     T.pour.dur += 20; T.pour.at = Date.now();
