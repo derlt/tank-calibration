@@ -379,6 +379,41 @@ class TestSitePage(unittest.TestCase):
         self.assertEqual(got["overCount"], "3 / 1 can · 400 L")
 
     @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_setup_works_out_d_and_l_from_the_nominal_and_the_brim(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "const type = (id, v) => { el(id).value = v; for (const fn of el(id)._listeners.input || []) fn({}); };\n"
+            "const read = () => [el('s-D').value, el('s-L').value];\n"
+            "type('s-nom', '10000');\n"
+            "out.nomOnly = [read(), el('s-ded').textContent];\n"
+            "type('s-brim', '1830');\n"
+            "out.both = [read(), el('s-ded').textContent];\n"
+            "// A typed D is kept; L follows it so the volume stays.\n"
+            "type('s-D', '2000');\n"
+            "out.typedD = read();\n"
+            "// A typed L is kept too: a new nominal changes neither.\n"
+            "type('s-L', '3000'); type('s-nom', '12000');\n"
+            "out.typedL = [read(), el('s-ded').textContent];\n"
+            "// Clearing D works it out again from the brim.\n"
+            "type('s-D', '');\n"
+            "out.cleared = read();\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["nomOnly"], [["", ""], ""], "the nominal alone cannot give D or L")
+        self.assertEqual(got["both"][0], ["1830", "3802"], "D is the brim, L = 4 V / (pi D^2)")
+        self.assertEqual(got["both"][1], "D = 1830 mm and L = 3802 mm are worked out from 10000 L and the brim 1830 mm."
+                         " Type in a field to change it; clear it to work it out again.")
+        self.assertEqual(got["typedD"], ["2000", "3183"], "L follows a typed D")
+        self.assertEqual(got["typedL"][0], ["2000", "3000"], "a typed L stays, whatever the nominal")
+        self.assertEqual(got["typedL"][1], "", "both typed: nothing is worked out, so no note")
+        self.assertEqual(got["cleared"][0], "1830", "a cleared D comes back from the brim")
+
+    @unittest.skipUnless(NODE, "node is not installed")
     def test_page_tally_shows_the_time_between_cans(self):
         stub = (HERE / "tests" / "page_stub.js").as_posix()
         got = _node(

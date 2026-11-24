@@ -121,6 +121,7 @@ from the phone has no worker; it needs none).
 
 | Field | What to enter |
 |---|---|
+| Nominal capacity | The tank's stated volume, L. With the brim reading it works out D and L (below); it is also the total the batch plan must reach. |
 | Diameter estimate D | Brim-to-bottom with the tape, or the drawing. |
 | D is good to ± | Your honest limit. ±200 mm is acceptable: the data take over within a few pours. |
 | Length estimate L | Outside length minus the end plates. |
@@ -136,6 +137,19 @@ from the phone has no worker; it needs none).
 | First level | The heel volume (or `?`) and the first reading. A drain also asks where the first level stands. |
 
 Every ± means "the truth is almost surely inside" (2σ).
+
+### D and L from the nominal capacity and the brim
+
+The shell is a cylinder, V = π D² L / 4, and the brim is its diameter
+(B = 2r + h0, the datum offset being 0 ± h0pm). So the nominal capacity V
+(litres) and the brim B (mm) give **D = B** and **L = 4 V / (π D²)**: 10000 L
+and a brim of 1830 mm give D = 1830 mm and L = 3802 mm. The page fills the two
+fields as soon as it has what it needs, and says so under the fields. With the
+nominal and a typed D it fills L only. D and L stay ordinary fields: type in
+one and it is kept (a typed D also moves L, so the volume stays; a typed L
+stays whatever the nominal), clear it and it is worked out again. The brim
+field is still the brim reading described below, with its ± and its effect on
+the shell: type it only when it is a measured reading.
 
 ### The brim reading
 

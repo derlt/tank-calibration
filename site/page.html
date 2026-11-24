@@ -325,6 +325,8 @@
   #p-err { margin: 0.4rem 0 0; }
   #p-err:empty { display: none; }
   /* The batch plan: one row per group in the setup, the group in work on the pour card. */
+  .ded { margin: 0.4rem 0 0; }
+  .ded:empty { display: none; }
   .plan-lab { display: block; font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; }
   .plan-row { display: flex; align-items: center; gap: 0.35rem; margin-top: 0.35rem; flex-wrap: wrap; }
   .plan-row .plan-n { width: 1.3rem; color: var(--muted); font: 600 0.85rem var(--mono); }
@@ -559,14 +561,16 @@
     <p class="muted" id="s-dir-note" style="margin-top:0"></p>
     <div class="grid">
       <label><span id="s-tank-label">Tank name</span><input id="s-tank" value="tank"></label>
+      <label><span id="s-nom-label">Nominal capacity, L</span><input id="s-nom" type="number" inputmode="decimal" placeholder="10000"></label>
+      <label>Brim reading, mm (blank = from the shell)<input id="s-brim" type="number" inputmode="decimal" step="0.5"></label>
       <label>Diameter estimate D, mm<input id="s-D" type="number" inputmode="decimal" placeholder="2480"></label>
       <label>D is good to ±, mm<input id="s-Dpm" type="number" inputmode="decimal" value="200"></label>
       <label>Length estimate L, mm<input id="s-L" type="number" inputmode="decimal" placeholder="5280"></label>
       <label>L is good to ±, mm (blank = 3 %)<input id="s-Lpm" type="number" inputmode="decimal"></label>
-      <label>Brim reading, mm (blank = from the shell)<input id="s-brim" type="number" inputmode="decimal" step="0.5"></label>
       <label>Brim is good to ±, mm (blank = 6)<input id="s-brimpm" type="number" inputmode="decimal" placeholder="6"></label>
       <label>Default can size, L<input id="s-unit" type="number" inputmode="decimal" placeholder="200"></label>
     </div>
+    <p class="muted ded" id="s-ded"></p>
     <h2 style="margin-top:0.9rem">Batch plan</h2>
     <p class="muted" style="margin-top:0">Optional. A batch is the cans of one level, then one dip. Declare the batches the campaign needs, from the first level to the last: small at the bottom and the top, the largest in the middle, and in total the nominal capacity. Without a plan the page advises each pour for a rise of about 30 mm.</p>
     <span class="plan-lab">Can sizes you have, L</span>
@@ -574,9 +578,6 @@
     <div class="row" style="margin-top:0.4rem;flex-wrap:nowrap">
       <label style="min-width:0;flex:1 1 0">Add a can size, L<input id="s-can-add" type="number" inputmode="decimal" placeholder="100"></label>
       <button class="secondary" id="s-can-go">Add</button>
-    </div>
-    <div class="grid" style="margin-top:0.5rem">
-      <label><span id="s-nom-label">Nominal capacity, L</span><input id="s-nom" type="number" inputmode="decimal" placeholder="10000"></label>
     </div>
     <p class="muted" id="s-nom-note"></p>
     <span class="plan-lab" id="s-plan-label">Batches, bottom → top</span>
@@ -605,16 +606,17 @@
       <h2 style="margin-top:0.9rem">Tank B — pour in</h2>
       <div class="grid">
         <label>Tank B name<input id="sB-tank" value="tank-b"></label>
+        <label>Tank B nominal capacity, L<input id="sB-nom" type="number" inputmode="decimal"></label>
+        <label>Brim reading, mm (blank = from the shell)<input id="sB-brim" type="number" inputmode="decimal" step="0.5"></label>
         <label>Diameter estimate D, mm<input id="sB-D" type="number" inputmode="decimal" placeholder="2480"></label>
         <label>D is good to ±, mm<input id="sB-Dpm" type="number" inputmode="decimal" value="200"></label>
         <label>Length estimate L, mm<input id="sB-L" type="number" inputmode="decimal" placeholder="5280"></label>
         <label>L is good to ±, mm (blank = 3 %)<input id="sB-Lpm" type="number" inputmode="decimal"></label>
-        <label>Brim reading, mm (blank = from the shell)<input id="sB-brim" type="number" inputmode="decimal" step="0.5"></label>
         <label>Brim is good to ±, mm (blank = 6)<input id="sB-brimpm" type="number" inputmode="decimal" placeholder="6"></label>
-        <label>Tank B nominal capacity, L (batch plan)<input id="sB-nom" type="number" inputmode="decimal"></label>
         <label>Liquid in tank B before the first batch, L (? = unknown heel)<input id="sB-step" value="?"></label>
         <label>Tank B first reading, mm<input id="sB-dip" class="big" type="number" inputmode="decimal" step="0.5"></label>
       </div>
+      <p class="muted ded" id="sB-ded"></p>
       <p class="muted">Sound the bottom of tank B and record the heel as this row (§3.3). One reading is enough for a first level.</p>
     </div>
     <div class="row" style="margin-top:0.6rem"><button id="s-go">Start campaign</button></div>
@@ -2094,6 +2096,38 @@
     $(id).addEventListener("input", () => { planDraft()[key] = num(id); planChanged(); });
   }
   for (const id of ["s-unit", "s-D", "s-L", "sB-D", "sB-L"]) $(id).addEventListener("input", () => renderPlanSetup());
+
+  // ---- the tank from its nominal volume and its brim
+  // The shell is a cylinder: V = π D² L / 4, and the brim B = 2r + h0 is its
+  // diameter (the datum offset is 0 ± h0pm).  So the nominal capacity and the
+  // brim reading give D = B and L = 4 V / (π D²).  D and L stay fields of
+  // their own: typing in one keeps it (the other follows), clearing it works
+  // it out again.
+  const TANK_FIELDS = [
+    { nom: "s-nom", brim: "s-brim", D: "s-D", L: "s-L", note: "s-ded" },
+    { nom: "sB-nom", brim: "sB-brim", D: "sB-D", L: "sB-L", note: "sB-ded" },
+  ];
+  function deduceTank(t) {
+    const V = num(t.nom), B = num(t.brim), eD = $(t.D), eL = $(t.L);
+    let dAuto = false, lAuto = false;
+    if (B > 0 && !eD.dataset.manual) { eD.value = String(Math.round(B * 10) / 10); dAuto = true; }
+    const D = num(t.D);
+    if (V > 0 && D > 0 && !eL.dataset.manual) { eL.value = String(Math.round(4e6 * V / (Math.PI * D * D))); lAuto = true; }
+    $(t.note).textContent = dAuto && lAuto
+      ? `D = ${fl(num(t.D))} mm and L = ${fl(num(t.L))} mm are worked out from ${fl(V)} L and the brim ${fl(B)} mm. Type in a field to change it; clear it to work it out again.`
+      : lAuto ? `L = ${fl(num(t.L))} mm is worked out from ${fl(V)} L and D = ${fl(D)} mm. Type in the field to change it; clear it to work it out again.`
+        : dAuto ? `D = ${fl(num(t.D))} mm is the brim reading. Add the nominal capacity to work out L.` : "";
+  }
+  for (const t of TANK_FIELDS) {
+    for (const id of [t.nom, t.brim]) $(id).addEventListener("input", () => { deduceTank(t); renderPlanSetup(); });
+    for (const id of [t.D, t.L]) {
+      $(id).addEventListener("input", () => {
+        const el = $(id);
+        if (el.value === "") delete el.dataset.manual; else el.dataset.manual = "1";
+        deduceTank(t); renderPlanSetup();
+      });
+    }
+  }
 
   /**
    * The plan part of a new campaign's config: { canSizes, plan } (and the

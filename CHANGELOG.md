@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **New campaign: D and L from the nominal capacity and the brim.** The nominal
+  capacity and the brim reading now sit at the top of the tank fields (also
+  for tank B). Type both and the page fills D = brim and L = 4 V / (π D²);
+  with the nominal and a typed D it fills L. D and L stay fields of their own:
+  type in one and it is kept (a typed D also moves L so the volume stays),
+  clear it and it is worked out again. A note under the fields says what was
+  worked out.
 - **Can tally: the time between two cans.** Under the finish-time pills, a thin
   measuring line runs from the centre of one pill to the next with the time
   between the two taps on it (`+1:50`, `+1:06:40` from an hour). It shows
