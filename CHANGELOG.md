@@ -8,12 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- **Pour card: the batch and group tally is back.** Beside the batch line
-  (`Batch 800 L · 4/8`) small pips show the batches of the group in work —
-  done filled, the one in work ◉, the rest hollow — then a thin strip of
-  the plan's groups, each segment as wide as its batch size: done groups
-  filled, the group in work filled up to its batches done. A group of more
-  than 16 batches is a thin bar. No extra row.
+- **Pour card: the batch and group tally is back.** A thin line above the
+  batch line shows `group 3/5` and a strip of the plan's groups, each segment
+  as wide as its batch size with the size under it: done groups filled, the
+  group in work outlined and filled up to its batches done. On the batch line
+  (`Batch 800 L · 4/8`), small pips show the batches of the group in work —
+  done filled, the one in work ◉, the rest hollow. A group of more than 16
+  batches is a thin bar; a plan with one group has no group line.
 
 ### Fixed
 
