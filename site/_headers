@@ -9,7 +9,7 @@
 # script does not.  Do not edit the hashes by hand.  The page also puts no
 # user text into HTML without escaping it.
 /*
-  Content-Security-Policy: default-src 'none'; script-src 'sha256-uO/+Psctv+bCBKW13kOHDga4uEN0LJlPM9BWXSJZR3I=' 'sha256-J6oUe/ZGYvaJupcZV9fwatcjDNYUWb3im/DrZfzOal4=' 'sha256-eSr6vrVYmujDMWvU0oRv2bP7JP1SVT7MlodnGeCigSg=' 'sha256-j+PYh0vB+bxaWCcJT4ZM6cip1JnO2v/sjUwOm2S1nH0=' 'sha256-jMUo1R1ltbIzJP0KUi1yy6KG02wSGi2T2bNMkLmIxqI='; style-src 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'none'; script-src 'sha256-uO/+Psctv+bCBKW13kOHDga4uEN0LJlPM9BWXSJZR3I=' 'sha256-J6oUe/ZGYvaJupcZV9fwatcjDNYUWb3im/DrZfzOal4=' 'sha256-eSr6vrVYmujDMWvU0oRv2bP7JP1SVT7MlodnGeCigSg=' 'sha256-j+PYh0vB+bxaWCcJT4ZM6cip1JnO2v/sjUwOm2S1nH0=' 'sha256-U7wPgVfSTrZb0QzaBqDERRPAmhLERMahyr0tA46CFQc='; style-src 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   X-Frame-Options: DENY

@@ -8,12 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- **Pour card: the batch and group tally is back.** On the batch line
-  (`Batch 800 L · 4/8`) each group of the plan is a small square (done
-  faded, to come hollow). The group in work opens into a soft pill with a
-  pip per batch — done filled, the one in work ◉, the rest hollow — so the
-  batches read as belonging to their group. A group of more than 16 batches
-  is a thin bar in the pill. No extra row.
+- **Pour card: the batch and group tally is back.** Two thin lines under the
+  batch text (`Batch 800 L · 4/8`). The first is the groups of the plan, one
+  separate block each, as wide as the litres of the group (batch size ×
+  batches), the batch size under it: done groups faded, groups to come
+  hollow, the group in work tinted and ringed. The second is the batches of
+  the group in work, a pip each — done filled, the one in work ◉, the rest
+  hollow — in a soft pill under that group, joined to it by a small notch. A
+  group of more than 16 batches is a thin bar in the pill; a plan with one
+  group has the pill alone.
 
 ### Fixed
 

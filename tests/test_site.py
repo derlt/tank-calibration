@@ -3699,10 +3699,14 @@ class TestSitePlan(unittest.TestCase):
         self.assertEqual(got["err"], "")
         self.assertFalse(got["hidden"])
         self.assertEqual(got["head"], "Batch 300 L · 1/2", "the batch size, then its number in the group")
-        self.assertEqual(got["ptally"][0],
-                         '<span class="gpill"><span class="pips"><i class="now"></i><i class=""></i></span></span>'
-                         '<i class="gsq"></i><i class="gsq"></i><i class="gsq"></i><i class="gsq"></i>',
-                         "the group in work is a pill of pips; the other four groups are squares")
+        self.assertIn('<div class="pgs" aria-hidden="true"><div class="pgc now" style="flex:600 1 0"><i></i><span>300</span></div>'
+                      '<div class="pgc " style="flex:1200 1 0"><i></i><span>600</span></div>'
+                      '<div class="pgc " style="flex:6400 1 0"><i></i><span>800</span></div>'
+                      '<div class="pgc " style="flex:1200 1 0"><i></i><span>600</span></div>'
+                      '<div class="pgc " style="flex:600 1 0"><i></i><span>300</span></div></div>', got["ptally"][0],
+                      "a block per group as wide as its litres, the batch size under it")
+        self.assertIn('<span class="pips"><i class="now"></i><i class=""></i></span>', got["ptally"][0],
+                      "a pip per batch of the group in work, ◉ for the batch in work")
         self.assertEqual(got["ptally"][1], "Group 1 of 5: 0 of 2 batches done")
         self.assertEqual(got["unit0"], "200", "the batch starts with its largest can")
         self.assertEqual(got["target"], "0 / 2 cans · 0 L", "the plan's batch is two cans: 200 + 100 L")
