@@ -1755,7 +1755,7 @@ class TestSitePage(unittest.TestCase):
 
         self.assertEqual(got["tally"], "Batch ≈ 200 L", "a drain names its advised batch too")
         self.assertIn("draining 200 L", got["dip"])
-        self.assertIn("drain", got["dir"])
+        self.assertIn("drain", got["dir"].lower())
         self.assertIn("at the brim (brim B = 1800.0 mm)", got["dir"])
         self.assertEqual(got["brim"], "", "no brim typed at setup")
         self.assertEqual(got["brimPm"], "6", "the brim ± is the campaign's own, 6 mm by default")
@@ -2266,7 +2266,7 @@ console.log(JSON.stringify(out));
                          "the tiles stay on Replay, read-only; the title stays")
         self.assertIn("alpha", got["shell"], "the log switch carries to the shell tab")
         self.assertIn("alpha", got["settings"]["title"])
-        self.assertIn("transfer", got["settings"]["dir"])
+        self.assertIn("transfer", got["settings"]["dir"].lower())
 
 
 @unittest.skipUnless(NODE, "node is not installed")
@@ -3704,7 +3704,7 @@ class TestSitePlan(unittest.TestCase):
                       "the planned can shows its size in its cell, hidden from the progressbar's name")
         self.assertNotIn(" · ", got["todoLab"], "the tag carries no can number")
         self.assertEqual(got["settings"], "Batch plan: 2 × 300, 2 × 600, 8 × 800, 2 × 600, 2 × 300 L"
-                         " · nominal 10000 L · cans 200, 100 L. Fixed at the start.")
+                         " · nominal 10000 L · cans 200, 100 L")
         cfg = got["cfg"]
         self.assertEqual((cfg["canSizes"], cfg["nominal"], len(cfg["plan"])), ([200, 100], 10000, 5))
         self.assertFalse(got["plain"][0], "no plan: the batch line still shows")

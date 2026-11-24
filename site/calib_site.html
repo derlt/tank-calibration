@@ -812,7 +812,6 @@
       <p class="muted" id="set-dir"></p>
       <p class="muted" id="set-plan"></p>
       <div class="row" style="margin-top:0.6rem"><button id="set-save">Save campaign settings</button></div>
-      <p class="muted">A change refits the running shell from the levels already accepted. The levels keep their state; the next check uses the new values.</p>
       <p id="set-msg" class="muted"></p>
       <p id="set-err" class="error"></p>
     </details>
@@ -830,7 +829,6 @@
       <p class="muted" id="set-noise-note"></p>
       <p id="set-noise-msg" class="muted"></p>
       <p id="set-noise-err" class="error"></p>
-      <p class="muted">The repeatability σ comes from a repeat study: many dips at one level, without pouring. Your study at 501 mm and 1033 mm gave 0.2–0.4 mm. Every ± here means "the truth is almost surely inside" (2σ).</p>
     </details>
 
     <details class="card fold" id="timers" style="margin-top:0.8rem" open>
@@ -841,10 +839,10 @@
         <label>Alarm lead before full, s<input id="tm-lead" type="number" inputmode="numeric" placeholder="15"></label>
       </div>
       <h2 style="margin-top:0.9rem">Fill (pump) time per can, m:ss</h2>
-      <p class="muted" style="margin-top:0">The time the pump needs to fill one can. The alarm rings this time minus the lead, so the valve is closed when the can is full. The page measures it from Start fill timer to +1 can. The alarm changes only when you adopt the trend below.</p>
+      <p class="muted" style="margin-top:0">The pump time to fill one can. The alarm rings this time minus the lead.</p>
       <div class="grid" id="tm-sizes"></div>
       <h2 style="margin-top:0.9rem">Drain time per can, m:ss</h2>
-      <p class="muted" style="margin-top:0" id="tm-drain-help">The time to empty one can into the tank. The time to half and to the brim adds it to the fill time.</p>
+      <p class="muted" style="margin-top:0" id="tm-drain-help">The time to empty one can into the tank.</p>
       <div class="grid" id="tm-drains"></div>
       <div id="tm-trend" style="margin-top:0.5rem"></div>
       <div class="row" style="margin-top:0.6rem">
@@ -855,7 +853,7 @@
       </div>
       <div id="tm-push" class="hidden" style="margin-top:0.6rem">
         <label class="check"><input type="checkbox" id="tm-push-on"> lock-screen alarm (notification)</label>
-        <p class="muted">The server sends a notification at the can-full and settle alarms, so they reach the lock screen of the Home Screen app. The phone needs network when a timer starts. A notification follows the Ring/Silent switch and Focus (the iPhone timer rings in silent mode too), and it can come a few seconds late. The page keeps its own alarms and rings them while it is in view.</p>
+        <p class="muted">A notification at the can-full and settle alarms, also on the lock screen. The phone needs network when a timer starts.</p>
         <p class="muted" id="tm-push-msg"></p>
       </div>
       <div id="tm-ios" class="hidden" style="margin-top:0.6rem">
@@ -864,7 +862,7 @@
           <label>Shortcut name<input id="tm-ios-name" placeholder="Calib timer"></label>
           <button class="secondary" id="tm-ios-test">Test iPhone timer (10 s)</button>
         </div>
-        <p class="muted">The iPhone's own timer shows a countdown on the lock screen and rings when the phone is locked or silent. The page cannot do this. <i>Start fill timer</i> starts it, set to ring with the page's alarm: close the valve. The page then shows no alarm banner and makes no sound for the fill timer: the iPhone rings. <i>Stop timer</i>, <i>+20 s</i> and <i>−20 s</i> do not change it: stop it in the Clock app.</p>
+        <p class="muted">The iPhone's own timer rings when the phone is locked or silent. <i>Start fill timer</i> starts it; stop it in the Clock app.</p>
         <details>
           <summary>Make the shortcut (once per phone)</summary>
           <ol class="muted">
@@ -874,14 +872,14 @@
             <li>Name the shortcut with the name above (Calib timer) and tap Done.</li>
             <li>Tick the box above, tap <b>Save timers and device</b>, then <b>Test iPhone timer</b>. Allow the shortcut when iOS asks.</li>
           </ol>
-          <p class="muted">Safari asks first: tap Open. The page timer starts when Shortcuts opens, so the two timers run together. The phone opens Shortcuts for a moment and comes back to the page. From a Home Screen icon it cannot come back by itself: swipe back to the page.</p>
+          <p class="muted">Safari asks first: tap Open. From a Home Screen icon, swipe back to the page.</p>
         </details>
       </div>
       <div class="row" style="margin-top:0.6rem"><button id="tm-save">Save timers and device</button><button class="secondary" id="tm-test">Test alarm</button></div>
       <p id="tm-msg" class="muted"></p>
       <p id="tm-err" class="error"></p>
       <p class="muted" id="tm-wake-state"></p>
-      <p class="muted">A locked phone stops the page and its alarm. If the screen still turns off, set the phone's own screen timeout longer (see How it works).</p>
+      <p class="muted">A locked phone stops the page and its alarm.</p>
     </details>
   </section>
 
@@ -2045,6 +2043,20 @@
     "Safari deletes this page's saved data (the open campaign and the archive) after 7 days without a visit. To keep it, add the page to the Home Screen (Share → Add to Home Screen), log in to the cloud, or download the session JSON after each campaign. Sessions in Safari do not move to the app: log in to the cloud first, or export the session JSON and import it in the app.": "Safari xoá dữ liệu đã lưu của trang này (đợt đo đang mở và kho lưu) sau 7 ngày không mở trang. Để giữ lại, hãy thêm trang vào Màn hình chính (Chia sẻ → Thêm vào MH chính), đăng nhập đám mây, hoặc tải JSON của phiên sau mỗi đợt đo. Phiên trong Safari không chuyển sang ứng dụng: hãy đăng nhập đám mây trước, hoặc xuất JSON của phiên rồi nhập vào ứng dụng.",
     "The browser may delete this page's saved data (the open campaign and the archive) when the device runs low on space. Download the session JSON after each campaign, or log in to the cloud.": "Trình duyệt có thể xoá dữ liệu đã lưu của trang này (đợt đo đang mở và kho lưu) khi thiết bị sắp hết dung lượng. Hãy tải JSON của phiên sau mỗi đợt đo, hoặc đăng nhập đám mây.",
     "Open": "Mở",
+    // Settings, trimmed
+    "A change refits the shell and restarts the noise scale.": "Thay đổi sẽ khớp lại mô hình bồn và khởi động lại thang nhiễu.",
+    "Applies to the next campaign.": "Áp dụng cho đợt đo tiếp theo.",
+    "Transfer: tank A pumps out, tank B pours in.": "Chuyển bồn: bồn A bơm ra, bồn B đổ vào.",
+    "Drain (pump out).": "Bơm ra.",
+    "Fill (pour in).": "Đổ vào.",
+    "cans {cans} L": "bình {cans} L",
+    "The pump time to fill one can.": "Thời gian bơm đầy một bình.",
+    "The alarm rings this time minus the lead.": "Chuông kêu sớm hơn thời gian này một khoảng báo trước.",
+    "A notification at the can-full and settle alarms, also on the lock screen.": "Thông báo ở chuông đầy bình và chuông chờ lắng, cả trên màn hình khoá.",
+    "The phone needs network when a timer starts.": "Điện thoại cần có mạng khi bắt đầu hẹn giờ.",
+    "The iPhone's own timer rings when the phone is locked or silent.": "Hẹn giờ của iPhone kêu cả khi máy khoá hoặc im lặng.",
+    "starts it; stop it in the Clock app.": "sẽ bật nó; tắt trong ứng dụng Đồng hồ.",
+    "From a Home Screen icon, swipe back to the page.": "Từ biểu tượng Màn hình chính, hãy vuốt quay lại trang.",
     // Welcome
     "Check each dip before you pour the next can.": "Kiểm tra từng lần đo trước khi rót can tiếp theo.",
     "Log in to share campaigns with your team, or use the page on its own, offline.": "Đăng nhập để chia sẻ đợt đo với nhóm, hoặc dùng trang riêng, ngoại tuyến.",
@@ -9091,28 +9103,27 @@
       $("set-campaign-title").textContent = isTransfer() ? `This tank — ${S.cfg.tank}` : "This campaign";
       if (isTransfer()) {
         const L0 = S.out.levels[0];
-        $("set-dir").textContent = `Direction: transfer — tank A pumps out, tank B pours in. Fixed at the start.`
-          + ` Tank A starts ${L0 && L0.entrance ? "at the brim (brim B = " + f(S.out.cfg.brimStart) + " mm)" : L0 && L0.neck ? "in the neck" : "in the shell"}.`
-          + " This card edits the tank named above; the noise, the cans and the timers are shared.";
+        $("set-dir").textContent = `Transfer: tank A pumps out, tank B pours in.`
+          + ` Tank A starts ${L0 && L0.entrance ? "at the brim (brim B = " + f(S.out.cfg.brimStart) + " mm)" : L0 && L0.neck ? "in the neck" : "in the shell"}.`;
       } else {
         const L0 = S.levels[0];
         $("set-dir").textContent = isDrain()
-          ? `Direction: drain (pump out), fixed at the start. First level: ${L0 && L0.entrance ? "at the brim (brim B = " + f(S.cfg.brimStart) + " mm)" : L0 && L0.neck ? "in the neck" : "in the shell"}.`
-          : "Direction: fill (pour in), fixed at the start.";
+          ? `Drain (pump out). First level: ${L0 && L0.entrance ? "at the brim (brim B = " + f(S.cfg.brimStart) + " mm)" : L0 && L0.neck ? "in the neck" : "in the shell"}.`
+          : "Fill (pour in).";
       }
       // The batch plan is declared before the first pour: shown, not edited.
       const c = S.cfg;
       $("set-plan").textContent = !c.plan ? ""
         : `Batch plan: ${c.plan.map((g) => `${g.count} × ${fl(g.size)}`).join(", ")} L`
           + (c.nominal ? ` · nominal ${fl(c.nominal)} L` : "")
-          + (c.canSizes ? ` · cans ${c.canSizes.map(fl).join(", ")} L` : "") + ". Fixed at the start.";
+          + (c.canSizes ? ` · cans ${c.canSizes.map(fl).join(", ")} L` : "");
     } else {
       $("set-campaign-title").textContent = "This campaign";
       $("set-plan").textContent = "";
     }
     $("set-noise-note").textContent = has
-      ? "These are the numbers the check uses, one set everywhere (§9.1). A change refits the running shell and restarts the noise scale; earlier rows keep the z from their dip."
-      : "These apply to the next campaign. They stay on this device.";
+      ? "A change refits the shell and restarts the noise scale."
+      : "Applies to the next campaign.";
     if (has) renderTimers();
   }
   /** A brim reading field: blank = none (the running shell gives the brim). */
@@ -9876,10 +9887,9 @@
     $("tm-trend").innerHTML = trends.map(([, sg]) => (sg
       ? `<div class="row" style="margin-top:0.3rem"><button class="secondary small" data-u="${sg.size}">${esc(suggestText(sg))}</button></div>` : "")).join("");
     $("tm-drain-help").textContent = (isTransfer()
-      ? "The time to empty one can into tank B. The time to the suction floor of A and to the brim of B adds it to the fill time."
-      : isDrain() ? "The time to empty one can. The time to half and to the suction floor adds it to the fill time."
-        : "The time to empty one can into the tank. The time to half and to the brim adds it to the fill time.")
-      + " The page measures it from +1 can to the next Start fill timer. The time estimate follows the trend of your cans, with the most recent cans weighing most; these fields count where there is no trend yet.";
+      ? "The time to empty one can into tank B."
+      : isDrain() ? "The time to empty one can."
+        : "The time to empty one can into the tank.");
     $("tm-anim").checked = !!P.anim;
     $("tm-sound").checked = !!P.sound; $("tm-vib").checked = !!P.vibrate; $("tm-wake").checked = !!P.wake;
     // Shortcuts is on iPhone and iPad only; a switch that is on stays in
