@@ -367,8 +367,9 @@ a pour error of a full unit, and the level that could show it is gone after
 the next batch.
 
 - **Tap when each can is empty.** The page shows the count, the litres and the
-  time of each can. The count is saved after each tap, so a closed page or a
-  locked phone does not lose it.
+  time of each can, and under the times the gap between two cans (`+1:50`, a
+  thin line from one time to the next). The count is saved after each tap, so a
+  closed page or a locked phone does not lose it.
 - **One cell per can.** The tally is a row of cells, one per can of the
   batch, each as wide as its can size, with the size inside. The time of
   each can is under its cell. When the cans are many and the cells are

@@ -272,6 +272,16 @@
   .tally-lab > div { min-width: 0; text-align: center; overflow: hidden; min-height: 1.15rem; }
   .tally-lab .pill { display: inline-block; background: var(--ok-bg); color: var(--ok); border-radius: 6px; padding: 0 0.25rem; font: 600 0.66rem var(--mono); white-space: nowrap; max-width: 100%; overflow: hidden; }
   .tally-lab .pill.none { background: var(--todo-bg); color: var(--todo); }
+  /* The time between two cans: a thin measuring line from the centre of one
+     finish-time pill to the centre of the next, the difference on it. */
+  .tally-lab.dt { margin-bottom: 0; }
+  .tally-dt { display: flex; gap: 3px; margin: 1px 0 0.55rem; min-height: 0.95rem; }
+  .tally-dt:empty { display: none; }
+  .tally-dt > div { min-width: 0; position: relative; height: 0.95rem; }
+  .tally-dt .dm { position: absolute; top: 0; height: 0.95rem; display: flex; align-items: center; justify-content: center; }
+  .tally-dt .dm::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid var(--line); }
+  .tally-dt .dm::after { content: ""; position: absolute; left: 0; right: 0; top: calc(50% - 3px); height: 6px; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+  .tally-dt .dl { position: relative; background: var(--card); padding: 0 0.25rem; font: 600 0.58rem/0.95rem var(--mono); color: var(--muted); white-space: nowrap; }
   button.huge { width: 100%; min-height: 4.8rem; font-size: 1.3rem; margin-top: 0.3rem; }
   /* A litre limit inside the batch (the shell gap of a fill, the liquid left
      of a drain): a line across the tally at that litre, and the cans past it
@@ -628,6 +638,7 @@
         <div class="big-num" id="t-count"></div>
         <div class="tally-seg" id="t-bar" role="progressbar" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div>
         <div class="tally-lab" id="t-times" role="group" aria-label="Finish times"></div>
+        <div class="tally-dt" id="t-deltas" aria-hidden="true"></div>
         <div class="timer" id="pt">
           <button class="tset" id="pt-settings" type="button" aria-label="Timer settings" title="Timer settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
           <svg class="pour-anim" id="pt-anim" viewBox="0 0 120 90" aria-hidden="true">
@@ -3353,6 +3364,12 @@
     // cell, in the warning colour.
     const total = Math.max(cans, n);
     const hhmm = (x) => { const d = new Date(x); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+    // A time span as m:ss (h:mm:ss from an hour), rounded to the second.
+    const clockSpan = (ms) => {
+      const sec = Math.round(ms / 1000), h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), r = sec % 60;
+      const two = (x) => String(x).padStart(2, "0");
+      return h ? `${h}:${two(m)}:${two(r)}` : `${m}:${two(r)}`;
+    };
     const seg = $("t-bar"), lab = $("t-times");
     seg.classList.toggle("hidden", !total);
     lab.classList.toggle("hidden", !total);
@@ -3373,7 +3390,7 @@
     const vw = volumeWarn(adv, vol, Math.max(litres, adv && adv.target > 0 ? adv.target : 0));
     const limit = vw && vw.limit != null && total > 0 && vw.limit < litres ? vw.limit : null;
     const room = Math.min(lastWidth || 360, 760) - 56 - 3 * Math.max(total - 1, 0);
-    let cells = "", times = "", hidden = false, lastT = null, from = 0, at = null;
+    let cells = "", times = "", deltas = "", hidden = false, lastT = null, from = 0, at = null, prev = null;
     for (let i = 0; i < total; i++) {
       const over = cans > 0 && i >= cans;
       const state = i < n ? (over ? "over" : "done") : i === n ? "now" : "todo";
@@ -3388,7 +3405,19 @@
       if (limit != null && at == null && past) at = { i, frac: lit > 0 ? (limit - from) / lit : 0, before: from };
       from += lit;
       const cls = [state === "todo" ? "" : state, past ? "past" : ""].filter(Boolean).join(" ");
-      const tip = `${raw > 0 ? f(raw, 0) + " L" : "—"}${t ? " · " + t : ""}`;
+      // The time since the can before: a line from its pill to this one.
+      let dm = "", dText = "";
+      const tms = i < n && list[i].t ? Number(list[i].t) : null;
+      if (tms != null && prev && prev.t != null && tms >= prev.t) {
+        dText = "+" + clockSpan(tms - prev.t);
+        const r = 50 * prev.size / size;
+        if (fitT && prev.fitT && prev.w / 2 + 3 + w / 2 >= 40) {
+          dm = `<span class="dm" style="left:calc(-${r.toFixed(2)}% - 3px);width:calc(${(r + 50).toFixed(2)}% + 3px)"><span class="dl">${dText}</span></span>`;
+        }
+      }
+      prev = tms != null ? { t: tms, size, w, fitT } : null;
+      deltas += `<div style="flex:${size} 1 0">${dm}</div>`;
+      const tip = `${raw > 0 ? f(raw, 0) + " L" : "—"}${t ? " · " + t : ""}${dText ? " · " + dText : ""}`;
       cells += `<i class="${cls}" data-state="${state}"${past ? ' data-past="1"' : ""} style="flex:${size} 1 0" title="${esc(tip)}">`
         + (fitS ? `<span aria-hidden="true">${raw > 0 ? f(raw, 0) : "—"}</span>` : "") + `${state === "now" ? "<b></b>" : ""}</i>`;
       times += `<div style="flex:${size} 1 0">`
@@ -3413,6 +3442,9 @@
     lab.classList.toggle("lim", !!line);
     // Too crowded for a time under each can: one pill with the last time.
     // While a limit shows, its label takes the line under the bar.
+    const showDt = !line && !hidden && deltas.includes('class="dm"');
+    $("t-deltas").innerHTML = showDt ? deltas : "";
+    lab.classList.toggle("dt", showDt);
     if (!line) lab.innerHTML = hidden && lastT ? `<div style="flex:1 1 auto;text-align:left"><span class="pill">last ${lastT}</span></div>` : times;
     renderPlanLive(adv, vw);
 

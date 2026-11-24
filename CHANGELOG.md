@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Can tally: the time between two cans.** Under the finish-time pills, a thin
+  measuring line runs from the centre of one pill to the next with the time
+  between the two taps on it (`+1:50`, `+1:06:40` from an hour). It shows
+  between two counted cans wide enough for it, and also in the cell's
+  tooltip. The first can of a batch has no line.
 - **Pour card: the batch and group tally is back.** One row under the batch
   text (`Batch 800 L · 4/8`): a dot for every batch of the plan, all the same
   size, stretched to the width of the card and grouped by the plan's groups.

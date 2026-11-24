@@ -379,6 +379,33 @@ class TestSitePage(unittest.TestCase):
         self.assertEqual(got["overCount"], "3 / 1 can · 400 L")
 
     @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_tally_shows_the_time_between_cans(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const realNow = Date.now.bind(Date); let off = 0; Date.now = () => realNow() + off;\n"
+            "const out = {}, store = new Map();\n"
+            "const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "el('s-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "el('t-plus').click();\n"
+            "out.one = [el('t-deltas').innerHTML, el('t-times')._classes.has('dt')];\n"
+            "off += 110000; el('t-plus').click();\n"
+            "out.two = [el('t-deltas').innerHTML, el('t-times')._classes.has('dt'), el('t-bar').innerHTML];\n"
+            "off += 4000000; el('t-plus').click();\n"
+            "out.three = el('t-deltas').innerHTML;\n"
+            "console.log(JSON.stringify(out));"
+        )
+        self.assertEqual(got["one"], ["", False], "one can has no time to measure from")
+        self.assertIn('<span class="dl">+1:50</span>', got["two"][0], "the second can shows the time since the first")
+        self.assertTrue(got["two"][1])
+        self.assertIn(" · +1:50", got["two"][2], "the cell's tooltip keeps it")
+        self.assertIn('<span class="dl">+1:06:40</span>', got["three"], "an hour or more shows h:mm:ss")
+
+    @unittest.skipUnless(NODE, "node is not installed")
     def test_page_tally_counts_poured_litres_at_their_own_size(self):
         stub = (HERE / "tests" / "page_stub.js").as_posix()
         got = _node(
