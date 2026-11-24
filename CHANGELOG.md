@@ -33,6 +33,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **Files → Cloud → New workspace: the signup code takes typing in the Home Screen
+  app.** The field was a password field; iOS treats those specially (autofill,
+  Strong Password) and could leave it unable to take input. It is now a masked
+  text field (dots as before) with autocorrect, capitals and spell check off.
 - **Live tab: the action buttons stay last.** While a dip waits and the next can
   runs, the pour and Now cards moved below the buttons (Take another reading,
   Recount, Undo last entry …). They now sit above them: the buttons close the
