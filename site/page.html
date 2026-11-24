@@ -69,9 +69,9 @@
   html { -webkit-text-size-adjust: 100%; touch-action: manipulation; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   /* One slim line: the tank (or the tank switch), then the status in small text. */
-  header { background: var(--hdr); color: #fff; padding: 0.35rem 0.8rem; position: relative; display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; min-height: 2.6rem; }
-  header h1 { font-size: 1rem; margin: 0; font-weight: 650; flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  header .hdr-status { margin-left: auto; font-size: 0.78rem; color: rgba(255, 255, 255, 0.8); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  header { background: var(--hdr); color: #fff; padding: 0.15rem 0.8rem; position: relative; display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; min-height: 0; }
+  header h1 { font-size: 0.9rem; line-height: 1.3; margin: 0; font-weight: 650; flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  header .hdr-status { margin-left: auto; font-size: 0.74rem; color: rgba(255, 255, 255, 0.8); white-space: nowrap; font-variant-numeric: tabular-nums; }
   header .hdr-status span + span:not(:empty)::before { content: " · "; }
   /* The live indicator: a small can before the title and a line along the
      bottom edge of the header.  The can fills while the pump fills it and
@@ -400,7 +400,7 @@
   /* Simple mode: the Live tab keeps the actions and the numbers to read. */
   /* The Simple · Verbose switch: one small box at the right end of the
      header, on every tab.  "Aa" = verbose (all text), "A" = simple. */
-  header .hdr-mode { flex: 0 0 auto; min-height: 1.9rem; min-width: 2.1rem; padding: 0 0.35rem; border: 1px solid rgba(255, 255, 255, 0.45); border-radius: 6px; background: transparent; color: #fff; font-size: 0.8rem; font-weight: 700; }
+  header .hdr-mode { flex: 0 0 auto; min-height: 1.5rem; line-height: 1; min-width: 2.1rem; padding: 0 0.35rem; border: 1px solid rgba(255, 255, 255, 0.45); border-radius: 6px; background: transparent; color: #fff; font-size: 0.8rem; font-weight: 700; }
   body.simple #live .vb { display: none !important; }
   body.simple #now-advice { font-size: 1.1rem; }
   /* Phone layout.  A grid item never grows past its column: a wide table
@@ -415,14 +415,14 @@
   /* A Home Screen app: the status bar floats over the page (black-translucent),
      so the header makes room for it, and a bar of the header colour stays
      behind it while the page scrolls under the sticky tabs. */
-  header { padding-top: max(0.35rem, env(safe-area-inset-top)); }
+  header { padding-top: max(0.15rem, env(safe-area-inset-top)); }
   @media (display-mode: standalone) {
     /* The status bar text sits in the upper part of the safe area (the time
        and battery beside the notch, 59 px on a Dynamic Island phone), so the
        header starts 10 px above the bottom of it and is slim below. */
     :root { --top: max(0px, calc(env(safe-area-inset-top) - 10px)); }
     body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: var(--top); background: var(--hdr); z-index: 20; pointer-events: none; }
-    header { padding-top: max(0.25rem, var(--top)); padding-bottom: 0.25rem; min-height: 0; }
+    header { padding-top: max(0.15rem, var(--top)); padding-bottom: 0.15rem; min-height: 0; }
     .chrome { top: var(--top); }
   }
   main { padding-left: max(0.8rem, env(safe-area-inset-left)); padding-right: max(0.8rem, env(safe-area-inset-right)); padding-bottom: calc(0.8rem + env(safe-area-inset-bottom)); }
