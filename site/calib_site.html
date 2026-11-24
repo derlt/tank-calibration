@@ -3171,14 +3171,14 @@
   }
 
   // ---------------------------------------------------------------- step cells (§3.9)
-  function parseStep(text) {
+  function parseStep(text, allowZero) {
     const t = String(text == null ? "" : text).trim().replace(",", ".");
     if (t === "" || t === "?" || /^x\d*$/i.test(t)) return { kind: "unknown", value: null, base: 0, text: t || "?" };
     const m = t.match(/^([0-9.]+)\s*\+\s*\?$/);
     if (m) return { kind: "partial", value: null, base: parseFloat(m[1]), text: t };
     const v = parseFloat(t);
     if (!isFinite(v) || !/^[-+]?[0-9.]+(e[-+]?\d+)?$/i.test(t)) throw new Error(`cannot read pour ${JSON.stringify(text)}`);
-    if (v <= 0) throw new Error("a pour must be positive");
+    if (v < 0 || (v === 0 && !allowZero)) throw new Error("a pour must be positive");
     return { kind: "known", value: v, base: 0, text: t };
   }
 
@@ -3361,7 +3361,7 @@
     const at = (opts && opts.at) || "shell";
     if (["entrance", "neck", "shell"].indexOf(at) < 0) throw new Error(`the start level is "entrance", "neck" or "shell", not ${JSON.stringify(at)}`);
     if (at !== "shell" && this.cfg.dir > 0) throw new Error("a start at the neck is for a drain campaign");
-    const step = parseStep(stepText);
+    const step = parseStep(stepText, true);   // an empty tank: 0 L is a valid first level
     const L = { row: 1, step, dips: [], state: "pending", from: null, note: note || "", tags: [], H: null, n: 0, start: true };
     if (at === "entrance") { L.entrance = true; addTag(L, "at brim"); }
     if (at === "neck") L.neck = true;
