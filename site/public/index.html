@@ -324,6 +324,17 @@
   .plan-row button { min-height: 2.3rem; min-width: 2.3rem; padding: 0.2rem 0.5rem; }
   #s-plan-check.ok { color: var(--ok); font-weight: 650; }
   .plan-live { margin: 0; }
+  /* The group tally on the batch line: one pip per batch of the group in
+     work (done filled, the one in work ringed), then the group's number
+     among the groups.  A long group (over 16) is a thin bar instead. */
+  .ptally { display: inline-flex; align-items: center; gap: 0.45rem; min-width: 0; }
+  .ptally .pips { display: inline-flex; flex-wrap: wrap; gap: 3px; max-width: 9.5rem; }
+  .ptally .pips > i { width: 0.45rem; height: 0.45rem; border-radius: 50%; background: var(--todo-bg); box-shadow: inset 0 0 0 1px var(--todo); }
+  .ptally .pips > i.done { background: var(--info); box-shadow: none; }
+  .ptally .pips > i.now { background: var(--info-bg); box-shadow: inset 0 0 0 1.5px var(--info); }
+  .ptally .pbar { width: 4rem; height: 0.35rem; border-radius: 999px; background: var(--todo-bg); overflow: hidden; }
+  .ptally .pbar > i { display: block; height: 100%; background: var(--info); }
+  .ptally .pgrp { font: 600 0.72rem var(--mono); color: var(--muted); white-space: nowrap; }
   .sizes { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem; }
   .sizes button { min-height: 2.3rem; padding: 0.2rem 0.7rem; font-size: 0.9rem; background: var(--surface); color: var(--brand-ink); }
   .sizes button[aria-pressed=true] { background: var(--brand); color: #fff; }
@@ -587,7 +598,7 @@
       <p class="muted hidden" id="t-early" style="margin-top:0"></p>
       <div id="tally">
         <div class="plan-live hidden" id="t-plan">
-          <div class="bline"><b id="t-plan-head"></b><button class="vchip hidden" id="t-warn" aria-expanded="false" aria-controls="t-warn-text"></button></div>
+          <div class="bline"><b id="t-plan-head"></b><span class="ptally hidden" id="t-plan-tally" role="img"></span><button class="vchip hidden" id="t-warn" aria-expanded="false" aria-controls="t-warn-text"></button></div>
           <p class="hidden" id="t-warn-text"></p>
           <p class="muted" id="t-plan-note" style="margin:0"></p>
         </div>
@@ -2400,6 +2411,9 @@
     "Batch {0} L": "Mẻ {0} L",
     "Batch ≈ {0} L": "Mẻ ≈ {0} L",
     "{0}/{1}": "{0}/{1}",
+    "group {0}/{1}": "nhóm {0}/{1}",
+    "Group {0} of {1}: {2} of {3} batches done": "Nhóm {0}/{1}: xong {2}/{3} mẻ",
+    "{0} of {1} batches done": "Xong {0}/{1} mẻ",
     "{0}/{1} (plan {2})": "{0}/{1} (kế hoạch {2})",
     "Only {0} of {1} cans. Close the batch?": "Mới {0}/{1} bình. Đóng mẻ?",
     "⚠ overflow": "⚠ tràn",
@@ -8993,6 +9007,7 @@
         : adv && adv.target > 0 ? `Batch ≈ ${f(adv.target, 0)} L` : "";
     $("t-plan").classList.toggle("hidden", !head && !vw);
     $("t-plan-head").textContent = head;
+    renderPlanTally(b);
     const chip = $("t-warn"), text = $("t-warn-text");
     const open = !!vw && warnOpen === vw.chip;
     for (const tone of ["bad", "warn"]) {
@@ -9028,6 +9043,30 @@
     // Simple mode: the batch line already shows a changed count (`3/9 (plan 8)`).
     $("t-plan-note").textContent = sm ? "" : note;
     $("t-plan-note").classList.toggle("hidden", sm || !note);
+  }
+
+  /**
+   * The group tally beside the batch line: a pip per batch of the group in
+   * work (done, in work, to come) and `group 2/5` when the plan has more
+   * than one group.  Hidden without a plan and when the plan is complete.
+   */
+  function renderPlanTally(b) {
+    const el = $("t-plan-tally");
+    el.classList.toggle("hidden", !b);
+    if (!b) { el.innerHTML = ""; el.setAttribute("aria-label", ""); return; }
+    const done = b.inGroup - 1;
+    let marks = "";
+    if (b.count > 16) marks = `<span class="pbar"><i style="width:${(100 * done / b.count).toFixed(1)}%"></i></span>`;
+    else {
+      marks = '<span class="pips">';
+      for (let i = 1; i <= b.count; i++) marks += `<i class="${i < b.inGroup ? "done" : i === b.inGroup ? "now" : ""}"></i>`;
+      marks += "</span>";
+    }
+    const grp = b.groups > 1 ? `<span class="pgrp">group ${b.number}/${b.groups}</span>` : "";
+    el.innerHTML = marks + grp;
+    el.setAttribute("aria-label", b.groups > 1
+      ? `Group ${b.number} of ${b.groups}: ${done} of ${b.count} batches done`
+      : `${done} of ${b.count} batches done`);
   }
 
   /** With a plan, each tap moves the size field to the next planned can of the batch. */
