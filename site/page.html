@@ -818,6 +818,11 @@
         <label class="check"><input type="checkbox" id="tm-vib"> vibrate</label>
         <label class="check"><input type="checkbox" id="tm-wake"> keep the screen on while the campaign is open</label>
       </div>
+      <div id="tm-push" class="hidden" style="margin-top:0.6rem">
+        <label class="check"><input type="checkbox" id="tm-push-on"> lock-screen alarm (notification)</label>
+        <p class="muted">The server sends a notification at the can-full and settle alarms, so they reach the lock screen of the Home Screen app. The phone needs network when a timer starts. A notification follows the Ring/Silent switch and Focus (the iPhone timer rings in silent mode too), and it can come a few seconds late. The page keeps its own alarms and rings them while it is in view.</p>
+        <p class="muted" id="tm-push-msg"></p>
+      </div>
       <div id="tm-ios" class="hidden" style="margin-top:0.6rem">
         <label class="check"><input type="checkbox" id="tm-ios-on"> also start the iPhone timer (Shortcuts)</label>
         <div class="row" style="margin-top:0.4rem">
@@ -1603,6 +1608,21 @@
   // ------------------------------------------------------------ helpers
   const num = (id) => { const v = $(id).value.trim().replace(",", "."); return v === "" ? null : parseFloat(v); };
   function download(name, text, type) {
+    // A Home Screen app on iOS: a blob link may open nothing, so the share
+    // sheet takes the file (Save to Files, AirDrop, Mail).  A cancel is not
+    // an error; any other failure falls back to the link.
+    if (isIOS() && isStandalone() && typeof File === "function" && navigator.share && navigator.canShare) {
+      try {
+        const file = new File([text], name, { type });
+        if (navigator.canShare({ files: [file] })) {
+          navigator.share({ files: [file] }).catch((e) => { if (!e || e.name !== "AbortError") saveAsLink(name, text, type); });
+          return;
+        }
+      } catch (e) { /* the link below */ }
+    }
+    saveAsLink(name, text, type);
+  }
+  function saveAsLink(name, text, type) {
     const blob = new Blob([text], { type });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob); a.download = name;
@@ -3633,7 +3653,7 @@
   const TIMER = "calib-site:timer", PREFS = "calib-site:prefs";
   function loadJSON(k, d) { try { return JSON.parse(localStorage.getItem(k) || "null") || d; } catch (e) { return d; } }
   let T = loadJSON(TIMER, {});   // { pour: { start, dur, size, alarmed }, wait, settled: "row@time", unit: the chosen can size }
-  const P = Object.assign({ anim: true, sound: true, vibrate: true, wake: true, iosTimer: false, iosShortcut: "", nowOpen: true, optsOpen: false }, loadJSON(PREFS, {}));
+  const P = Object.assign({ anim: true, sound: true, vibrate: true, wake: true, iosTimer: false, iosShortcut: "", nowOpen: true, optsOpen: false, push: false }, loadJSON(PREFS, {}));
   // The Now card folds; the device keeps the choice.
   $("now-card").open = P.nowOpen !== false;
   $("now-card").addEventListener("toggle", () => {
@@ -4341,6 +4361,7 @@
     $("tm-ios").classList.toggle("hidden", !isIOS() && !P.iosTimer);
     $("tm-ios-on").checked = !!P.iosTimer;
     $("tm-ios-name").value = P.iosShortcut || "";
+    renderPush();
   }
   $("tm-save").addEventListener("click", guard("tm-err", () => {
     $("tm-msg").textContent = "";
@@ -4379,9 +4400,116 @@
     iosTimer(10, $("tm-ios-name").value.trim());
   });
 
+  // ---- lock-screen alarms (Web Push: worker/push.js, docs/site.md)
+  // The Home Screen app asks the server to send a notification at each alarm
+  // (the fill timer's two, the settle alarm).  No login: this device has a
+  // random secret (calib-site:device) that names its store on the server.
+  // pushCheck() runs with the heartbeat: it works out the alarms to come
+  // (C.pushPlan) and uploads them whenever that list changes (a start, +20 s,
+  // a stop, a new batch, a timer from another device), as "in N seconds".
+  const DEVICE = "calib-site:device";
+  let pushKey, pushMsg = "", pushSig = "", pushTry = 0, pushBusy = false;   // pushKey: undefined = not asked, null = not set up
+  function deviceSecret() {
+    let s = null;
+    try { s = localStorage.getItem(DEVICE); } catch (e) { s = null; }
+    if (!s || !/^[A-Za-z0-9_-]{32,64}$/.test(s)) {
+      const a = new Uint8Array(32);
+      crypto.getRandomValues(a);
+      s = btoa(String.fromCharCode.apply(null, a)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      localStorage.setItem(DEVICE, s);
+    }
+    return s;
+  }
+  /** The switch exists only where a notification can work: the https app on the Home Screen. */
+  function pushPossible() {
+    return typeof PushManager !== "undefined" && typeof navigator !== "undefined" && !!navigator.serviceWorker
+      && typeof Notification !== "undefined" && typeof location !== "undefined" && location.protocol === "https:" && isStandalone();
+  }
+  function pushApi(method, path, body, secret) {
+    const headers = { "Content-Type": "application/json" };
+    if (secret !== false) headers.Authorization = "Device " + deviceSecret();
+    return fetch(location.origin + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
+      .then((r) => r.json().catch(() => ({})).then((b) => ({ status: r.status, body: b })), () => ({ status: 0, body: {} }));
+  }
+  function pushProbe() {
+    if (pushKey !== undefined || !pushPossible()) return Promise.resolve();
+    pushKey = false;   // asking
+    return pushApi("GET", "/api/push/key", undefined, false).then((r) => {
+      pushKey = r.status === 200 && r.body.key ? r.body.key : r.status === 0 ? undefined : null;
+    });
+  }
+  function keyBytes(text) {
+    const t = text.replace(/-/g, "+").replace(/_/g, "/"), bin = atob(t + "=".repeat((4 - (t.length % 4)) % 4));
+    return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  }
+  function savePrefs() { localStorage.setItem(PREFS, JSON.stringify(P)); }
+  function renderPush() {
+    const box = $("tm-push");
+    if (!pushPossible()) { box.classList.add("hidden"); return; }
+    if (pushKey === undefined) pushProbe().then(renderPush);
+    box.classList.toggle("hidden", !pushKey);
+    $("tm-push-on").checked = !!P.push && Notification.permission === "granted";
+    $("tm-push-msg").textContent = pushMsg;
+  }
+  async function pushEnable() {
+    try {
+      if ((await Notification.requestPermission()) !== "granted") return "Notifications are off for this app: allow them in the phone's Settings.";
+      const reg = await navigator.serviceWorker.ready;
+      const sub = (await reg.pushManager.getSubscription())
+        || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(pushKey) }));
+      const r = await pushApi("POST", "/api/push/subscribe", { subscription: sub.toJSON() });
+      if (r.status === 0) return "No network: try again.";
+      if (r.status !== 200) return "The server did not accept this device.";
+      P.push = true; savePrefs(); pushSig = null; pushTry = 0;
+      return "On: the alarms reach the lock screen.";
+    } catch (e) { console.error(e); return "Could not turn it on."; }
+  }
+  async function pushDisable() {
+    P.push = false; savePrefs(); pushSig = "";
+    try {
+      const reg = await navigator.serviceWorker.ready, sub = await reg.pushManager.getSubscription();
+      if (sub) await sub.unsubscribe();
+    } catch (e) { console.error(e); }
+    await pushApi("DELETE", "/api/push/subscribe");
+    return "";
+  }
+  $("tm-push-on").addEventListener("change", () => {
+    const on = $("tm-push-on").checked;
+    unlockAudio();
+    (on ? pushEnable() : pushDisable()).then((m) => { pushMsg = m; renderPush(); });
+  });
+  /** The alarms still to ring, for the lock screen. */
+  function pushPlanNow(now) {
+    let settleAt = null, settled = false;
+    const pend = S ? pending() : null;
+    if (pend && pend.dips.length === 0 && pend.pourTime && S.cfg.settleSeconds > 0) {
+      settleAt = pend.pourTime + S.cfg.settleSeconds * 1000;
+      settled = T.settled === (isTransfer() ? `batch@${pend.pourTime}` : `${pend.row}@${pend.pourTime}`);
+    }
+    return C.pushPlan({ pour: S ? T.pour : null, settleAt, settled, now });
+  }
+  function pushCheck() {
+    if (!P.push || pushBusy || !pushPossible()) return;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+    const now = Date.now(), plan = pushPlanNow(now);
+    const sig = plan.map((a) => `${a.kind}@${Math.round(a.at / 1000)}`).join(",");
+    if (sig === pushSig || now < pushTry) return;
+    pushBusy = true;
+    const req = plan.length
+      ? pushApi("PUT", "/api/push/alarms", { alarms: plan.map((a) => ({ in: Math.max(1, Math.round((a.at - now) / 1000)), kind: a.kind, title: tr(a.text), body: "" })) })
+      : pushApi("DELETE", "/api/push/alarms");
+    req.then((r) => {
+      if (r.status === 200) { pushSig = sig; if (pushMsg.startsWith("Not on the lock screen")) pushMsg = ""; }
+      else if (r.status === 409 || r.status === 401) { P.push = false; savePrefs(); pushMsg = "The lock-screen alarm is off: the server lost this device. Turn it on again."; }
+      else { pushTry = Date.now() + 10000; pushMsg = "Not on the lock screen: no network. The page's own alarms still work."; }
+    }).catch((e) => console.error(e)).then(() => { pushBusy = false; renderPush(); });
+  }
+  if (window.addEventListener) window.addEventListener("online", () => { pushTry = 0; });
+
   // ---- one clock for every timer
   function heartbeat() {
     const now = Date.now();
+    pushCheck();
     ringTick(now);
     tickLive(now);
     if (!S) return;

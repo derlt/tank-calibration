@@ -16,6 +16,12 @@
  *     has none, a shared link may) gives the same page.
  *   - Only a good answer is kept: status 200, from this site, not a redirect.
  *
+ * Lock-screen alarms (worker/push.js): a push carries {title, body, kind}
+ * (encrypted; the browser decrypts it).  It is always shown as a
+ * notification, because iOS drops a subscription that gets a push with none.
+ * When the app is in view, the page rings itself: the notification closes
+ * at once.  A tap on it opens the app.
+ *
  * The page registers this file only on https (the hosted page); the one
  * file on a phone (calib_site.html) has no worker.
  */
@@ -74,5 +80,29 @@ self.addEventListener("fetch", (ev) => {
     }, () => net.then(give, () => give(Response.error())));
     const timer = setTimeout(fallback, WAIT_MS);
     net.then((r) => { clearTimeout(timer); give(r); }, () => { clearTimeout(timer); fallback(); });
+  }));
+});
+
+self.addEventListener("push", (ev) => {
+  let m = {};
+  try { m = ev.data ? ev.data.json() : {}; } catch (e) { m = {}; }
+  const title = String(m.title || "calib site"), tag = String(m.kind || "calib");
+  ev.waitUntil((async () => {
+    await self.registration.showNotification(title, {
+      body: String(m.body || ""), tag, renotify: true, requireInteraction: true, data: { kind: tag },
+      icon: "/icon-192.png",
+    });
+    const seen = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    if (seen.some((c) => c.visibilityState === "visible")) {
+      for (const n of await self.registration.getNotifications({ tag })) n.close();
+    }
+  })());
+});
+
+self.addEventListener("notificationclick", (ev) => {
+  ev.notification.close();
+  ev.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+    const open = list.find((c) => "focus" in c);
+    return open ? open.focus() : self.clients.openWindow("/");
   }));
 });

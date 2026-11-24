@@ -33,6 +33,9 @@
  *     working offline.
  */
 
+import { cleanAlarms, cleanSubscription } from "./push.js";
+export { PushTimer } from "./push.js";
+
 export const LIMITS = {
   body: 1_000_000,          // bytes of one request body
   campaigns: 2000,          // live campaigns per workspace
@@ -424,9 +427,60 @@ async function putTimer(request, env, a, id, now) {
     current: Object.assign({ timer: d == null ? null : JSON.parse(d), now }, meta) }, 409);
 }
 
+// ------------------------------------------------------- lock-screen alarms
+// Web Push (worker/push.js).  No login: a device proves itself with a random
+// secret of its own ("Authorization: Device <secret>"), and its store (a
+// PushTimer Durable Object) is named by the SHA-256 of that secret.
+async function pushDevice(request, env) {
+  if (!env.PUSH_TIMER || !env.VAPID_PRIVATE_KEY || !env.VAPID_PUBLIC_KEY || !env.VAPID_SUBJECT) {
+    throw new HttpError(503, "Lock-screen alarms are not set up on this server.");
+  }
+  const m = /^Device ([A-Za-z0-9_-]{32,64})$/.exec(request.headers.get("authorization") || "");
+  if (!m) throw new HttpError(401, "A device secret is needed.");
+  await rateLimit(env, "PUSH_LIMIT", clientIp(request));
+  const name = await sha256(m[1]);
+  return env.PUSH_TIMER.get(env.PUSH_TIMER.idFromName(name));
+}
+async function pushCall(stub, method, path, body) {
+  const r = await stub.fetch(new Request("https://push.internal" + path, {
+    method, body: body === undefined ? undefined : JSON.stringify(body),
+  }));
+  const out = await r.json();
+  if (!r.ok) throw new HttpError(r.status, out.error || "Push error.");
+  return out;
+}
+async function pushRoute(request, env, path, method) {
+  if (path === "/api/push/key" && method === "GET") {
+    if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY || !env.PUSH_TIMER) throw new HttpError(503, "Lock-screen alarms are not set up on this server.");
+    return json({ key: env.VAPID_PUBLIC_KEY });
+  }
+  if (path === "/api/push/subscribe" && method === "POST") {
+    const stub = await pushDevice(request, env);
+    const sub = cleanSubscription((await readBody(request)).subscription);
+    if (!sub) throw new HttpError(400, "That is not a subscription of a known push service.");
+    return json(await pushCall(stub, "POST", "/subscribe", { subscription: sub }));
+  }
+  if (path === "/api/push/subscribe" && method === "DELETE") {
+    return json(await pushCall(await pushDevice(request, env), "DELETE", "/subscribe"));
+  }
+  if (path === "/api/push/alarms" && method === "PUT") {
+    const stub = await pushDevice(request, env);
+    const alarms = cleanAlarms((await readBody(request)).alarms);
+    if (!alarms) throw new HttpError(400, "The alarms are not valid.");
+    return json(await pushCall(stub, "PUT", "/alarms", { alarms }));
+  }
+  if (path === "/api/push/alarms" && method === "DELETE") {
+    return json(await pushCall(await pushDevice(request, env), "DELETE", "/alarms"));
+  }
+  return null;
+}
 async function route(request, env, url, now) {
   const path = url.pathname, method = request.method;
   if (path === "/api/health" && method === "GET") return json({ ok: true });
+  if (path.startsWith("/api/push/")) {
+    const r = await pushRoute(request, env, path, method);
+    if (r) return r;
+  }
   if (!env.DB) throw new HttpError(503, "The cloud store is not set up on this server.");
   if (path === "/api/workspaces" && method === "POST") return signup(request, env, now);
   if (path === "/api/login" && method === "POST") return login(request, env, now);

@@ -241,12 +241,60 @@ ruleset on the zone; they need no setup. The Free plan allows one rate limit
 rule, with a 10 s period and a 10 s block. 50 per 10 s matches the Worker's
 own limit of 300 per minute.
 
+## Lock-screen alarms (Web Push)
+
+iOS stops a page's scripts and sound when the phone locks. A Home Screen app
+(iOS 16.4 or later) can get a Web Push instead: the page tells the Worker the
+alarms to come ("in 45 s: close the valve"), and the Worker sends a
+notification at those moments (the fill timer's two alarms and the settle
+alarm). The page keeps its own alarms and rings them while it is in view; the
+notification closes at once then.
+
+| Part | What it does |
+|---|---|
+| `worker/push.js` | The sender (VAPID JWT, ES256; payload encryption RFC 8291, aes128gcm) and `PushTimer`, a Durable Object (SQLite class) per device that holds the subscription and up to 10 alarms, wakes at the earliest one (`alarm()`), drops an alarm more than 2 minutes late, and deletes the subscription when the push service answers 404 or 410 |
+| `GET /api/push/key` | The public VAPID key |
+| `POST` / `DELETE /api/push/subscribe` | Store / remove this device's browser subscription |
+| `PUT` / `DELETE /api/push/alarms` | Replace / clear the alarm list: `[{in, kind, title, body}]`, `in` 1 s to 6 h from now (the server counts, so a wrong phone clock does not matter), `kind` one of `pre`, `full`, `settle`, title 120 and body 300 characters |
+| `site/sw.js` | `push` shows the notification (always: iOS drops a subscription that gets a push with none); `notificationclick` opens the app |
+
+**No login.** A device makes a random secret (`calib-site:device`) and sends
+`Authorization: Device <secret>`; its store is named by the SHA-256 of the
+secret, so the secret is the only way to reach it. The routes use the rate
+limit `PUSH_LIMIT` (60 a minute per IP address) besides `API_LIMIT`. The
+Worker sends only to the push services of Apple, Google (FCM), Mozilla and
+Microsoft (`pushHostAllowed`), never to an address a user chose, and a
+subscription must hold a valid key and auth secret. Anyone can register a
+subscription, but a notification goes only to the browser that owns it and
+carries only alarm texts of at most 120 + 300 characters.
+
+Set up once:
+
+```bash
+node scripts/make_vapid.mjs                          # prints VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY
+npx wrangler@4 secret put VAPID_PRIVATE_KEY          # paste the private key; never in git
+# in .env:  VAPID_PUBLIC_KEY=<the public key>   VAPID_SUBJECT=mailto:<a contact address>
+```
+
+and add `VAPID_PUBLIC_KEY` and `VAPID_SUBJECT` to the Workers Builds variables
+and the deploy command (above). Without the three values the push routes
+answer 503 and the page does not show the switch. **The first deploy must be
+a `wrangler deploy` (a push to `main`)**: it applies the Durable Object
+migration `v1`, which the dashboard's version upload cannot.
+
+Limits: the phone needs network when a timer starts; a web notification
+follows the Ring/Silent switch and Focus (the Clock timer of the Shortcuts mode
+rings in silent mode); delivery takes a few seconds and is not guaranteed.
+On the free plan, a day of timers is a few thousand Durable Object requests.
+
 ## Secrets: where each one lives
 
 | Value | Where | Never in |
 |---|---|---|
 | Signup code | `.env` and the Worker secret `SIGNUP_CODE` | the page, git, the API answers |
 | D1 database id | `.env` (`D1_DATABASE_ID`); `make deploy` writes `wrangler.deploy.jsonc` (ignored by git) | `wrangler.jsonc`, the page |
+| VAPID private key | the Worker secret `VAPID_PRIVATE_KEY` (and a copy in a password manager) | git, `.env` in the repository, the page, the API answers |
+| VAPID public key, contact | `.env` (`VAPID_PUBLIC_KEY`, `VAPID_SUBJECT`), passed to the deploy as variables | git |
 | Host names | `.env` (`SITE_URL`, `WORKERS_DEV_URL`, `API_HOSTS`) | docs, git, the page |
 | Keyword hashes, salts, token hashes | D1 only | every API answer: the queries name their columns, and none of these |
 
@@ -294,8 +342,8 @@ fails with `binding DB of type d1 must have a valid database_id specified`
 | Setting | Value |
 |---|---|
 | Build command | empty |
-| Deploy command | `sh scripts/cloud-build.sh && npx wrangler deploy --config wrangler.deploy.jsonc --var API_HOSTS:$API_HOSTS` |
-| Variables and Secrets | `D1_DATABASE_ID` and `API_HOSTS`, the values from `.env` |
+| Deploy command | `sh scripts/cloud-build.sh && npx wrangler deploy --config wrangler.deploy.jsonc --var API_HOSTS:$API_HOSTS --var VAPID_PUBLIC_KEY:$VAPID_PUBLIC_KEY --var VAPID_SUBJECT:$VAPID_SUBJECT` |
+| Variables and Secrets | `D1_DATABASE_ID`, `API_HOSTS`, `VAPID_PUBLIC_KEY` and `VAPID_SUBJECT`, the values from `.env` |
 
 Put the two variables in the **Workers Builds** section. The Worker's own
 *Variables and Secrets* (Settings → Variables and Secrets) are runtime
@@ -333,6 +381,8 @@ All bodies are JSON. Send `Authorization: Bearer <token>` after the login.
 | `site/cloud.js` | The page's client: login, link, the action list, sync, the merge, conflict, poll, the shared fill timer (inlined in the page) |
 | `site/_headers` | Security headers for the hosted page |
 | `site/sw.js` | The hosted page's offline copy (service worker, copied to `site/public/`) |
+| `worker/push.js` | Lock-screen alarms: Web Push sender and the `PushTimer` Durable Object |
+| `scripts/make_vapid.mjs` | Prints a VAPID key pair for the push |
 | `site/app/` | The Home Screen app: manifest and icons (copied to `site/public/`); `scripts/make_icons.py` draws the PNG files from the icon |
 | `tests/test_cloud.py` | Tests: the Worker on an in-memory SQLite D1, the client, two page devices, the merge, a seeded two-writer stress run and the shared fill timer |
 | `tests/test_secrets.py` | No `.env` value or server code in the page or in git |

@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Lock-screen alarms by Web Push.** In the Home Screen app a switch in
+  Settings sends the fill and settle alarms to the server, which sends a
+  notification at each alarm, so it reaches the lock screen. A Durable Object
+  per device holds the alarms; no cloud login (a random device secret);
+  VAPID keys are a Worker secret and two variables, see docs/cloud.md. The
+  first deploy applies a Durable Object migration (`wrangler deploy`). In the
+  app on an iPhone, an export opens the share sheet.
 - **Home Screen app.** The hosted page has a web manifest and icons
   (`site/app/`), so it installs as an app (iPhone: Share → Add to Home Screen)
   with the status bar over the header. Sessions in Safari do not move to the

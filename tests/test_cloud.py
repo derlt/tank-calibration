@@ -293,6 +293,270 @@ class TestCampaigns(unittest.TestCase):
         self.assertEqual(got["route"], 404)
 
 
+DEVICE = "A" * 43   # a device secret as the page makes it (32 random bytes, base64url)
+PUSHSETUP = (
+    "const env = await h.makePushEnv();\n"
+    "const dev = (secret = '" + DEVICE + "') => ({ Authorization: 'Device ' + secret, 'Content-Type': 'application/json' });\n"
+    "const call = async (method, p, body, headers = dev()) => {\n"
+    "  const r = await h.fetchFor(env)(h.BASE + p, { method, headers, body: body == null ? undefined : JSON.stringify(body) });\n"
+    "  let b = null; try { b = await r.json(); } catch (e) { b = null; } return { status: r.status, body: b };\n"
+    "};\n"
+    "const sub = await h.makeSubscription();\n"
+    "const obj = () => [...env.PUSH_TIMER.objects.values()][0];\n"
+    "const sent = []; const realFetch = globalThis.fetch; let answer = 201;\n"
+    "globalThis.fetch = async (url, init) => { sent.push({ url: String(url), init }); return new Response(null, { status: answer }); };\n"
+)
+
+
+@unittest.skipUnless(SQLITE, "node with node:sqlite is not installed")
+class TestPush(unittest.TestCase):
+    """Lock-screen alarms: worker/push.js, the routes /api/push/*, the Durable Object PushTimer."""
+
+    def test_the_routes_need_the_keys_and_a_device_secret(self):
+        got = _run(
+            PUSHSETUP
+            + "const bare = h.makeEnv();\n"
+            "const raw = async (e, method, p, headers) => (await h.fetchFor(e)(h.BASE + p, { method, headers })).status;\n"
+            "out.noKeys = [await raw(bare, 'GET', '/api/push/key'), await raw(bare, 'PUT', '/api/push/alarms', dev())];\n"
+            "out.key = (await call('GET', '/api/push/key')).body.key === env.VAPID_PUBLIC_KEY;\n"
+            "out.noSecret = (await call('PUT', '/api/push/alarms', { alarms: [] }, { 'Content-Type': 'application/json' })).status;\n"
+            "out.shortSecret = (await call('PUT', '/api/push/alarms', { alarms: [] }, dev('abc'))).status;\n"
+            "out.noSub = (await call('PUT', '/api/push/alarms', { alarms: [] })).status;\n"
+            "out.private = JSON.stringify((await call('GET', '/api/push/key')).body).includes(env.VAPID_PRIVATE_KEY);\n"
+            "globalThis.fetch = realFetch;\n"
+        )
+        self.assertEqual(got["noKeys"], [503, 503])
+        self.assertTrue(got["key"])
+        self.assertEqual(got["noSecret"], 401)
+        self.assertEqual(got["shortSecret"], 401)
+        self.assertEqual(got["noSub"], 409, "alarms need a subscription first")
+        self.assertFalse(got["private"], "the private key never leaves the Worker")
+
+    def test_subscription_and_alarm_checks(self):
+        got = _run(
+            PUSHSETUP
+            + "const bad = (endpoint) => ({ subscription: { endpoint, keys: sub.subscription.keys } });\n"
+            "out.hosts = [];\n"
+            "for (const e of ['https://evil.example/x', 'http://web.push.apple.com/x', 'https://web.push.apple.com:8443/x', 'https://127.0.0.1/x', 'https://fcm.googleapis.com.evil.example/x'])\n"
+            "  out.hosts.push((await call('POST', '/api/push/subscribe', bad(e))).status);\n"
+            "out.badKeys = (await call('POST', '/api/push/subscribe', { subscription: { endpoint: sub.subscription.endpoint, keys: { p256dh: 'AAAA', auth: 'AAAA' } } })).status;\n"
+            "out.ok = [];\n"
+            "for (const e of ['https://web.push.apple.com/a', 'https://fcm.googleapis.com/fcm/send/b', 'https://updates.push.services.mozilla.com/c', 'https://x.notify.windows.com/d'])\n"
+            "  out.ok.push((await call('POST', '/api/push/subscribe', bad(e))).status);\n"
+            "const al = (x) => ({ alarms: [Object.assign({ in: 30, kind: 'full', title: 'Valve', body: 'now' }, x)] });\n"
+            "out.bad = [];\n"
+            "for (const x of [{ in: 0 }, { in: 7 * 3600 }, { in: 'x' }, { kind: 'other' }, { title: '' }])\n"
+            "  out.bad.push((await call('PUT', '/api/push/alarms', al(x))).status);\n"
+            "out.many = (await call('PUT', '/api/push/alarms', { alarms: Array.from({ length: 11 }, () => al({}).alarms[0]) })).status;\n"
+            "out.good = (await call('PUT', '/api/push/alarms', al({ title: 'x'.repeat(500) }))).status;\n"
+            "out.title = obj().storage.data.get('alarms')[0].title.length;\n"
+            "globalThis.fetch = realFetch;\n"
+        )
+        self.assertEqual(got["hosts"], [400] * 5, "only the push services of the browsers")
+        self.assertEqual(got["badKeys"], 400)
+        self.assertEqual(got["ok"], [200] * 4)
+        self.assertEqual(got["bad"], [400] * 5)
+        self.assertEqual(got["many"], 400)
+        self.assertEqual(got["good"], 200)
+        self.assertEqual(got["title"], 120)
+
+    def test_an_alarm_is_sent_encrypted_at_its_time_and_not_late(self):
+        got = _run(
+            PUSHSETUP
+            + "await call('POST', '/api/push/subscribe', { subscription: sub.subscription });\n"
+            "const t0 = Date.now();\n"
+            "out.put = (await call('PUT', '/api/push/alarms', { alarms: [\n"
+            "  { in: 60, kind: 'full', title: 'Close the valve', body: 'full now' },\n"
+            "  { in: 45, kind: 'pre', title: 'Almost', body: '15 s' },\n"
+            "  { in: 300, kind: 'settle', title: 'Settled', body: 'dip now' }] })).status;\n"
+            "const o = obj();\n"
+            "out.wake = Math.round((o.storage.wake - t0) / 1000);   // the earliest alarm\n"
+            "out.early = sent.length;\n"
+            # 45 s later: the first one is due
+            "o.now = () => t0 + 45500; await o.alarm();\n"
+            "out.first = sent.length;\n"
+            "const m = sent[0], body = new Uint8Array(await new Response(m.init.body).arrayBuffer());\n"
+            "const d = await h.decryptPush(sub, body);\n"
+            "out.msg = JSON.parse(d.text); out.delim = d.delimiter; out.rs = d.rs;\n"
+            "out.url = m.url; out.enc = m.init.headers['Content-Encoding']; out.topic = m.init.headers.Topic; out.urgency = m.init.headers.Urgency; out.ttl = m.init.headers.TTL;\n"
+            "out.next = Math.round((o.storage.wake - t0) / 1000);\n"
+            # the phone's service was down: the second alarm comes 3 minutes late and is dropped, the third is on time
+            "o.now = () => t0 + 60000 + 180000; await o.alarm();\n"
+            "out.afterLate = sent.length;\n"
+            "out.left = o.storage.data.get('alarms').map((a) => a.kind);\n"
+            "o.now = () => t0 + 300500; await o.alarm();\n"
+            "out.last = [sent.length, JSON.parse((await h.decryptPush(sub, new Uint8Array(await new Response(sent[1].init.body).arrayBuffer()))).text).kind];\n"
+            "out.wakeAfter = o.storage.wake;\n"
+            "globalThis.fetch = realFetch;\n"
+        )
+        self.assertEqual(got["put"], 200)
+        self.assertEqual(got["wake"], 45)
+        self.assertEqual(got["early"], 0, "nothing goes out at scheduling time")
+        self.assertEqual(got["first"], 1)
+        self.assertEqual(got["msg"], {"title": "Almost", "body": "15 s", "kind": "pre"})
+        self.assertEqual((got["delim"], got["rs"]), (2, 4096))
+        self.assertEqual(got["url"], "https://web.push.apple.com/abc123")
+        self.assertEqual((got["enc"], got["topic"], got["urgency"], got["ttl"]), ("aes128gcm", "pre", "high", "60"))
+        self.assertEqual(got["next"], 60)
+        self.assertEqual(got["afterLate"], 1, "an alarm 3 minutes late is dropped")
+        self.assertEqual(got["left"], ["settle"])
+        self.assertEqual(got["last"], [2, "settle"])
+        self.assertIsNone(got["wakeAfter"], "no alarm left: the object sleeps")
+
+    def test_the_vapid_header_verifies(self):
+        got = _run(
+            PUSHSETUP
+            + "await call('POST', '/api/push/subscribe', { subscription: sub.subscription });\n"
+            "await call('PUT', '/api/push/alarms', { alarms: [{ in: 1, kind: 'full', title: 'T', body: 'b' }] });\n"
+            "const o = obj(); const t0 = Date.now(); o.now = () => t0 + 2000; await o.alarm();\n"
+            "const auth = sent[0].init.headers.Authorization;\n"
+            "const [, jwt, key] = /^vapid t=([^,]+), k=(.+)$/.exec(auth);\n"
+            "const [hd, cl, sg] = jwt.split('.');\n"
+            "const { createPublicKey, verify } = await import('node:crypto');\n"
+            "const pub = Buffer.from(env.VAPID_PUBLIC_KEY, 'base64url');\n"
+            "const k = createPublicKey({ key: { kty: 'EC', crv: 'P-256', x: pub.subarray(1, 33).toString('base64url'), y: pub.subarray(33).toString('base64url') }, format: 'jwk' });\n"
+            "out.valid = verify('sha256', Buffer.from(hd + '.' + cl), { key: k, dsaEncoding: 'ieee-p1363' }, Buffer.from(sg, 'base64url'));\n"
+            "out.head = JSON.parse(Buffer.from(hd, 'base64url')); out.claims = JSON.parse(Buffer.from(cl, 'base64url'));\n"
+            "out.k = key === env.VAPID_PUBLIC_KEY; out.now = Math.floor(t0 / 1000);\n"
+            "globalThis.fetch = realFetch;\n"
+        )
+        self.assertTrue(got["valid"], "ES256 signature, raw r||s")
+        self.assertEqual(got["head"], {"typ": "JWT", "alg": "ES256"})
+        self.assertEqual(got["claims"]["aud"], "https://web.push.apple.com")
+        self.assertEqual(got["claims"]["sub"], "mailto:ops@example.test")
+        self.assertTrue(0 < got["claims"]["exp"] - got["now"] <= 12 * 3600 + 5)
+        self.assertTrue(got["k"])
+
+    def test_replace_clear_remove_and_a_gone_subscription(self):
+        got = _run(
+            PUSHSETUP
+            + "await call('POST', '/api/push/subscribe', { subscription: sub.subscription });\n"
+            "const a = (n, kind) => ({ in: n, kind, title: kind, body: '' });\n"
+            "await call('PUT', '/api/push/alarms', { alarms: [a(30, 'pre'), a(60, 'full')] });\n"
+            "await call('PUT', '/api/push/alarms', { alarms: [a(90, 'settle')] });\n"
+            "out.replaced = obj().storage.data.get('alarms').map((x) => x.kind);\n"
+            "out.clear = (await call('DELETE', '/api/push/alarms')).status;\n"
+            "out.cleared = [obj().storage.data.get('alarms').length, obj().storage.wake];\n"
+            # another device's secret reaches another object
+            "await call('POST', '/api/push/subscribe', { subscription: sub.subscription }, dev('B'.repeat(43)));\n"
+            "out.objects = env.PUSH_TIMER.objects.size;\n"
+            # the push service says the subscription is gone: the store is emptied
+            "await call('PUT', '/api/push/alarms', { alarms: [a(1, 'full')] });\n"
+            "const o = obj(); const t0 = Date.now(); o.now = () => t0 + 1500; answer = 410; await o.alarm();\n"
+            "out.gone = [o.storage.data.size, o.storage.wake];\n"
+            "out.after = (await call('PUT', '/api/push/alarms', { alarms: [a(5, 'full')] })).status;\n"
+            "await call('POST', '/api/push/subscribe', { subscription: sub.subscription });\n"
+            "out.unsub = (await call('DELETE', '/api/push/subscribe')).status;\n"
+            "out.empty = obj().storage.data.size;\n"
+            "globalThis.fetch = realFetch;\n"
+        )
+        self.assertEqual(got["replaced"], ["settle"])
+        self.assertEqual(got["clear"], 200)
+        self.assertEqual(got["cleared"], [0, None])
+        self.assertEqual(got["objects"], 2, "one object per device secret")
+        self.assertEqual(got["gone"], [0, None])
+        self.assertEqual(got["after"], 409)
+        self.assertEqual((got["unsub"], got["empty"]), (200, 0))
+
+    def test_the_page_schedules_the_lock_screen_alarms(self):
+        stub = (HERE / "page_stub.js").as_posix()
+        page = (ROOT / "site" / "page.html").as_posix()
+        core = (ROOT / "site" / "site_core.js").as_posix()
+        got = _run(
+            "const stub = require(" + json.dumps(stub) + ");\n"
+            "const env = await h.makePushEnv();\n"
+            "const sub = await h.makeSubscription();\n"
+            "const f = h.fetchFor(env, '10.0.0.1'); const iv = []; const st = new Map();\n"
+            "let granted = 'granted';\n"
+            "const subscribed = { n: 0, unsub: 0 };\n"
+            "const reg = { pushManager: { getSubscription: async () => (subscribed.n ? { toJSON: () => sub.subscription, unsubscribe: async () => { subscribed.unsub++; return true; } } : null),\n"
+            "  subscribe: async (o) => { subscribed.n++; subscribed.opts = o; return { toJSON: () => sub.subscription, unsubscribe: async () => { subscribed.unsub++; return true; } }; } } };\n"
+            "const ext = { fetch: f, PushManager: function () {}, location: { protocol: 'https:', origin: h.BASE },\n"
+            "  navigator: { standalone: true, onLine: true, serviceWorker: { register: async () => reg, ready: Promise.resolve(reg) } },\n"
+            "  Notification: { permission: 'default', requestPermission: async () => { ext.Notification.permission = granted; return granted; } },\n"
+            "  crypto: globalThis.crypto, btoa, atob, Uint8Array,\n"
+            "  setInterval: (fn, ms) => { iv.push({ fn, ms }); return iv.length; } };\n"
+            "const a = stub.boot(" + json.dumps(page) + ", " + json.dumps(core) + ", st, ext).el;\n"
+            "const until = async (ok) => { for (let i = 0; i < 300 && !ok(); i++) await new Promise((r) => setTimeout(r, 10)); return ok(); };\n"
+            "const beat = () => iv.find((x) => x.ms === 500).fn();\n"
+            "const al = () => { const o = [...env.PUSH_TIMER.objects.values()][0]; return o ? o.storage.data.get('alarms') || [] : null; };\n"
+            "a('s-tank').value = 'alpha'; a('s-D').value = '2400'; a('s-L').value = '5000'; a('s-dip').value = '100'; a('s-step').value = '?'; a('s-go').click(); a('d-val').value = '100'; a('d-go').click();\n"
+            "a('t-unit').value = '200'; a('tm-fill-200').value = '1:00'; a('tm-lead').value = '15'; a('tm-save').click();\n"
+            "out.hiddenAtFirst = a('tm-push')._classes.has('hidden');\n"
+            "out.shown = await until(() => !a('tm-push')._classes.has('hidden'));\n"
+            # nothing goes up before the switch is on
+            "a('pt-start').click(); beat(); await new Promise((r) => setTimeout(r, 50));\n"
+            "out.before = al();\n"
+            "a('tm-push-on').checked = true; a('tm-push-on')._listeners.change[0]();\n"
+            "out.on = await until(() => JSON.parse(st.get('calib-site:prefs') || '{}').push === true);\n"
+            "out.key = subscribed.opts && subscribed.opts.userVisibleOnly === true && subscribed.opts.applicationServerKey.length === 65;\n"
+            "out.secret = /^[A-Za-z0-9_-]{43}$/.test(st.get('calib-site:device') || '');\n"
+            "beat(); out.up = await until(() => al() && al().length === 2);\n"
+            "out.kinds = (al() || []).map((x) => [x.kind, x.title]);\n"
+            "out.gap = al() && Math.round((al()[1].at - al()[0].at) / 1000);\n"
+            # +20 s moves both; the list is replaced, not added to
+            "a('pt-more').click(); beat(); await until(() => al() && al().length === 2 && al()[1].at - Date.now() > 70000);\n"
+            "const t = Date.now(); out.moved = al().map((x) => Math.round((x.at - t) / 1000)).map((s, i) => Math.abs(s - [65, 80][i]) <= 3);\n"
+            # stop: the list is cleared on the server
+            "a('pt-stop').click(); beat(); out.cleared = await until(() => al() && al().length === 0);\n"
+            # off: unsubscribed here and on the server
+            "a('tm-push-on').checked = false; a('tm-push-on')._listeners.change[0]();\n"
+            "out.off = await until(() => JSON.parse(st.get('calib-site:prefs') || '{}').push === false && [...env.PUSH_TIMER.objects.values()][0].storage.data.size === 0);\n"
+            "out.unsub = subscribed.unsub;\n"
+            "const sk = [...env.PUSH_TIMER.objects.keys()][0];\n"
+            "out.named = sk.length === 64 && sk !== st.get('calib-site:device');\n"
+        )
+        self.assertTrue(got["hiddenAtFirst"] or got["shown"])
+        self.assertTrue(got["shown"], "the switch shows in the Home Screen app when the server has keys")
+        self.assertIsNone(got["before"], "nothing is sent while the switch is off")
+        self.assertTrue(got["on"])
+        self.assertTrue(got["key"], "userVisibleOnly and the server's key")
+        self.assertTrue(got["secret"])
+        self.assertTrue(got["up"], "start: the fill alarms go to the server")
+        self.assertEqual([k for k, _ in got["kinds"]], ["pre", "full"])
+        self.assertEqual(got["kinds"][0][1], "Close the valve: 0:15 to full")
+        self.assertEqual(got["gap"], 15)
+        self.assertEqual(got["moved"], [True, True], "+20 s moves the alarms")
+        self.assertTrue(got["cleared"], "stop clears them")
+        self.assertTrue(got["off"])
+        self.assertEqual(got["unsub"], 1)
+        self.assertTrue(got["named"], "the store is named by a hash of the secret, not the secret")
+
+    def test_the_push_plan(self):
+        got = _run(
+            "const core = require(" + json.dumps((ROOT / "site" / "site_core.js").as_posix()) + ");\n"
+            "const now = 1_000_000, pour = { start: now - 10_000, dur: 60, lead: 15, size: 200, preAlarmed: false, fullAlarmed: false, ios: false };\n"
+            "const plan = (o) => core.pushPlan(Object.assign({ pour, settleAt: null, settled: false, now }, o));\n"
+            "out.both = plan({}).map((a) => [a.kind, (a.at - now) / 1000, a.text]);\n"
+            "out.rang = plan({ pour: Object.assign({}, pour, { preAlarmed: true }) }).map((a) => a.kind);\n"
+            "out.late = plan({ now: now + 40_000 }).map((a) => a.kind);\n"
+            "out.tooClose = plan({ now: now + 49_500 }).length;\n"
+            "out.ios = plan({ pour: Object.assign({}, pour, { ios: true }) }).length;\n"
+            "out.settle = plan({ pour: null, settleAt: now + 300_000 }).map((a) => [a.kind, a.text]);\n"
+            "out.settleDone = plan({ pour: null, settleAt: now + 300_000, settled: true }).length;\n"
+            "out.order = plan({ settleAt: now + 20_000 }).map((a) => a.kind);\n"
+            "out.short = core.pushPlan({ pour: { ...pour, dur: 10, lead: 15 }, settleAt: null, settled: false, now: now - 10_000 + 2000 }).map((a) => a.kind);\n"
+        )
+        self.assertEqual(got["both"], [["pre", 35, "Close the valve: 0:15 to full"], ["full", 50, "Can full: pump off (200 L)"]])
+        self.assertEqual(got["rang"], ["full"])
+        self.assertEqual(got["late"], ["full"])
+        self.assertEqual(got["tooClose"], 0, "less than 1 s ahead is not scheduled")
+        self.assertEqual(got["ios"], 0, "the iPhone timer rings these itself")
+        self.assertEqual(got["settle"], [["settle", "Settled: dip now"]])
+        self.assertEqual(got["settleDone"], 0)
+        self.assertEqual(got["order"], ["settle", "pre", "full"], "sorted by time")
+        self.assertEqual(got["short"], ["full"], "a lead longer than the timer: the pre alarm is already past")
+
+    def test_the_push_rate_limit(self):
+        got = _run(
+            PUSHSETUP
+            + "env.PUSH_LIMIT = h.makeLimiter(3);\n"
+            "out.codes = []; for (let i = 0; i < 5; i++) out.codes.push((await call('DELETE', '/api/push/alarms')).status);\n"
+            "globalThis.fetch = realFetch;\n"
+        )
+        self.assertEqual(got["codes"], [200, 200, 200, 429, 429])
+
+
 @unittest.skipUnless(SQLITE, "node with node:sqlite is not installed")
 class TestTimerApi(unittest.TestCase):
     def test_the_last_change_wins_and_the_rev_polls(self):

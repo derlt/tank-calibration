@@ -74,6 +74,29 @@ shows at the next load while the network works. The worker handles only the
 page itself, never `/api/*`. The copy starts after the first visit on that
 phone and browser.
 
+### Lock-screen alarm (notification)
+
+In the Home Screen app, Settings → Timers, alarm and device shows **lock-screen
+alarm (notification)** when the server has the push keys
+([cloud.md](cloud.md), "Lock-screen alarms"). Turn it on with a tap and allow
+notifications. From then on the page tells the server each alarm to come (the
+two fill alarms of the timer, the settle alarm) whenever that list changes
+(start, +20 s, −20 s, stop, +1 can, a new batch, a timer from another
+device), and the server sends a notification at the time, so the alarm
+reaches the lock screen. No cloud login is needed. Each device gets only its
+own alarms. A run that the iPhone timer (Shortcuts) rings is left out.
+
+Limits: the phone needs network when the timer starts (the line under the
+switch says when it was not sent; the page's own alarms still work and the
+page sends again when the network is back); the notification follows the
+Ring/Silent switch and Focus, unlike the Clock timer of the Shortcuts mode,
+which rings in silent mode; it can come a few seconds late, and one more than
+2 minutes late is dropped. While the app is in view, the page rings and the
+notification closes at once.
+
+On an iPhone the export (CSV, session JSON) from the app opens the share
+sheet (Save to Files, AirDrop); elsewhere it downloads as before.
+
 ### Home Screen app (iPhone, iPad, Android)
 
 The hosted page is also an app: `site/app/manifest.webmanifest` (standalone,

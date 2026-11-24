@@ -3078,7 +3078,31 @@
   function fmt(x, d) { return x == null || !isFinite(x) ? "—" : Number(x).toFixed(d); }
   function sgn(x, d) { return (x >= 0 ? "+" : "−") + fmt(Math.abs(x), d); }
 
+  /**
+   * The alarms a lock-screen notification must ring for, from the fill
+   * timer and the settle timer: [{at (ms), kind: "pre" | "full" | "settle", text}].
+   * The same moments and texts as the page's own alarms.  Left out: an alarm
+   * that rang already (preAlarmed, fullAlarmed, settled), one in the past
+   * (under 1 s ahead), and every alarm of a run the iPhone timer (Shortcuts)
+   * rings.  pour: the fill timer {start, dur, lead, size, preAlarmed,
+   * fullAlarmed, ios} or null; settleAt: when the settle time ends (ms) or
+   * null; settled: that alarm rang already.
+   */
+  function pushPlan({ pour, settleAt, settled, now }) {
+    const out = [], soon = now + 1000;
+    const ms = (s) => { s = Math.max(0, Math.round(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+    if (pour && !pour.ios) {
+      const lead = Math.min(pour.lead, pour.dur - 1);
+      const preAt = pour.start + (pour.dur - lead) * 1000, fullAt = pour.start + pour.dur * 1000;
+      if (!pour.preAlarmed && preAt >= soon) out.push({ at: Math.round(preAt), kind: "pre", text: `Close the valve: ${ms(lead)} to full` });
+      if (!pour.fullAlarmed && fullAt >= soon) out.push({ at: Math.round(fullAt), kind: "full", text: `Can full: pump off (${Number(pour.size).toFixed(0)} L)` });
+    }
+    if (settleAt != null && !settled && settleAt >= soon) out.push({ at: Math.round(settleAt), kind: "settle", text: "Settled: dip now" });
+    return out.sort((a, b) => a.at - b.at);
+  }
+
   const api = {
+    pushPlan,
     DEFAULT_CYCLE,
     area, volume, slope, capacity, brim, levelFor, fitShell, predictLevel, parseStep,
     resolveConfig, Session, TransferSession, DEFAULTS, adopt, canHint, NAMES, replayRows,

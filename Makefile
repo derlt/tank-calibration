@@ -58,10 +58,10 @@ site-public:
 # Publish the on-site page as a Cloudflare Worker with static assets.
 # Needs a Cloudflare login: `npx wrangler login`, or CLOUDFLARE_API_TOKEN.
 deploy: site-public deploy-config
-	npx wrangler@4 deploy --config $(DEPLOY_CFG) --var API_HOSTS:$(API_HOSTS)
+	npx wrangler@4 deploy --config $(DEPLOY_CFG) --var API_HOSTS:$(API_HOSTS) --var VAPID_PUBLIC_KEY:$(VAPID_PUBLIC_KEY) --var VAPID_SUBJECT:$(VAPID_SUBJECT)
 
 deploy-dry: site-public deploy-config
-	npx wrangler@4 deploy --config $(DEPLOY_CFG) --var API_HOSTS:$(API_HOSTS) --dry-run
+	npx wrangler@4 deploy --config $(DEPLOY_CFG) --var API_HOSTS:$(API_HOSTS) --var VAPID_PUBLIC_KEY:$(VAPID_PUBLIC_KEY) --var VAPID_SUBJECT:$(VAPID_SUBJECT) --dry-run
 
 clean:
 	rm -rf out
