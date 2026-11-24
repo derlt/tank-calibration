@@ -348,6 +348,11 @@
   .sizes { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem; }
   .sizes button { min-height: 2.3rem; padding: 0.2rem 0.7rem; font-size: 0.9rem; background: var(--surface); color: var(--brand-ink); }
   .sizes button[aria-pressed=true] { background: var(--brand); color: #fff; }
+  /* The way to the timer settings: a small gear in the card's top right corner. */
+  .timer { position: relative; }
+  .timer .tset { position: absolute; top: 0.3rem; right: 0.3rem; width: 1.9rem; min-width: 0; min-height: 0; height: 1.9rem; padding: 0; display: flex; align-items: center; justify-content: center; background: transparent; border: 0; box-shadow: none; color: var(--muted); border-radius: 999px; }
+  .timer .tset svg { width: 1.1rem; height: 1.1rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .timer .tset:active { background: var(--todo-bg); }
   .timer { border: 1px solid var(--line); border-radius: 10px; padding: 0.6rem; margin: 0.7rem 0 0.2rem; display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 0.8rem; align-items: center; }
   .timer.run { border-color: var(--info); background: var(--info-bg); }
   .timer.pre { border-color: var(--warn); background: var(--warn-bg); }
@@ -617,6 +622,7 @@
         <div class="tally-seg" id="t-bar" role="progressbar" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div>
         <div class="tally-lab" id="t-times" role="group" aria-label="Finish times"></div>
         <div class="timer" id="pt">
+          <button class="tset" id="pt-settings" type="button" aria-label="Timer settings" title="Timer settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
           <svg class="pour-anim" id="pt-anim" viewBox="0 0 120 90" aria-hidden="true">
             <defs>
               <clipPath id="pt-clip"><rect x="10" y="30" width="30" height="44" rx="3"/></clipPath>
@@ -644,7 +650,6 @@
             <button class="secondary small hidden" id="pt-less">−20 s</button>
             <button class="secondary small hidden" id="pt-more">+20 s</button>
             <button class="danger small hidden" id="pt-stop">Stop timer</button>
-            <button class="secondary small" id="pt-settings">Timer settings</button>
           </div>
         </div>
         <p class="muted vb" id="t-help">Start the fill timer when you start the pump. The alarm rings before the can is full: close the valve. Tap <b>+1 can poured</b> when the can is full. Emptying the can into the tank has no timer. Each can keeps the size set in Options, so one batch can mix sizes. The count is saved after each tap. One dip follows the batch.</p>
