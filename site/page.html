@@ -420,9 +420,10 @@
     /* The status bar text sits in the upper part of the safe area (the time
        and battery beside the notch, 59 px on a Dynamic Island phone), so the
        header starts 10 px above the bottom of it and is slim below. */
-    :root { --top: max(0px, calc(env(safe-area-inset-top) - 10px)); }
+    :root { --top: max(0px, calc(env(safe-area-inset-top) - 18px)); }
     body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: var(--top); background: var(--hdr); z-index: 20; pointer-events: none; }
-    header { padding-top: max(0.15rem, var(--top)); padding-bottom: 0.15rem; min-height: 0; }
+    header { padding-top: max(0.1rem, var(--top)); padding-bottom: 0.1rem; min-height: 0; }
+    header h1 { line-height: 1.15; }
     .chrome { top: var(--top); }
   }
   main { padding-left: max(0.8rem, env(safe-area-inset-left)); padding-right: max(0.8rem, env(safe-area-inset-right)); padding-bottom: calc(0.8rem + env(safe-area-inset-bottom)); }
