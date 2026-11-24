@@ -412,8 +412,13 @@
      behind it while the page scrolls under the sticky tabs. */
   header { padding-top: max(0.35rem, env(safe-area-inset-top)); }
   @media (display-mode: standalone) {
-    body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top); background: var(--hdr); z-index: 20; pointer-events: none; }
-    .chrome { top: env(safe-area-inset-top); }
+    /* The status bar text sits in the upper part of the safe area (the time
+       and battery beside the notch, 59 px on a Dynamic Island phone), so the
+       header starts 10 px above the bottom of it and is slim below. */
+    :root { --top: max(0px, calc(env(safe-area-inset-top) - 10px)); }
+    body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: var(--top); background: var(--hdr); z-index: 20; pointer-events: none; }
+    header { padding-top: max(0.25rem, var(--top)); padding-bottom: 0.25rem; min-height: 0; }
+    .chrome { top: var(--top); }
   }
   main { padding-left: max(0.8rem, env(safe-area-inset-left)); padding-right: max(0.8rem, env(safe-area-inset-right)); padding-bottom: calc(0.8rem + env(safe-area-inset-bottom)); }
   @media (max-width: 560px) {
