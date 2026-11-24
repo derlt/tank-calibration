@@ -3675,7 +3675,6 @@ class TestSitePlan(unittest.TestCase):
             "el('d-val').value = '10'; el('d-go').click(); el('d-val').value = '10'; el('d-go').click();\n"
             "out.head = el('t-plan-head').textContent;\n"
             "out.ptally = [el('t-plan-tally').innerHTML, el('t-plan-tally')['aria-label']];\n"
-            "out.pgroups = [el('t-plan-groups')._classes.has('hidden'), el('t-plan-groups').innerHTML];\n"
             "out.hidden = el('t-plan')._classes.has('hidden');\n"
             "out.unit0 = el('t-unit').value; out.target = el('t-count').textContent;\n"
             "el('t-plus').click(); out.unit1 = el('t-unit').value; out.todo = el('t-bar').innerHTML; out.todoLab = el('t-times').innerHTML;\n"
@@ -3700,17 +3699,11 @@ class TestSitePlan(unittest.TestCase):
         self.assertEqual(got["err"], "")
         self.assertFalse(got["hidden"])
         self.assertEqual(got["head"], "Batch 300 L · 1/2", "the batch size, then its number in the group")
-        self.assertEqual(got["ptally"][0], '<span class="pips"><i class="now"></i><i class=""></i></span>',
-                         "a pip per batch of the group in work")
-        self.assertEqual(got["ptally"][1], "0 of 2 batches done")
-        self.assertFalse(got["pgroups"][0], "five groups: the group line shows")
-        self.assertIn('<span class="pgn" aria-hidden="true">group 1/5</span>', got["pgroups"][1])
-        self.assertIn('<div class="pgrp"><i class="now" style="flex:300 1 0"><b style="width:0.0%"></b></i>'
-                      '<i class="" style="flex:600 1 0"></i><i class="" style="flex:800 1 0"></i>'
-                      '<i class="" style="flex:600 1 0"></i><i class="" style="flex:300 1 0"></i></div>',
-                      got["pgroups"][1], "a segment per group, as wide as its batch size")
-        self.assertIn('<span class="now" style="flex:300 1 0">300</span>', got["pgroups"][1],
-                      "each batch size under its segment")
+        self.assertEqual(got["ptally"][0],
+                         '<span class="gpill"><span class="pips"><i class="now"></i><i class=""></i></span></span>'
+                         '<i class="gsq"></i><i class="gsq"></i><i class="gsq"></i><i class="gsq"></i>',
+                         "the group in work is a pill of pips; the other four groups are squares")
+        self.assertEqual(got["ptally"][1], "Group 1 of 5: 0 of 2 batches done")
         self.assertEqual(got["unit0"], "200", "the batch starts with its largest can")
         self.assertEqual(got["target"], "0 / 2 cans · 0 L", "the plan's batch is two cans: 200 + 100 L")
         self.assertEqual(got["unit1"], "100", "the next tap is the 100 L can of the mix")
