@@ -149,6 +149,15 @@ class TestSitePage(unittest.TestCase):
         self.assertIn('navigator.serviceWorker.register("/sw.js")', page)
         self.assertIn('location.protocol === "https:"', page, "the one file on a phone registers no worker")
 
+    def test_the_action_buttons_stay_last_on_the_live_tab(self):
+        """In next-can mode the pour card moves below the dip card, but above the buttons."""
+        page = (SITE / "page.html").read_text(encoding="utf-8")
+        live = page[page.index('<section id="live"'):page.index('<!-- ===================================================== log')]
+        order = [live.index(f'id="{i}"') for i in ("pour-card", "now-card", "dip-card", "verdict", "level-actions", "now-fin-note")]
+        self.assertEqual(order, sorted(order), "the buttons, then their note, close the tab")
+        self.assertIn('live.insertBefore(card, $("level-actions"))', page, "next-can mode keeps the buttons last")
+        self.assertNotIn("live.appendChild(card)", page)
+
     def test_home_screen_app_files(self):
         """The manifest names icons that exist, with the sizes it states; the page links them."""
         app = SITE / "app"

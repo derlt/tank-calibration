@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Live tab: the action buttons stay last.** While a dip waits and the next can
+  runs, the pour and Now cards moved below the buttons (Take another reading,
+  Recount, Undo last entry …). They now sit above them: the buttons close the
+  tab in every case.
+
 ### Added
 
 - **Timer settings from the timer card.** A **Timer settings** button on the

@@ -3434,8 +3434,10 @@
     for (const id of ["t-plus", "t-undo", "t-part", "p-go"]) $(id).disabled = true;
   }
   /**
-   * The pour card above the dip card (normal), or last on the Live tab
-   * (next-can mode).  The Now card follows the pour card.
+   * The pour card above the dip card (normal), or below it (next-can mode,
+   * above the buttons).  The Now card follows the pour card.  The action
+   * buttons (Take another reading, Recount, Undo …) are always last on the
+   * Live tab.
    */
   let pourBelow = false;
   function placePourCard(below) {
@@ -3443,7 +3445,7 @@
     pourBelow = below;
     const live = $("live"), card = $("pour-card"), now = $("now-card");
     if (!live.insertBefore) return;   // the test stub has no DOM tree
-    if (below) { live.appendChild(card); live.appendChild(now); }
+    if (below) { live.insertBefore(card, $("level-actions")); live.insertBefore(now, $("level-actions")); }
     else { live.insertBefore(card, $("dip-card")); live.insertBefore(now, $("dip-card")); }
   }
 
