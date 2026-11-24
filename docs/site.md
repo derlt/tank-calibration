@@ -269,6 +269,9 @@ explanation. **Simple** shows only what to do and the numbers to read:
 - the time to the brim (a drain: the suction floor) as one short line: the
   way left now, after the batch, the time and the clock;
 - each verdict as its title and its action, without the numbers behind it.
+- no how-to text: the Now card has no *pour to predict* hint and keeps the
+  default time per can to one short line, the next-can note is one sentence,
+  and the litres hint in Options is hidden.
 
 Simple mode hides the help paragraphs, the shell figures (liquid, brim,
 slope), the full time block (*To half* and its breakdown), the batch plan's

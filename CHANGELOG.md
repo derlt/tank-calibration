@@ -63,6 +63,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- **Simple mode: less explanation on the Live tab.** The Now card no longer says
+  *pour to predict (tap the cans or enter litres)* or repeats *blind repeat*
+  (the dip card keeps it), and the default time per can is one short line. The
+  next-can note is *Empty the can after the dip.*, the dip field is *Next
+  reading, mm*, and the litres hint in Options is hidden. Verbose mode keeps all
+  the text.
 - **The first level needs one reading, not two.** The start level is accepted
   on one reading (*First level recorded*) and the first pour is tested against
   it; a second dip still re-opens it. The setup notes, the help and the docs

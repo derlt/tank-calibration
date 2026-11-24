@@ -714,7 +714,7 @@
                   <button class="secondary small" id="p-minus">− unit</button>
                   <button class="secondary small" id="p-plus">+ unit</button>
                 </div>
-                <p class="muted" id="p-vol-hint" style="margin:0.35rem 0 0">Typed litres replace the batch volume; the can taps and times stay in the note.</p>
+                <p class="muted vb" id="p-vol-hint" style="margin:0.35rem 0 0">Typed litres replace the batch volume; the can taps and times stay in the note.</p>
               </div>
             </div>
           </div>
@@ -1534,6 +1534,8 @@
     "Reading after {s} L, mm": "Số đo sau {s} L, mm",
     "Reading after draining {s} L, mm": "Số đo sau khi bơm ra {s} L, mm",
     "Next reading, mm": "Số đo tiếp theo, mm",
+    "Empty the can after the dip.": "Đổ bình vào bồn sau khi đo.",
+    "Default time per can: a rough guess.": "Thời gian mỗi bình mặc định: chỉ là ước đoán.",
     "earlier readings hidden": "đã ẩn các số đo trước",
     "Tank B reading, mm": "Số đo bồn B, mm",
     "{name}, mm": "{name}, mm",
@@ -8418,7 +8420,7 @@
     if (pend) {
       const n = pend.dips.length;
       $("dip-title").textContent = n === 0 ? "2 · Dip" : `2 · Dip again (reading ${n + 1})`;
-      $("dip-label").textContent = n === 0 ? `Reading after ${drain ? "draining " : ""}${pend.step.text} L, mm` : "Next reading, mm — earlier readings hidden";
+      $("dip-label").textContent = n === 0 ? `Reading after ${drain ? "draining " : ""}${pend.step.text} L, mm` : (simple() ? "Next reading, mm" : "Next reading, mm — earlier readings hidden");
     }
     renderDipExpect("dip-expect-a", S);
     tickSettle(Date.now());
@@ -8759,8 +8761,8 @@
     if (S.finished) { set("", ""); return; }
     // The first level waits for its pair: no batch to predict yet.
     if (v.from == null || (pending() && !v.pending)) { set("", ""); return; }
-    if (blind(v)) { set(simple() ? "Blind repeat: no expected level." : "Expected level hidden for the repeat reading (blind repeat).", "muted"); return; }
-    if (v.why === "no-cans") { set(`After this ${w}: pour to predict (tap the cans or enter litres).`, "muted"); return; }
+    if (blind(v)) { set(simple() ? "" : "Expected level hidden for the repeat reading (blind repeat).", "muted"); return; }
+    if (v.why === "no-cans") { set(simple() ? "" : `After this ${w}: pour to predict (tap the cans or enter litres).`, "muted"); return; }
     if (v.why === "to-neck") { set(`After this ${w}: overflow (the liquid reached the neck).`, "error"); return; }
     if (v.why) { set(`After this ${w}: no prediction (${nowWhy(v, w)}).`, "muted"); return; }
     if (simple()) { set(`After ${f(v.s, 0)} L: ` + (v.edge ? predNum(v) : `${f(v.to)} ± ${f(2 * v.sd)} mm`), v.edge ? "error" : ""); return; }
@@ -8779,7 +8781,7 @@
     const ent = [["A", a], ["B", b]].filter(([, v]) => v.why !== "finished");
     if (!ent.length) { set("Both tanks are finished: close the session on Files.", "muted"); return; }
     if (a.from == null || b.from == null || (pending() && !a.pending && !b.pending)) { set("", ""); return; }
-    if (a.why === "no-cans" && b.why === "no-cans") { set("After this batch: pour to predict (tap the cans or enter litres).", "muted"); return; }
+    if (a.why === "no-cans" && b.why === "no-cans") { set(simple() ? "" : "After this batch: pour to predict (tap the cans or enter litres).", "muted"); return; }
     if (a.why && a.why === b.why) { set(`After this batch: no prediction (${nowWhy(a, "batch")}).`, "muted"); return; }
     const part = (v, k) => {
       if (blind(v)) return `${k}: hidden for the repeat reading`;
@@ -9070,9 +9072,10 @@
     $("p-opts-rest").classList.toggle("hidden", on);
     if (!on) { note.textContent = ""; return; }
     $("pour-title").textContent = "1 · Next can";
-    note.textContent = isTransfer()
-      ? "Tank B waits for its dip. The pump can fill the next can from tank A now. Empty it into tank B after the dip: +1 can and Batch done open when tank B is decided."
-      : "The dip waits. The pump can fill the next can now. Empty it into the tank after the dip: +1 can and Batch done open when the dip is decided.";
+    note.textContent = simple() ? "Empty the can after the dip."
+      : isTransfer()
+        ? "Tank B waits for its dip. The pump can fill the next can from tank A now. Empty it into tank B after the dip: +1 can and Batch done open when tank B is decided."
+        : "The dip waits. The pump can fill the next can now. Empty it into the tank after the dip: +1 can and Batch done open when the dip is decided.";
     for (const id of ["t-plus", "t-undo", "t-part", "p-go"]) $(id).disabled = true;
   }
   /**
@@ -9952,7 +9955,9 @@
   }
   /** The default time per can is a guess: say so, in both modes. */
   function defaultMark(d) {
-    return d.source === "default" ? `<div class="muted">Default time per can (fill ${fmtClock(d.fill)} + drain ${fmtClock(d.drain)}): a rough guess.</div>` : "";
+    if (d.source !== "default") return "";
+    return simple() ? '<div class="muted">Default time per can: a rough guess.</div>'
+      : `<div class="muted">Default time per can (fill ${fmtClock(d.fill)} + drain ${fmtClock(d.drain)}): a rough guess.</div>`;
   }
 
   /** The cycle time of one can size in s, for the plan's mixed batches; null when not set. */

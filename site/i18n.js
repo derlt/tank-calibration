@@ -481,6 +481,8 @@
     "Reading after {s} L, mm": "Số đo sau {s} L, mm",
     "Reading after draining {s} L, mm": "Số đo sau khi bơm ra {s} L, mm",
     "Next reading, mm": "Số đo tiếp theo, mm",
+    "Empty the can after the dip.": "Đổ bình vào bồn sau khi đo.",
+    "Default time per can: a rough guess.": "Thời gian mỗi bình mặc định: chỉ là ước đoán.",
     "earlier readings hidden": "đã ẩn các số đo trước",
     "Tank B reading, mm": "Số đo bồn B, mm",
     "{name}, mm": "{name}, mm",

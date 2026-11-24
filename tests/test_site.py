@@ -414,6 +414,40 @@ class TestSitePage(unittest.TestCase):
         self.assertEqual(got["cleared"][0], "1830", "a cleared D comes back from the brim")
 
     @unittest.skipUnless(NODE, "node is not installed")
+    def test_page_simple_mode_trims_the_explanations(self):
+        stub = (HERE / "tests" / "page_stub.js").as_posix()
+        got = _node(
+            f"const stub = require({json.dumps(stub)});\n"
+            f"const page = {json.dumps((SITE / 'page.html').as_posix())};\n"
+            f"const corePath = {json.dumps(CORE)};\n"
+            "const run = (mode) => {\n"
+            "  const store = new Map(); store.set('calib-site:prefs', JSON.stringify({ mode }));\n"
+            "  const p = stub.boot(page, corePath, store), el = p.el;\n"
+            "  el('s-tank').value = 't1'; el('s-D').value = '1800'; el('s-L').value = '3000';\n"
+            "  el('s-dip').value = '400'; el('s-unit').value = '200';\n"
+            "  el('s-go').click(); el('d-val').value = '400'; el('d-go').click(); el('d-val').value = '400'; el('d-go').click();\n"
+            "  const o = { pred: el('now-pred').textContent, eta: el('now-eta').innerHTML };\n"
+            "  el('t-plus').click(); el('p-go').click();\n"
+            "  o.early = el('t-early').textContent; o.label = el('dip-label').textContent;\n"
+            "  el('d-val').value = '420'; el('d-go').click();\n"
+            "  o.label2 = el('dip-label').textContent; o.blind = el('now-pred').textContent;\n"
+            "  return o;\n"
+            "};\n"
+            "console.log(JSON.stringify({ simple: run('simple'), verbose: run('verbose') }));"
+        )
+        sm, vb = got["simple"], got["verbose"]
+        self.assertIn("pour to predict", vb["pred"])
+        self.assertEqual(sm["pred"], "", "simple: no hint about how to get a prediction")
+        self.assertIn("a rough guess", vb["eta"])
+        self.assertNotIn("fill ", sm["eta"], "simple: the default time per can is a short mark")
+        self.assertEqual(sm["early"], "Empty the can after the dip.")
+        self.assertIn("The dip waits", vb["early"])
+        self.assertEqual(sm["label2"], "Next reading, mm")
+        self.assertIn("earlier readings hidden", vb["label2"])
+        self.assertEqual(sm["blind"], "", "simple: the dip card says the repeat is blind, not the Now card too")
+        self.assertIn("blind repeat", vb["blind"])
+
+    @unittest.skipUnless(NODE, "node is not installed")
     def test_page_tally_shows_the_time_between_cans(self):
         stub = (HERE / "tests" / "page_stub.js").as_posix()
         got = _node(
