@@ -343,6 +343,10 @@
   .pour-anim .nozzle { fill: var(--can); stroke: var(--brand); stroke-width: 1.5; }
   button.pulse { animation: pulse 1s ease-in-out infinite; }
   @keyframes pulse { 50% { box-shadow: 0 0 0 7px rgba(29, 122, 62, 0.35); } }
+  .welcome { position: fixed; inset: 0; z-index: 30; background: var(--bg); overflow-y: auto; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+  .welcome-box { width: 100%; max-width: 26rem; }
+  .welcome-box h1 { margin: 0 0 0.4rem; font-size: 1.5rem; }
+  .welcome-box .row > button { flex: 1 1 100%; }
   .alarm { position: fixed; left: 0.6rem; right: 0.6rem; bottom: calc(0.6rem + env(safe-area-inset-bottom)); z-index: 20; background: var(--alarm); color: #fff; border-radius: 12px; padding: 0.8rem 1rem; display: flex; gap: 0.6rem; align-items: center; box-shadow: 0 6px 24px var(--shadow); max-width: 740px; margin: 0 auto; }
   .alarm b { flex: 1; font-size: 1.05rem; }
   .alarm button { background: #fff; color: var(--alarm); border-color: #fff; }
@@ -453,6 +457,23 @@
 </style>
 </head>
 <body>
+<div id="welcome" class="welcome hidden" role="dialog" aria-modal="true" aria-labelledby="w-title">
+  <form class="card welcome-box" id="w-form" autocomplete="on">
+    <h1 id="w-title" translate="no">calib site</h1>
+    <p class="muted" style="margin-top:0">Check each dip before you pour the next can. Log in to share campaigns with your team, or use the page on its own, offline.</p>
+    <div class="grid">
+      <label id="w-base-wrap" class="hidden">Server address<input id="w-base" inputmode="url" autocomplete="url" placeholder="https://" translate="no"></label>
+      <label>Workspace<input id="w-ws" autocomplete="username" autocapitalize="none" translate="no"></label>
+      <label>Secret keyword<input id="w-key" type="password" autocomplete="current-password"></label>
+      <label>Your name<input id="w-user" autocomplete="name" translate="no"></label>
+    </div>
+    <p class="muted" id="w-err" style="color:var(--bad)"></p>
+    <div class="row" style="margin-top:0.6rem"><button type="submit" id="w-login">Log in</button></div>
+    <p class="muted" style="text-align:center;margin:0.8rem 0 0.4rem">or</p>
+    <div class="row"><button type="button" class="secondary" id="w-offline">Use offline</button></div>
+    <p class="muted" style="margin-bottom:0">Offline, the page saves in this browser and needs no network. You can log in later in Files → Cloud.</p>
+  </form>
+</div>
 <div class="chrome" id="chrome">
 <header>
   <span class="live hidden" id="hdr-live" role="img"><svg viewBox="0 0 16 20" aria-hidden="true"><rect class="can-liq" id="hdr-can-liq" x="3" y="17" width="10" height="0" rx="1"/><rect class="can-frame" x="1.5" y="2.5" width="13" height="16" rx="2"/><path class="can-tick hidden" id="hdr-can-tick" d="M4.6 10.6l2.4 2.4 4.5-5"/></svg></span>
@@ -2016,6 +2037,13 @@
     "Safari deletes this page's saved data (the open campaign and the archive) after 7 days without a visit. To keep it, add the page to the Home Screen (Share → Add to Home Screen), log in to the cloud, or download the session JSON after each campaign. Sessions in Safari do not move to the app: log in to the cloud first, or export the session JSON and import it in the app.": "Safari xoá dữ liệu đã lưu của trang này (đợt đo đang mở và kho lưu) sau 7 ngày không mở trang. Để giữ lại, hãy thêm trang vào Màn hình chính (Chia sẻ → Thêm vào MH chính), đăng nhập đám mây, hoặc tải JSON của phiên sau mỗi đợt đo. Phiên trong Safari không chuyển sang ứng dụng: hãy đăng nhập đám mây trước, hoặc xuất JSON của phiên rồi nhập vào ứng dụng.",
     "The browser may delete this page's saved data (the open campaign and the archive) when the device runs low on space. Download the session JSON after each campaign, or log in to the cloud.": "Trình duyệt có thể xoá dữ liệu đã lưu của trang này (đợt đo đang mở và kho lưu) khi thiết bị sắp hết dung lượng. Hãy tải JSON của phiên sau mỗi đợt đo, hoặc đăng nhập đám mây.",
     "Open": "Mở",
+    // Welcome
+    "Check each dip before you pour the next can.": "Kiểm tra từng lần đo trước khi rót can tiếp theo.",
+    "Log in to share campaigns with your team, or use the page on its own, offline.": "Đăng nhập để chia sẻ đợt đo với nhóm, hoặc dùng trang riêng, ngoại tuyến.",
+    "or": "hoặc",
+    "Use offline": "Dùng ngoại tuyến",
+    "Offline, the page saves in this browser and needs no network.": "Ngoại tuyến, trang lưu trong trình duyệt này và không cần mạng.",
+    "You can log in later in Files → Cloud.": "Bạn có thể đăng nhập sau trong Tệp → Đám mây.",
     // Cloud
     "Cloud": "Đám mây",
     "Optional.": "Không bắt buộc.",
@@ -10570,10 +10598,39 @@
     document.addEventListener("pointerdown", () => { if (changedElsewhere()) adoptStored(); }, true);
   }
 
+  // Welcome: a new visitor (no open campaign, not logged in, no choice made
+  // yet) logs in or chooses to work offline.  The choice is kept; the cloud
+  // login stays in Files → Cloud.
+  const WELCOME = "calib-site:welcome";
+  function welcomeSeen() { try { return !!localStorage.getItem(WELCOME); } catch (e) { return true; } }
+  function welcomeDone() { try { localStorage.setItem(WELCOME, "1"); } catch (e) { /* no space: it shows again */ } $("welcome").classList.add("hidden"); }
+  function startWelcome() {
+    if (welcomeSeen()) return;
+    if (S || (CL && CL.loggedIn())) { welcomeDone(); return; }
+    const a = CL ? CL.auth() : {};
+    $("w-base-wrap").classList.toggle("hidden", !!pageOrigin);
+    for (const [id, v] of [["w-base", a.base], ["w-ws", a.workspace], ["w-user", a.user]]) if (v) $(id).value = v;
+    $("w-login").disabled = !CL;
+    $("welcome").classList.remove("hidden");
+    $("w-offline").addEventListener("click", welcomeDone);
+    $("w-form").addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      $("w-err").textContent = "";
+      $("w-login").disabled = true;
+      Promise.resolve().then(async () => {
+        await CL.login($("w-base").value, $("w-ws").value, $("w-key").value, $("w-user").value);
+        $("w-key").value = "";
+        welcomeDone();
+        await afterLogin();
+      }).catch((e) => { $("w-err").textContent = e.message; }).then(() => { $("w-login").disabled = false; render(); });
+    });
+  }
+
   S = load();
   readKeep();
   startLang();
   applyTheme();
+  startWelcome();
   render();
   // Upload what waits from an earlier visit; then look for newer versions.
   // Every 10 s: upload what waits, or (in view, nothing to upload) ask for a

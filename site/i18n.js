@@ -1041,6 +1041,13 @@
     "Safari deletes this page's saved data (the open campaign and the archive) after 7 days without a visit. To keep it, add the page to the Home Screen (Share → Add to Home Screen), log in to the cloud, or download the session JSON after each campaign. Sessions in Safari do not move to the app: log in to the cloud first, or export the session JSON and import it in the app.": "Safari xoá dữ liệu đã lưu của trang này (đợt đo đang mở và kho lưu) sau 7 ngày không mở trang. Để giữ lại, hãy thêm trang vào Màn hình chính (Chia sẻ → Thêm vào MH chính), đăng nhập đám mây, hoặc tải JSON của phiên sau mỗi đợt đo. Phiên trong Safari không chuyển sang ứng dụng: hãy đăng nhập đám mây trước, hoặc xuất JSON của phiên rồi nhập vào ứng dụng.",
     "The browser may delete this page's saved data (the open campaign and the archive) when the device runs low on space. Download the session JSON after each campaign, or log in to the cloud.": "Trình duyệt có thể xoá dữ liệu đã lưu của trang này (đợt đo đang mở và kho lưu) khi thiết bị sắp hết dung lượng. Hãy tải JSON của phiên sau mỗi đợt đo, hoặc đăng nhập đám mây.",
     "Open": "Mở",
+    // Welcome
+    "Check each dip before you pour the next can.": "Kiểm tra từng lần đo trước khi rót can tiếp theo.",
+    "Log in to share campaigns with your team, or use the page on its own, offline.": "Đăng nhập để chia sẻ đợt đo với nhóm, hoặc dùng trang riêng, ngoại tuyến.",
+    "or": "hoặc",
+    "Use offline": "Dùng ngoại tuyến",
+    "Offline, the page saves in this browser and needs no network.": "Ngoại tuyến, trang lưu trong trình duyệt này và không cần mạng.",
+    "You can log in later in Files → Cloud.": "Bạn có thể đăng nhập sau trong Tệp → Đám mây.",
     // Cloud
     "Cloud": "Đám mây",
     "Optional.": "Không bắt buộc.",
