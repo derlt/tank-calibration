@@ -333,7 +333,7 @@
      to come. */
   .ptally { margin: 0.45rem 0 0; }
   .ptally .pgs { display: flex; gap: 5px; align-items: flex-start; }
-  .ptally .pgc { display: flex; flex-direction: column; min-width: 0; }
+  .ptally .pgc { display: flex; flex-direction: column; min-width: 0; container-type: inline-size; }
   .ptally .pgc > .c { display: flex; align-items: center; height: 1.1rem; padding: 0 1px; }
   .ptally .pgc > .c > i { flex: 1 1 0; min-width: 0; display: flex; justify-content: center; }
   .ptally .pgc > .c > i > b { display: block; width: 100%; max-width: 0.7rem; aspect-ratio: 1; border-radius: 50%; box-sizing: border-box; box-shadow: inset 0 0 0 1px var(--todo); }
@@ -344,6 +344,13 @@
   .ptally .pgc > span::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; border-radius: 2px; background: var(--line); }
   .ptally .pgc.done > span::before { background: var(--info); opacity: 0.5; }
   .ptally .pgc.now > span { color: var(--info); }
+  /* A dense plan: the gaps shrink (the page sets them), the batch in work is
+     larger than its dots, a group too narrow for its size shows no size, and
+     the group in work shows it anyway, centred on its group. */
+  .ptally .pgs.tight .pgc > .c > i.now > b { transform: scale(1.6); box-shadow: inset 0 0 0 1px var(--info); }
+  .ptally .pgs.tight .pgc > .c > i > b { box-shadow: inset 0 0 0 0.75px var(--todo); }
+  .ptally .pgc.now > span { display: flex; justify-content: center; overflow: visible; }
+  @container (max-width: 1.5rem) { .ptally .pgc:not(.now) > span { visibility: hidden; } }
   .ptally .pgc.now > span::before { background: var(--info); }
   .sizes { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem; }
   .sizes button { min-height: 2.3rem; padding: 0.2rem 0.7rem; font-size: 0.9rem; background: var(--surface); color: var(--brand-ink); }
@@ -3580,7 +3587,8 @@
       }
       out += `<div class="pgc ${cls}" style="flex:${g.count} 1 0"><div class="c">${dots}</div><span>${f(g.size, 0)}</span></div>`;
     });
-    el.innerHTML = `<div class="pgs" aria-hidden="true">${out}</div>`;
+    const many = st.groups.filter((g) => g.count > 0).length, dots = st.groups.reduce((a, g) => a + Math.max(g.count, 0), 0);
+    el.innerHTML = `<div class="pgs${dots > 24 ? " tight" : ""}" style="gap:${many > 10 ? 2 : 5}px" aria-hidden="true">${out}</div>`;
     el.setAttribute("aria-label", b.groups > 1
       ? `Group ${b.number} of ${b.groups}: ${done} of ${b.count} batches done`
       : `${done} of ${b.count} batches done`);

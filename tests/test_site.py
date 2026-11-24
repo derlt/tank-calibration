@@ -3704,7 +3704,7 @@ class TestSitePlan(unittest.TestCase):
 
         self.assertEqual(
             got["ptally"][0],
-            '<div class="pgs" aria-hidden="true">'
+            '<div class="pgs" style="gap:5px" aria-hidden="true">'
             '<div class="pgc now" style="flex:2 1 0"><div class="c">' + dots("now", "") + '</div><span>300</span></div>'
             '<div class="pgc " style="flex:2 1 0"><div class="c">' + dots("", "") + '</div><span>600</span></div>'
             '<div class="pgc " style="flex:8 1 0"><div class="c">' + dots(*[""] * 8) + '</div><span>800</span></div>'

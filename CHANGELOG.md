@@ -15,6 +15,9 @@ All notable changes to this project are documented here. The format follows
   group is done, blue for the group in work, grey for the groups to come). A
   dot is filled when its batch is done, ◉ for the batch in work, hollow for
   the batches to come.
+  A dense plan (up to 50 batches checked on a 320 px screen) keeps the row on one line: smaller gaps
+  between many groups, a larger ◉ for the batch in work, and the batch size
+  of a group shown only when it fits (the group in work always shows it).
 
 ### Fixed
 
