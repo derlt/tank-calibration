@@ -35,7 +35,7 @@
   const VI = {
     // Tabs, header and modes
     "Live": "Trực tiếp",
-    "Log & charts": "Nhật ký & biểu đồ",
+    "Log": "Nhật ký",
     "Shell": "Mô hình bồn",
     "Settings": "Cài đặt",
     "Files": "Tệp",
@@ -1275,7 +1275,7 @@
     "Two tanks at once (transfer).": "Hai bồn cùng lúc (chuyển bồn).",
     "A pump draws water out of a full tank A into calibrated cans, and the same cans are emptied into tank B.": "Bơm hút nước từ bồn A đầy ra các bình đã hiệu chuẩn, rồi trút chính các bình đó vào bồn B.",
     "One batch is one step for both tanks: A is a drain, B is a fill.": "Một mẻ là một bước cho cả hai bồn: A bơm ra, B đổ vào.",
-    "Each tank keeps its own check, its own running shell and its own raw file; switch tanks in the header or in Log & charts.": "Mỗi bồn có phép kiểm tra, mô hình bồn tạm và tệp thô riêng; chuyển bồn ở thanh tiêu đề hoặc trong Nhật ký & biểu đồ.",
+    "Each tank keeps its own check, its own running shell and its own raw file; switch tanks in the header or in Log.": "Mỗi bồn có phép kiểm tra, mô hình bồn tạm và tệp thô riêng; chuyển bồn ở thanh tiêu đề hoặc trong Nhật ký.",
     "Dip A, then dip B, after each batch": "Sau mỗi mẻ, đo A rồi đo B",
     "the dip card has one field and one button per tank, so each tank is checked as soon as its reading is in.": "thẻ đo có một ô và một nút cho mỗi bồn, nên mỗi bồn được kiểm tra ngay khi có số đo.",
     "When both dips are in, the page compares the two residuals of the same batch: the same litres in both tanks means the cans (a count or fill error)": "Khi đã có cả hai lần đo, trang so sánh hai phần dư của cùng một mẻ: cùng số lít ở cả hai bồn nghĩa là do bình (lỗi đếm hoặc lỗi đổ đầy)",

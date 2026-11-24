@@ -661,7 +661,7 @@ the pair view of the two tanks stays in the card.
 
 The chosen tank keeps the thick line under it in its role colour (amber for
 A, blue for B); another tile keeps the same empty strip, so the row never
-shifts. Tap a tile to choose the tank: the Log & charts, Shell,
+shifts. Tap a tile to choose the tank: the Log, Shell,
 Settings and Files tabs follow it. On Replay and How it works the tiles are
 read-only. The row hides before a campaign is open.
 
@@ -731,7 +731,7 @@ from a Home Screen icon has no address iOS can open, so the link has no
 not change the iPhone timer; stop it in the Clock app.
 
 **Swipe between tabs.** On a touch screen, swipe left in the middle of the
-screen for the next tab (Live → Log & charts → Shell → …) and right for the
+screen for the next tab (Live → Log → Shell → …) and right for the
 one before. Once the drag is clearly sideways, the tab follows the finger
 and the page does not scroll. Let go after a quarter of the screen width, or
 with a fast flick, and the next tab slides in from that side; let go sooner
@@ -839,7 +839,7 @@ keep a charger or a power bank near the tank.
 
 ## Charts during the campaign
 
-The **Log & charts** tab shows four charts. Tap a button above the chart, or
+The **Log** tab shows four charts. Tap a button above the chart, or
 swipe the chart left or right, to change the chart. The chosen tank is the
 tile with the thick line in the frozen row; the chart and Levels titles carry
 no tank name.
@@ -1046,10 +1046,10 @@ the underground tank is up, into it is down.
 Each tank keeps its own check, its own running shell and its own raw file.
 The tank tiles name the tanks: A's tile falls (pump out), B's rises (pour
 in), and the chosen tile keeps the thick line in its role colour (amber for
-A, blue for B). The tiles choose the tank that the Log & charts, Shell and
+A, blue for B). The tiles choose the tank that the Log, Shell and
 campaign cards show, and the tank that *Take another reading* and *Accept
 anyway* apply to; the Live tab marks the current tank. The tiles are
-read-only on Replay and Help, where they change nothing. The Log & charts tab
+read-only on Replay and Help, where they change nothing. The Log tab
 has no switch of its own: its table and chart are always the chosen tank's
 own (A's table reads *drained L*, B's *pour L*). The Live tab always shows
 both tanks. *Files* exports one raw CSV per tank.

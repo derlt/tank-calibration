@@ -487,7 +487,7 @@
 <div class="chrome-in">
   <nav class="tabs" id="tabs">
     <button data-tab="live" aria-pressed="true">Live</button>
-    <button data-tab="log" aria-pressed="false">Log &amp; charts</button>
+    <button data-tab="log" aria-pressed="false">Log</button>
     <button data-tab="shell" aria-pressed="false">Shell</button>
     <button data-tab="settings" aria-pressed="false">Settings</button>
     <button data-tab="files" aria-pressed="false">Files</button>
@@ -989,7 +989,7 @@
     <p><b>What it catches.</b> In a simulation of 100 campaigns per slip size, a reading off by 3 mm was caught 92 % of the time, and 4 mm or more every time. An honest reading triggered a second dip 3–6 % of the time.</p>
     <p><b>Drain campaign (reverse strapping).</b> The tank starts full. A pump draws the water out into calibrated cans; each batch is one step, and the level falls. Start at the brim: pump the neck down until the level just reaches the brim and dip. That reading is the brim, and the running shell knows the top from the first level. Keep the hose in the same state at every dip. Fill each can to its mark. When the pump loses suction, tick <i>pump lost suction: last can part</i>.</p>
     <p><b>Signs in a drain.</b> resid &lt; 0: the fall came too large (an object exposed, a leak, a spill at the can, or more left than the count). resid &gt; 0: the fall came too small (RETURN?: the hose drained back, wall film, or less left than the count).</p>
-    <p><b>Two tanks at once (transfer).</b> A pump draws water out of a full tank A into calibrated cans, and the same cans are emptied into tank B. One batch is one step for both tanks: A is a drain, B is a fill. Each tank keeps its own check, its own running shell and its own raw file; switch tanks in the header or in Log &amp; charts. Dip A, then dip B, after each batch — the dip card has one field and one button per tank, so each tank is checked as soon as its reading is in. When both dips are in, the page compares the two residuals of the same batch: the same litres in both tanks means the cans (a count or fill error) — one recount fixes both files; litres that only B misses means a spill on the way; a miss that only one tank shows means that tank or its hose. The pour noise is shared, so the comparison is as sharp as the dips alone.</p>
+    <p><b>Two tanks at once (transfer).</b> A pump draws water out of a full tank A into calibrated cans, and the same cans are emptied into tank B. One batch is one step for both tanks: A is a drain, B is a fill. Each tank keeps its own check, its own running shell and its own raw file; switch tanks in the header or in Log. Dip A, then dip B, after each batch — the dip card has one field and one button per tank, so each tank is checked as soon as its reading is in. When both dips are in, the page compares the two residuals of the same batch: the same litres in both tanks means the cans (a count or fill error) — one recount fixes both files; litres that only B misses means a spill on the way; a miss that only one tank shows means that tank or its hose. The pour noise is shared, so the comparison is as sharp as the dips alone.</p>
     <p><b>Batch plan.</b> Before the first pour, declare the can sizes, the nominal capacity and the batches: for example 2 × 300 L, 2 × 600 L, 8 × 800 L, 2 × 600 L, 2 × 300 L. A batch is not a can: a 300 L batch is one 200 L can and one 100 L can. The page gives each batch the fewest cans, and of those the largest, so the pump and the carry take the least time. The pour card shows the group in work and its batches only: the small batches at the bottom and at the top are two groups. The real tank can hold more or less than the nominal. After the halfway level, the page recounts the batches still to come from the litres the running shell says are left: the litres over or under the plan go to the group whose batch size is nearest to them (600 L more is one 600 L batch more), and the last group fills the gap. A count changes once, when the shell's figure is clearly away from it, not back and forth with each dip.</p>
     <p class="muted">Method: CALIBRATION_METHODOLOGY.md §10a. Residual convention §2: resid = pour − predicted pour. resid &lt; 0: the rise came too cheap (object, or more liquid than recorded). resid &gt; 0: the rise came too small (loss, or less liquid than recorded).</p>
   </section>
@@ -1023,7 +1023,7 @@
   // a change of the page makes the browser lay it out at once.
   let lastWidth = window.innerWidth || 0;
   let editRow = null;     // the row whose note is open for editing
-  let sel = null;         // the selected level in Log & charts: { tank, row }, shared by the table and the chart
+  let sel = null;         // the selected level in Log: { tank, row }, shared by the table and the chart
 
   // ------------------------------------------------------------ storage
   // Two tabs or windows of the page share the browser's storage, and each
