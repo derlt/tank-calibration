@@ -325,15 +325,16 @@
   #s-plan-check.ok { color: var(--ok); font-weight: 650; }
   .plan-live { margin: 0; }
   /* The tally on the batch line: one pip per batch of the group in work
-     (done filled, the one in work ringed), then a thin strip of the groups,
+     (done filled, the one in work ◉), then a thin strip of the groups,
      each segment as wide as its batch size (done filled, the group in work
      filled up to its batches done, outlined).  A long group (over 16) is a
      thin bar instead of pips. */
   .ptally { display: inline-flex; align-items: center; gap: 0.4rem; min-width: 0; }
-  .ptally .pips { display: inline-flex; flex-wrap: wrap; gap: 2px; max-width: 8rem; }
+  .ptally .pips { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px; max-width: 8rem; }
   .ptally .pips > i { width: 0.38rem; height: 0.38rem; border-radius: 50%; background: var(--todo-bg); box-shadow: inset 0 0 0 1px var(--todo); }
   .ptally .pips > i.done { background: var(--info); box-shadow: none; }
-  .ptally .pips > i.now { background: var(--info-bg); box-shadow: inset 0 0 0 1.5px var(--info); }
+  /* The batch in work is ◉: a ring with a dot in its middle, a little larger. */
+  .ptally .pips > i.now { width: 0.62rem; height: 0.62rem; background: radial-gradient(circle, var(--info) 0 30%, transparent 33%); box-shadow: inset 0 0 0 1.5px var(--info); }
   .ptally .pbar { width: 3.5rem; height: 0.3rem; border-radius: 999px; background: var(--todo-bg); overflow: hidden; }
   .ptally .pbar > i { display: block; height: 100%; background: var(--info); }
   .ptally .pgrp { display: inline-flex; gap: 2px; width: 4rem; height: 0.3rem; }
