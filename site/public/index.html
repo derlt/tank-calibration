@@ -93,6 +93,12 @@
   @keyframes live-blink { 50% { opacity: 0.25; } }
   /* The Now card folds: its title line is the switch.  Folded, the line
      keeps the level and any warning. */
+  .fold > summary { list-style: none; display: flex; align-items: baseline; gap: 0.6rem; color: var(--ink); }
+  .fold > summary::-webkit-details-marker { display: none; }
+  .fold > summary h2 { margin: 0; }
+  .fold > summary::after { content: "▾"; margin-left: auto; color: var(--muted); transition: transform 0.15s; }
+  .fold:not([open]) > summary::after { transform: rotate(-90deg); }
+  .fold[open] > summary { margin-bottom: 0.6rem; }
   #now-card > summary { list-style: none; display: flex; align-items: baseline; gap: 0.6rem; color: var(--ink); }
   #now-card > summary::-webkit-details-marker { display: none; }
   #now-card > summary h2 { margin: 0; }
@@ -782,17 +788,17 @@
 
   <!-- ===================================================== settings -->
   <section id="settings" class="hidden">
-    <div class="card" id="set-lang-card">
-      <h2>Display</h2>
+    <details class="card fold" id="set-lang-card" open>
+      <summary><h2>Display</h2></summary>
       <div class="grid">
         <label>Language of the page<select id="set-lang" translate="no"></select></label>
         <label>Theme<select id="set-theme"></select></label>
       </div>
       <p class="muted">The exported files stay in English: they are the record for <span class="mono">calib</span>.</p>
-    </div>
+    </details>
 
-    <div class="card" id="set-campaign" style="margin-top:0.8rem">
-      <h2 id="set-campaign-title">This campaign</h2>
+    <details class="card fold" id="set-campaign" style="margin-top:0.8rem" open>
+      <summary><h2 id="set-campaign-title">This campaign</h2></summary>
       <div class="grid">
         <label>Tank name<input id="set-tank"></label>
         <label>Diameter estimate D, mm<input id="set-D" type="number" inputmode="decimal"></label>
@@ -809,17 +815,17 @@
       <p class="muted">A change refits the running shell from the levels already accepted. The levels keep their state; the next check uses the new values.</p>
       <p id="set-msg" class="muted"></p>
       <p id="set-err" class="error"></p>
-    </div>
+    </details>
 
-    <div class="card" id="set-noise" style="margin-top:0.8rem">
-      <h2>Noise and limits</h2>
+    <details class="card fold" id="set-noise" style="margin-top:0.8rem" open>
+      <summary><h2>Noise and limits</h2></summary>
       <div class="grid">
         <label>Reading repeatability σ, mm<input id="set-sr" type="number" inputmode="decimal"></label>
         <label>Pour noise, % of pour<input id="set-rel" type="number" inputmode="decimal"></label>
         <label>Pour noise, fixed L<input id="set-abs" type="number" inputmode="decimal"></label>
         <label>Datum: 0 ± mm<input id="set-h0" type="number" inputmode="decimal"></label>
         <label>Drain: suction floor, mm on the tape (blank = 65)<input id="set-floor" type="number" inputmode="decimal"></label>
-      </div>
+      </details>
       <div class="row" style="margin-top:0.6rem"><button id="set-noise-save">Save noise settings</button></div>
       <p class="muted" id="set-noise-note"></p>
       <p id="set-noise-msg" class="muted"></p>
@@ -827,8 +833,8 @@
       <p class="muted">The repeatability σ comes from a repeat study: many dips at one level, without pouring. Your study at 501 mm and 1033 mm gave 0.2–0.4 mm. Every ± here means "the truth is almost surely inside" (2σ).</p>
     </div>
 
-    <details class="card" id="timers" style="margin-top:0.8rem" open>
-      <summary><b>Timers, alarm and device</b></summary>
+    <details class="card fold" id="timers" style="margin-top:0.8rem" open>
+      <summary><h2>Timers, alarm and device</h2></summary>
       <div class="grid" style="margin-top:0.6rem">
         <label>Settle (idle) after a batch, m:ss<input id="tm-settle" placeholder="5:00"></label>
         <label>One dip and its entry, m:ss<input id="tm-dip" placeholder="1:00"></label>
