@@ -2025,6 +2025,7 @@
     "Press Sync now to see the list.": "Bấm Đồng bộ ngay để xem danh sách.",
     "No campaigns yet.": "Chưa có đợt đo nào.",
     "Delete": "Xoá",
+    "Delete this archived session from this browser? Download it first. A copy in the cloud stays.": "Xoá phiên đã lưu này khỏi trình duyệt? Hãy tải về trước. Bản trên đám mây vẫn được giữ.",
     "open": "đang mở",
     "This campaign is only in this browser.": "Đợt đo này chỉ có trong trình duyệt này.",
     "This page is a local file: enter the address of the hosted page as the server.": "Trang này là một tệp trên máy: hãy nhập địa chỉ của trang trực tuyến làm máy chủ.",
@@ -7764,6 +7765,15 @@
   $("f-archive").addEventListener("click", (ev) => {
     const b = ev.target.closest("button[data-i]"); if (!b) return;
     const item = archive()[+b.dataset.i];
+    if (!item) return;
+    if (b.dataset.act === "del") {
+      // Only the copy in this browser; a cloud campaign stays in the cloud.
+      if (!confirm(tr("Delete this archived session from this browser? Download it first. A copy in the cloud stays."))) return;
+      const a = archive(); a.splice(+b.dataset.i, 1);
+      localStorage.setItem(ARCH, JSON.stringify(a));
+      renderArchive();
+      return;
+    }
     if (b.dataset.act === "open") {
       if (S && !confirm(tr("Replace the open session? It goes to the archive."))) return;
       const s = fromJSON(item.session);
@@ -10242,7 +10252,7 @@
     const a = archive();
     $("f-archive").innerHTML = a.length ? "<h2 style='margin-top:0.9rem'>Archive</h2>" + a.map((it, i) =>
       `<div class="row" style="margin:0.3rem 0"><span class="muted">${esc(it.when.slice(0, 16).replace("T", " "))} · ${esc(it.tank)} · ${archiveLevels(it.session)} levels</span>`
-      + `<button class="secondary small" data-i="${i}" data-act="open">Open</button><button class="secondary small" data-i="${i}" data-act="get">Download</button></div>`).join("") : "";
+      + `<button class="secondary small" data-i="${i}" data-act="open">Open</button><button class="secondary small" data-i="${i}" data-act="get">Download</button><button class="secondary small" data-i="${i}" data-act="del">Delete</button></div>`).join("") : "";
   }
 
   // ------------------------------------------------------------ language

@@ -1075,6 +1075,7 @@
     "Press Sync now to see the list.": "Bấm Đồng bộ ngay để xem danh sách.",
     "No campaigns yet.": "Chưa có đợt đo nào.",
     "Delete": "Xoá",
+    "Delete this archived session from this browser? Download it first. A copy in the cloud stays.": "Xoá phiên đã lưu này khỏi trình duyệt? Hãy tải về trước. Bản trên đám mây vẫn được giữ.",
     "open": "đang mở",
     "This campaign is only in this browser.": "Đợt đo này chỉ có trong trình duyệt này.",
     "This page is a local file: enter the address of the hosted page as the server.": "Trang này là một tệp trên máy: hãy nhập địa chỉ của trang trực tuyến làm máy chủ.",
