@@ -175,7 +175,7 @@
   .grid { display: grid; gap: 0.6rem; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); }
   label { display: grid; gap: 0.2rem; font-size: 0.85rem; color: var(--muted); }
   label.check { display: flex; align-items: center; gap: 0.45rem; color: var(--ink); font-size: 0.95rem; }
-  input[type=text], input[type=number], input:not([type]), select { font: inherit; font-size: 1.05rem; padding: 0.55rem 0.6rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); width: 100%; }
+  input[type=text], input[type=number], input[type=password], input:not([type]), select { font: inherit; font-size: 1.05rem; padding: 0.55rem 0.6rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); width: 100%; }
   input.big { font-size: 1.6rem; font-family: var(--mono); padding: 0.5rem 0.7rem; }
   input[type=checkbox] { width: 1.3rem; height: 1.3rem; }
   button { font: inherit; font-weight: 600; border-radius: 10px; border: 1px solid var(--brand); background: var(--brand); color: #fff; padding: 0.65rem 1rem; min-height: 2.9rem; cursor: pointer; }
@@ -345,6 +345,7 @@
   @keyframes pulse { 50% { box-shadow: 0 0 0 7px rgba(29, 122, 62, 0.35); } }
   .welcome { position: fixed; inset: 0; z-index: 30; background: var(--bg); overflow-y: auto; display: flex; align-items: center; justify-content: center; padding: 1rem; }
   .welcome-box { width: 100%; max-width: 26rem; }
+  .welcome-box .grid { grid-template-columns: 1fr; }
   .welcome-box h1 { margin: 0 0 0.4rem; font-size: 1.5rem; }
   .welcome-box .row > button { flex: 1 1 100%; }
   .alarm { position: fixed; left: 0.6rem; right: 0.6rem; bottom: calc(0.6rem + env(safe-area-inset-bottom)); z-index: 20; background: var(--alarm); color: #fff; border-radius: 12px; padding: 0.8rem 1rem; display: flex; gap: 0.6rem; align-items: center; box-shadow: 0 6px 24px var(--shadow); max-width: 740px; margin: 0 auto; }
