@@ -53,6 +53,7 @@ site-public:
 	$(PY) -m calib site-page -o site/public/index.html
 	cp site/_headers site/public/_headers
 	cp site/sw.js site/public/sw.js
+	cp site/app/* site/public/
 
 # Publish the on-site page as a Cloudflare Worker with static assets.
 # Needs a Cloudflare login: `npx wrangler login`, or CLOUDFLARE_API_TOKEN.

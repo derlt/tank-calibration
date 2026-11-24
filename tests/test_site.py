@@ -13,6 +13,7 @@ import json
 import os
 import re
 import shutil
+import struct
 import subprocess
 import tempfile
 import unittest
@@ -93,6 +94,8 @@ class TestSitePage(unittest.TestCase):
         self.assertEqual(headers, (SITE / "_headers").read_text(encoding="utf-8"))
         sw = (SITE / "public" / "sw.js").read_text(encoding="utf-8")
         self.assertEqual(sw, (SITE / "sw.js").read_text(encoding="utf-8"), "site/public/sw.js is stale: run `make site`")
+        for f in (SITE / "app").iterdir():
+            self.assertEqual((SITE / "public" / f.name).read_bytes(), f.read_bytes(), f"site/public/{f.name} is stale: run `make site`")
 
     @unittest.skipUnless(SH, "sh is not installed")
     def test_cloud_build_copies_the_committed_page(self):
@@ -120,6 +123,8 @@ class TestSitePage(unittest.TestCase):
             self.assertEqual(built, build_page(), "the assets must be the current build")
             self.assertEqual(headers, (SITE / "_headers").read_text(encoding="utf-8"))
             self.assertEqual(sw, (SITE / "sw.js").read_text(encoding="utf-8"), "the offline copy's worker")
+            for f in (SITE / "app").iterdir():
+                self.assertEqual((run / "site" / "public" / f.name).read_bytes(), f.read_bytes(), f"the app file {f.name}")
             self.assertFalse(
                 (run / "wrangler.deploy.jsonc").exists(),
                 "no D1 id in the environment: no deploy config, and none with a placeholder",
@@ -143,6 +148,30 @@ class TestSitePage(unittest.TestCase):
         page = (SITE / "page.html").read_text(encoding="utf-8")
         self.assertIn('navigator.serviceWorker.register("/sw.js")', page)
         self.assertIn('location.protocol === "https:"', page, "the one file on a phone registers no worker")
+
+    def test_home_screen_app_files(self):
+        """The manifest names icons that exist, with the sizes it states; the page links them."""
+        app = SITE / "app"
+        man = json.loads((app / "manifest.webmanifest").read_text(encoding="utf-8"))
+        self.assertEqual((man["start_url"], man["scope"], man["display"]), ("/", "/", "standalone"))
+        self.assertTrue(man["name"] and man["short_name"])
+        purposes = set()
+        for ic in man["icons"]:
+            png = (app / ic["src"].lstrip("/")).read_bytes()
+            self.assertEqual(png[:8], b"\x89PNG\r\n\x1a\n")
+            w, h, _depth, ctype = struct.unpack(">IIBB", png[16:26])
+            self.assertEqual(f"{w}x{h}", ic["sizes"], ic["src"])
+            self.assertNotIn(ctype, (4, 6), f"{ic['src']} has transparency: iOS fills it with black")
+            purposes.add(ic["purpose"])
+        self.assertEqual(purposes, {"any", "maskable"})
+        touch = (app / "apple-touch-icon.png").read_bytes()
+        self.assertEqual(struct.unpack(">II", touch[16:24]), (180, 180))
+        page = build_page()
+        for tag in ('rel="manifest" href="manifest.webmanifest"', 'rel="apple-touch-icon" href="apple-touch-icon.png"',
+                    'name="apple-mobile-web-app-capable" content="yes"', 'name="apple-mobile-web-app-status-bar-style" content="black-translucent"'):
+            self.assertIn(tag, page)
+        self.assertIn("env(safe-area-inset-top)", page, "the header makes room for the status bar")
+        self.assertNotRegex(json.dumps(man), r"https?://", "no host name in the manifest")
 
     @unittest.skipUnless(NODE, "node is not installed")
     def test_offline_worker_keeps_the_page(self):

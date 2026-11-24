@@ -24,6 +24,8 @@ mkdir -p "$out"
 cp site/calib_site.html "$out/index.html"
 cp site/_headers "$out/_headers"
 cp site/sw.js "$out/sw.js"
+# The Home Screen app: manifest and icons (site/app/).
+cp site/app/* "$out/"
 if [ -n "${D1_DATABASE_ID:-}" ]; then
   sed "s|\"D1_DATABASE_ID\"|\"$D1_DATABASE_ID\"|" wrangler.jsonc > wrangler.deploy.jsonc
 else

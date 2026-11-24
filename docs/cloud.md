@@ -226,11 +226,12 @@ no Worker request and no D1 read.
 
 A new static file in `site/public/` needs its path in the first rule, or the
 custom domain answers 403 for it (the workers.dev address has no such rule).
-`/sw.js`, the offline copy, was added for that reason.
+`/sw.js`, the offline copy, and the Home Screen app files (`/manifest.webmanifest`,
+the icons) were added for that reason.
 
 | Rule | Phase | Expression (`<HOST>` = the page's host name) | Action |
 |---|---|---|---|
-| calib: serve only the page and the API | custom | `http.host eq "<HOST>" and not (http.request.uri.path in {"/" "/index.html" "/sw.js"} or starts_with(http.request.uri.path, "/api/"))` | block |
+| calib: serve only the page and the API | custom | `http.host eq "<HOST>" and not (http.request.uri.path in {"/" "/index.html" "/sw.js" "/manifest.webmanifest" "/apple-touch-icon.png" "/icon-192.png" "/icon-512.png" "/icon-maskable-512.png"} or starts_with(http.request.uri.path, "/api/"))` | block |
 | calib: API methods | custom | `http.host eq "<HOST>" and starts_with(http.request.uri.path, "/api/") and not http.request.method in {"GET" "POST" "PUT" "DELETE" "OPTIONS"}` | block |
 | calib: no crawlers on the API | custom | `http.host eq "<HOST>" and starts_with(http.request.uri.path, "/api/") and cf.client.bot` | block |
 | calib: API flood limit per IP | rate limit | `http.host eq "<HOST>" and starts_with(http.request.uri.path, "/api/")`, 50 per 10 s per IP and data center, blocked for 10 s | block |
@@ -279,6 +280,7 @@ so the build finds the assets directory. It is a copy of the built page:
     site/public/index.html    the same bytes, for the Worker's assets
     site/public/_headers      the security headers
     site/public/sw.js         the offline copy of the page (site/sw.js)
+    site/public/manifest.webmanifest, *.png, icon.svg   the Home Screen app (site/app/)
 
 A test fails when the copy is stale. After a change to the page, run
 `make site`: it builds `site/calib_site.html`, writes the script hashes into
@@ -331,6 +333,7 @@ All bodies are JSON. Send `Authorization: Bearer <token>` after the login.
 | `site/cloud.js` | The page's client: login, link, the action list, sync, the merge, conflict, poll, the shared fill timer (inlined in the page) |
 | `site/_headers` | Security headers for the hosted page |
 | `site/sw.js` | The hosted page's offline copy (service worker, copied to `site/public/`) |
+| `site/app/` | The Home Screen app: manifest and icons (copied to `site/public/`); `scripts/make_icons.py` draws the PNG files from the icon |
 | `tests/test_cloud.py` | Tests: the Worker on an in-memory SQLite D1, the client, two page devices, the merge, a seeded two-writer stress run and the shared fill timer |
 | `tests/test_secrets.py` | No `.env` value or server code in the page or in git |
 | `tests/cloud_harness.mjs` | Runs the Worker under Node (`node:sqlite`, Node 22.5 or newer) |

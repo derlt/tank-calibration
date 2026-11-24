@@ -74,6 +74,23 @@ shows at the next load while the network works. The worker handles only the
 page itself, never `/api/*`. The copy starts after the first visit on that
 phone and browser.
 
+### Home Screen app (iPhone, iPad, Android)
+
+The hosted page is also an app: `site/app/manifest.webmanifest` (standalone,
+start `/`) and the icons (`icon.svg` is the source; `scripts/make_icons.py`
+draws the PNG files). On an iPhone open the page in Safari, then Share → Add
+to Home Screen. The app opens with no Safari bar, the status bar floats over
+the dark header (the header and the sticky tabs keep clear of it), and it
+opens offline through the same service worker. A new deploy arrives at the
+next online launch.
+
+iOS keeps separate storage for the app: sessions saved in Safari do not move
+to it. Log in to the cloud first, or export the session JSON in Safari and
+import it in the app (Settings). Settings says so in Safari and in the app.
+
+Still to check on a device: wake lock in the app (iOS 18.4 or later), a file
+download from the app, and the Shortcuts timer started from the app.
+
 To keep the one file on a phone, use `site/calib_site.html` (a file opened
 from the phone has no worker; it needs none).
 

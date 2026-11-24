@@ -119,6 +119,7 @@ adopted shell, so the tool cannot drift from the fit.
 | 10a.8 LEARNING, WATCH, ALARM, pair pattern | `Session._evaluate` |
 | 10a.9 Record | `Session.toRawCsv` (reads back with `data.read_raw`), `Session.toJSON` |
 | 10a.10 Performance | `site/simulate.js`; `tests/test_site.py` |
+| Home Screen app | `site/app/` (manifest, icons; `scripts/make_icons.py`), tags and safe-area CSS in `site/page.html`, `isStandalone()`. `docs/site.md`, "Home Screen app". Test: `tests/test_site.py` `test_home_screen_app_files` |
 | Offline page | `site/page.html` + core + `site/i18n.js` → `calib site-page` → `site/calib_site.html` |
 | Page language | `site/i18n.js`: English and Vietnamese, chosen in Settings; the exported files stay English; `tests/test_i18n.py` checks a key for every text |
 | Header live indicator | `site/page.html` `liveState` / `tickLive`: fill, close-valve, full (fill timer) and drain (drain time after the last tap); `tests/test_site.py` |

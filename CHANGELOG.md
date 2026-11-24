@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Home Screen app.** The hosted page has a web manifest and icons
+  (`site/app/`), so it installs as an app (iPhone: Share → Add to Home Screen)
+  with the status bar over the header. Sessions in Safari do not move to the
+  app: Settings says to log in to the cloud or use the session JSON. The
+  firewall rule that serves only the page and the API needs the new paths
+  (docs/cloud.md).
+
 ### Changed
 
 - **Cloud: far fewer requests, less battery.** The page asked every 10 s (the
